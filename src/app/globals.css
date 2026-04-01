@@ -1,0 +1,98 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;700;900&family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --color-cream: #FAF7F2;
+  --color-warm-800: #7A5230;
+  --color-warm-600: #B07D4F;
+  --color-warm-200: #F0D9B5;
+  --color-ink-900: #1C1917;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: 'Noto Sans KR', sans-serif;
+  background-color: var(--color-cream);
+  color: var(--color-ink-900);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4 {
+  font-family: 'Noto Serif KR', Georgia, serif;
+}
+
+/* 스크롤바 커스텀 */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #D6D3D1; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #A8A29E; }
+
+/* 텍스트 영역 리사이즈 */
+textarea { resize: vertical; }
+
+/* 애니메이션 딜레이 유틸리티 */
+.delay-100 { animation-delay: 0.1s; }
+.delay-200 { animation-delay: 0.2s; }
+.delay-300 { animation-delay: 0.3s; }
+.delay-400 { animation-delay: 0.4s; }
+.delay-500 { animation-delay: 0.5s; }
+
+/* 페이지 전환 효과 */
+.page-enter { animation: fadeUp 0.6s ease-out forwards; }
+
+/* 카드 호버 효과 */
+.card-hover {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.card-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 40px -12px rgba(0, 0, 0, 0.12);
+}
+
+/* 버튼 기본 스타일 */
+.btn-primary {
+  @apply px-6 py-3 bg-ink-800 text-white rounded-lg font-medium transition-all;
+  @apply hover:bg-ink-900 active:scale-[0.98];
+}
+
+.btn-secondary {
+  @apply px-6 py-3 border border-ink-200 text-ink-800 rounded-lg font-medium transition-all;
+  @apply hover:bg-ink-50 active:scale-[0.98];
+}
+
+/* 입력 필드 */
+.input-field {
+  @apply w-full px-4 py-3 border border-ink-200 rounded-lg bg-white;
+  @apply focus:outline-none focus:ring-2 focus:ring-warm-600/30 focus:border-warm-600;
+  @apply transition-all placeholder:text-ink-400;
+}
+
+/* 스텝 인디케이터 */
+.step-dot {
+  @apply w-3 h-3 rounded-full transition-all;
+}
+.step-dot.active {
+  @apply bg-warm-600 scale-125;
+}
+.step-dot.completed {
+  @apply bg-warm-600;
+}
+.step-dot.pending {
+  @apply bg-ink-200;
+}
+
+/* 로딩 스피너 */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.spinner {
+  width: 20px; height: 20px;
+  border: 2px solid transparent;
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
