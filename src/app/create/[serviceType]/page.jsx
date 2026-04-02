@@ -29,6 +29,8 @@ export default function CreatePage() {
   const [templatesLoading, setTemplatesLoading] = useState(false);
   // 사용 가능한 템플릿 목록 (cover / content 별로 분류)
   const [availableTemplates, setAvailableTemplates] = useState({ cover: [], content: [] });
+  // API에서 받아온 전체 템플릿 raw 데이터 — 에디터 모달 등 다음 단계에서 사용
+  const [allTemplates, setAllTemplates] = useState([]);
 
   // 1단계: 마운트 시 GET /book-specs 호출
   useEffect(() => {
@@ -68,6 +70,9 @@ export default function CreatePage() {
         const res = await fetch(`/api/templates?bookSpecUid=${selectedSpec}&limit=50`);
         const data = await res.json();
         if (data.success && Array.isArray(data.data) && data.data.length > 0) {
+          // 전체 raw 목록 저장 (에디터 모달 등 다음 단계에서 활용)
+          setAllTemplates(data.data);
+
           // cover / content 분류
           const coverList = data.data.filter(t =>
             (t.templateKind || t.category || '').toLowerCase().includes('cover')
@@ -152,13 +157,14 @@ export default function CreatePage() {
       // 생성된 페이지를 sessionStorage에 임시 저장 (에디터에서 로드)
       sessionStorage.setItem('bookmaker_ai_pages', JSON.stringify(data.data.pages));
 
-      // 세션 메타데이터 저장 후 에디터로 이동
+      // 세션 메타데이터 저장 후 에디터로 이동 (allTemplates 포함 — 에디터 모달에서 활용)
       const sessionData = {
         serviceType,
         formData: { ...formData, bookTitle: data.data.title },
         bookSpecUid: selectedSpec,
         coverTemplateUid,
         contentTemplateUid,
+        allTemplates,
         useDummy: false,
         aiGenerated: true,
         aiTitle: data.data.title,
@@ -185,13 +191,14 @@ export default function CreatePage() {
       return;
     }
 
-    // 세션 스토리지에 저장 후 에디터로 이동 (템플릿 UID 포함)
+    // 세션 스토리지에 저장 후 에디터로 이동 (템플릿 UID + 전체 목록 포함)
     const sessionData = {
       serviceType,
       formData,
       bookSpecUid: selectedSpec,
       coverTemplateUid,
       contentTemplateUid,
+      allTemplates,
       useDummy,
     };
     sessionStorage.setItem('bookmaker_session', JSON.stringify(sessionData));
@@ -302,7 +309,13 @@ export default function CreatePage() {
             <div className="space-y-3">
               {(bookSpecs.length > 0 ? bookSpecs : Object.values(BOOK_SPECS).map(s => ({ bookSpecUid: s.uid, ...s }))).map((s) => {
                 const uid = s.bookSpecUid || s.uid;
-                const localSpec = BOOK_SPECS[uid];
+                // API 데이터 우선, 없으면 constants 폴백
+                const displayName = BOOK_SPEC_LABELS[uid] || s.name || uid;
+                const displayDetail = s.width && s.height
+                  ? `${s.width}×${s.height}mm · ${s.coverType || ''} · ${s.bindingType || ''}`.replace(/ · $/, '')
+                  : BOOK_SPECS[uid]
+                    ? `${BOOK_SPECS[uid].size} · ${BOOK_SPECS[uid].cover} · ${BOOK_SPECS[uid].binding} · ${BOOK_SPECS[uid].pages}`
+                    : s.description || uid;
                 return (
                   <label
                     key={uid}
@@ -323,14 +336,12 @@ export default function CreatePage() {
                       />
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
-                          <span className="font-medium text-ink-900">{BOOK_SPEC_LABELS[uid] || s.name}</span>
+                          <span className="font-medium text-ink-900">{displayName}</span>
                           {uid === service.recommendedSpec && (
                             <span className="text-xs bg-warm-600 text-white px-2 py-0.5 rounded-full">추천</span>
                           )}
                         </div>
-                        <p className="text-sm text-ink-400 mt-1">
-                          {localSpec ? `${localSpec.size} · ${localSpec.cover} · ${localSpec.binding} · ${localSpec.pages}` : s.description || uid}
-                        </p>
+                        <p className="text-sm text-ink-400 mt-1">{displayDetail}</p>
                       </div>
                     </div>
                   </label>
@@ -418,47 +429,6 @@ export default function CreatePage() {
               </div>
             )}
           </div>
-
-          {/* 여행 감성 설정 (travel 전용) — AI 에세이 품질 향상 */}
-          {serviceType === 'travel' && (
-            <div className="bg-white rounded-2xl border border-sky-100 p-6 space-y-4">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-lg">✈️</span>
-                <h2 className="font-display font-bold text-lg text-sky-900">여행 감성 설정</h2>
-                <span className="text-xs bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full">AI 품질 향상</span>
-              </div>
-              <p className="text-xs text-sky-600">아래 정보를 입력하면 AI가 더 감성적인 여행 에세이를 생성합니다.</p>
-
-              <div>
-                <label className="block text-sm font-medium text-ink-800 mb-1.5">여행 분위기</label>
-                <select
-                  className="input-field"
-                  value={formData.mood || ''}
-                  onChange={(e) => handleChange('mood', e.target.value)}
-                >
-                  <option value="">선택 안 함</option>
-                  <option value="설렘과 여유">설렘과 여유</option>
-                  <option value="유쾌하고 활기찬">유쾌하고 활기찬</option>
-                  <option value="감성적이고 낭만적인">감성적이고 낭만적인</option>
-                  <option value="힐링과 휴식">힐링과 휴식</option>
-                  <option value="모험과 도전">모험과 도전</option>
-                  <option value="가족과 함께하는 따뜻한">가족과 함께하는 따뜻한</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-ink-800 mb-1.5">여행 키워드</label>
-                <input
-                  type="text"
-                  className="input-field"
-                  placeholder="예) 맛집, 카페 투어, 야경, 쇼핑, 박물관"
-                  value={formData.keywords || ''}
-                  onChange={(e) => handleChange('keywords', e.target.value)}
-                />
-                <p className="text-xs text-ink-400 mt-1">쉼표로 구분해서 입력하세요</p>
-              </div>
-            </div>
-          )}
 
           {/* AI 동화 생성 패널 (fairytale 전용) */}
           {serviceType === 'fairytale' && (

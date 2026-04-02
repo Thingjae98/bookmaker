@@ -262,8 +262,6 @@ try {
 
 ## 9. 향후 구현 우선순위 (TODO)
 
-### ⚠️ 코드 정리 필요 (피벗 후 잔존 코드)
-- `src/app/create/[serviceType]/page.jsx` 내 `여행 감성 설정` 섹션 (mood/keywords 입력 UI) — 여행 AI 에세이 기능 취소로 불필요, 제거 필요
 
 ### P0 — 과제 제출 전 필수
 - [x] Books API 연동 (생성, 표지, 내지, 최종화)
