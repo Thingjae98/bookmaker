@@ -220,6 +220,45 @@ CSS Filter (blur) 속성과 인덱스 기반 조건부 렌더링을 활용하여
 
 ---
 
+## 📅 2026-04-02 — [버그 수정] Gemini 429 할당량 초과 대응 + 빌드 오류 수정
+
+### 문제 1: Gemini API 429 Too Many Requests
+
+**증상**
+```
+[GoogleGenerativeAI Error]: Error fetching from ... 429 Too Many Requests
+Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests
+limit: 0, model: gemini-2.0-flash
+```
+무료 계정 한도 초과로 모든 Gemini 모델 호출 불가.
+
+**해결 전략: 순차 모델 폴백 + 로컬 템플릿 폴백**
+
+1. `GEMINI_MODELS` 배열 도입: `['gemini-1.5-flash-8b', 'gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-pro']`
+   - 무료 한도가 비교적 넉넉한 경량 모델부터 순차 시도
+2. `callGemini()` 함수: 각 모델 실패 시 다음 모델로 이동, 전체 실패 시 `{ok: false}` 반환
+3. `generateFallback()` 함수: Gemini 전체 실패 시 6개 서비스별 한국어 콘텐츠 템플릿(10페이지씩) 내장
+   - picsum.photos seed 이미지로 시각적 완성도 유지
+4. 응답에 `source: 'gemini' | 'fallback'` 필드 포함 → 클라이언트가 출처 구분 가능
+5. 폴백 사용 시 `notice` 메시지 포함 → 에디터에서 안내 알림 표시
+
+**결과**: Gemini API가 완전히 불가한 상황에서도 AI 초안 생성 버튼이 항상 10페이지를 반환
+
+---
+
+### 문제 2: 빌드 오류 — `today`, `seed` 변수 중복 정의
+
+**증상**
+```
+x the name `today` is defined multiple times
+x the name `seed` is defined multiple times
+```
+`generateFallback()` 함수 내 41-42줄과 138-139줄에 동일한 변수가 이중 선언됨. 이전 작성 시 함수 구조 리팩토링 과정에서 발생한 잔존 코드.
+
+**수정**: 137번 이후 중복 선언 2줄 제거 (함수 상단 선언만 유지)
+
+---
+
 <!-- 새 기록 추가 시 아래 템플릿 복사 -->
 <!--
 ## 📅 YYYY-MM-DD — 제목

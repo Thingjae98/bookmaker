@@ -135,8 +135,6 @@ function generateFallback(serviceType, params) {
   };
 
   const template = templates[serviceType] || templates.fairytale;
-  const today = new Date().toISOString().slice(0, 10);
-  const seed = SEED_PREFIX[serviceType] || 'ai';
 
   return {
     title: template.title,
