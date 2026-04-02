@@ -27,6 +27,8 @@ export default function CreatePage() {
   const [coverTemplateUid, setCoverTemplateUid] = useState('79yjMH3qRPly');   // 기본값 폴백
   const [contentTemplateUid, setContentTemplateUid] = useState('vHA59XPPKqak'); // 기본값 폴백
   const [templatesLoading, setTemplatesLoading] = useState(false);
+  // 사용 가능한 템플릿 목록 (cover / content 별로 분류)
+  const [availableTemplates, setAvailableTemplates] = useState({ cover: [], content: [] });
 
   // 1단계: 마운트 시 GET /book-specs 호출
   useEffect(() => {
@@ -66,12 +68,27 @@ export default function CreatePage() {
         const res = await fetch(`/api/templates?bookSpecUid=${selectedSpec}&limit=50`);
         const data = await res.json();
         if (data.success && Array.isArray(data.data) && data.data.length > 0) {
-          // cover 종류 템플릿 첫 번째
-          const coverTpl = data.data.find(t => t.templateKind === 'cover' || t.category === 'cover');
-          // content 종류 템플릿 첫 번째
-          const contentTpl = data.data.find(t => t.templateKind === 'content' || t.category === 'content');
-          if (coverTpl) setCoverTemplateUid(coverTpl.templateUid);
-          if (contentTpl) setContentTemplateUid(contentTpl.templateUid);
+          // cover / content 분류
+          const coverList = data.data.filter(t =>
+            (t.templateKind || t.category || '').toLowerCase().includes('cover')
+          );
+          const contentList = data.data.filter(t =>
+            (t.templateKind || t.category || '').toLowerCase().includes('content') ||
+            (t.templateKind || t.category || '').toLowerCase().includes('page')
+          );
+          // 분류가 안 되면 전체를 cover로 간주
+          const fallbackList = (coverList.length === 0 && contentList.length === 0) ? data.data : [];
+
+          setAvailableTemplates({
+            cover:   [...coverList,   ...fallbackList],
+            content: [...contentList, ...fallbackList],
+          });
+
+          // 기본값 선택
+          const firstCover   = coverList[0]   || fallbackList[0];
+          const firstContent = contentList[0] || fallbackList[0];
+          if (firstCover)   setCoverTemplateUid(firstCover.templateUid);
+          if (firstContent) setContentTemplateUid(firstContent.templateUid);
         }
         // API 응답에 템플릿이 없으면 기존 하드코딩 값 유지
       } catch {
@@ -320,27 +337,128 @@ export default function CreatePage() {
                 );
               })}
             </div>
-            {/* 템플릿 로드 결과 — 사용자 친화적 표시 */}
+            {/* 템플릿 선택 UI */}
             {!templatesLoading && selectedSpec && (
-              <div className="mt-3 p-3 bg-ink-50 rounded-xl">
-                <p className="text-xs font-medium text-ink-600 mb-1.5">📄 선택된 템플릿</p>
-                <div className="flex flex-col gap-1">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-ink-500">앞표지 템플릿</span>
-                    <span className="font-medium text-ink-700">
-                      {coverTemplateUid === '79yjMH3qRPly' ? '일기장 표지형 (기본)' : '커스텀 표지'}
-                    </span>
+              <div className="mt-3">
+                {/* API 템플릿이 있는 경우: 선택 가능한 카드 형태 */}
+                {(availableTemplates.cover.length > 0 || availableTemplates.content.length > 0) ? (
+                  <div className="space-y-3">
+                    {/* 표지 템플릿 */}
+                    {availableTemplates.cover.length > 0 && (
+                      <div>
+                        <p className="text-xs font-medium text-ink-600 mb-1.5">📄 앞표지 템플릿</p>
+                        <div className="grid grid-cols-1 gap-1.5">
+                          {availableTemplates.cover.map((tpl) => (
+                            <button
+                              key={tpl.templateUid}
+                              type="button"
+                              onClick={() => setCoverTemplateUid(tpl.templateUid)}
+                              className={`text-left p-2.5 rounded-lg border-2 transition-all text-xs ${
+                                coverTemplateUid === tpl.templateUid
+                                  ? 'border-warm-600 bg-warm-50 text-warm-800'
+                                  : 'border-ink-100 hover:border-ink-300 text-ink-600'
+                              }`}
+                            >
+                              <span className="font-medium">
+                                {tpl.name || tpl.templateName || tpl.templateUid}
+                              </span>
+                              {coverTemplateUid === tpl.templateUid && (
+                                <span className="ml-1.5 text-warm-600">✓ 선택됨</span>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 내지 템플릿 */}
+                    {availableTemplates.content.length > 0 && (
+                      <div>
+                        <p className="text-xs font-medium text-ink-600 mb-1.5">📄 내지 템플릿</p>
+                        <div className="grid grid-cols-1 gap-1.5">
+                          {availableTemplates.content.map((tpl) => (
+                            <button
+                              key={tpl.templateUid}
+                              type="button"
+                              onClick={() => setContentTemplateUid(tpl.templateUid)}
+                              className={`text-left p-2.5 rounded-lg border-2 transition-all text-xs ${
+                                contentTemplateUid === tpl.templateUid
+                                  ? 'border-warm-600 bg-warm-50 text-warm-800'
+                                  : 'border-ink-100 hover:border-ink-300 text-ink-600'
+                              }`}
+                            >
+                              <span className="font-medium">
+                                {tpl.name || tpl.templateName || tpl.templateUid}
+                              </span>
+                              {contentTemplateUid === tpl.templateUid && (
+                                <span className="ml-1.5 text-warm-600">✓ 선택됨</span>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-ink-500">내지 템플릿</span>
-                    <span className="font-medium text-ink-700">
-                      {contentTemplateUid === 'vHA59XPPKqak' ? '사진+텍스트 일기형 (기본)' : '커스텀 내지'}
-                    </span>
+                ) : (
+                  /* API 템플릿 없음: 기본값 표시만 */
+                  <div className="p-3 bg-ink-50 rounded-xl">
+                    <p className="text-xs font-medium text-ink-600 mb-1.5">📄 적용 템플릿</p>
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-ink-500">앞표지</span>
+                        <span className="font-medium text-ink-700">기본 표지형</span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-ink-500">내지</span>
+                        <span className="font-medium text-ink-700">사진+텍스트형</span>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             )}
           </div>
+
+          {/* 여행 감성 설정 (travel 전용) — AI 에세이 품질 향상 */}
+          {serviceType === 'travel' && (
+            <div className="bg-white rounded-2xl border border-sky-100 p-6 space-y-4">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-lg">✈️</span>
+                <h2 className="font-display font-bold text-lg text-sky-900">여행 감성 설정</h2>
+                <span className="text-xs bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full">AI 품질 향상</span>
+              </div>
+              <p className="text-xs text-sky-600">아래 정보를 입력하면 AI가 더 감성적인 여행 에세이를 생성합니다.</p>
+
+              <div>
+                <label className="block text-sm font-medium text-ink-800 mb-1.5">여행 분위기</label>
+                <select
+                  className="input-field"
+                  value={formData.mood || ''}
+                  onChange={(e) => handleChange('mood', e.target.value)}
+                >
+                  <option value="">선택 안 함</option>
+                  <option value="설렘과 여유">설렘과 여유</option>
+                  <option value="유쾌하고 활기찬">유쾌하고 활기찬</option>
+                  <option value="감성적이고 낭만적인">감성적이고 낭만적인</option>
+                  <option value="힐링과 휴식">힐링과 휴식</option>
+                  <option value="모험과 도전">모험과 도전</option>
+                  <option value="가족과 함께하는 따뜻한">가족과 함께하는 따뜻한</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-ink-800 mb-1.5">여행 키워드</label>
+                <input
+                  type="text"
+                  className="input-field"
+                  placeholder="예) 맛집, 카페 투어, 야경, 쇼핑, 박물관"
+                  value={formData.keywords || ''}
+                  onChange={(e) => handleChange('keywords', e.target.value)}
+                />
+                <p className="text-xs text-ink-400 mt-1">쉼표로 구분해서 입력하세요</p>
+              </div>
+            </div>
+          )}
 
           {/* AI 동화 생성 패널 (fairytale 전용) */}
           {serviceType === 'fairytale' && (

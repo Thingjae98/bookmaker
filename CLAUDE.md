@@ -90,10 +90,13 @@ bookmaker/
     ├── components/
     │   ├── Header.jsx           # 공통 헤더 + 모바일 메뉴
     │   ├── ServiceCard.jsx      # 서비스 선택 카드
-    │   └── StepIndicator.jsx    # 진행 단계 표시
+    │   ├── StepIndicator.jsx    # 진행 단계 표시
+    │   └── Toast.jsx            # 전역 토스트 컨테이너 (layout에 1회 마운트)
     ├── lib/
-    │   ├── sweetbook.js         # SweetBook API 클라이언트 (서버 전용!)
-    │   └── constants.js         # 서비스 타입, 판형, 주문상태 상수
+    │   ├── sweetbook.js         # SweetBook API 클라이언트 (서버 전용!, 지연 초기화)
+    │   ├── constants.js         # 서비스 타입, 판형, 주문상태 상수
+    │   ├── toast.js             # 토스트 이벤트 버스 (클라이언트 전용)
+    │   └── fetchWithRetry.js    # fetch 재시도 래퍼 (5xx 3회 재시도)
     └── data/
         └── dummy.js             # 6가지 서비스별 더미 데이터
 ```
@@ -266,16 +269,17 @@ try {
 - [x] 6가지 서비스별 더미 데이터
 - [x] README.md 완성
 - [x] 실제 Sandbox API Key 연동 (.env 설정)
-- [ ] Toast 알림 컴포넌트 개선
-- [ ] 에러 발생 시 재시도 로직
+- [x] Toast 알림 컴포넌트 — 이벤트 버스 기반, success/error/info/warn, 3.5초 자동 소멸
+- [x] 에러 발생 시 재시도 로직 — fetchWithRetry, 5xx 3회 재시도, 지수 백오프
 
 ### P1 — 면접 전 개선
 - [x] 이미지 파일 직접 업로드 (Drag & Drop + Photos API) — 에디터 내 구현 완료
 - [x] 표지 이미지 (앞/뒤) 전용 업로드 UI — 에디터 좌측 패널
-- [x] 사진 일괄 업로드 — 페이지 순서대로 자동 배정
+- [x] 사진 일괄 업로드 — 날짜순 정렬 + 첫/마지막 표지 자동 설정 + AI 텍스트 자동 생성
 - [x] 미리보기 블러 티저 UI (상위 5p 공개 + 구매 유도 오버레이)
 - [x] AI 페이지 초안 생성 — 에디터 내 6개 서비스 전체 지원, 미리보기 모달로 교체/추가/취소
-- [ ] GET /templates로 실제 템플릿 목록 가져와서 선택 UI
+- [x] GET /templates로 실제 템플릿 목록 가져와서 선택 UI — create 페이지 카드 선택 UI
+- [x] ✈️ 여행 포토북 특별 기능: AI 감성 에세이, EXIF 날짜순 정렬, 일차별 챕터 자동 제목
 - [ ] 페이지 미리보기 시각화 (템플릿 레이아웃 렌더링)
 - [ ] Skeleton UI 로딩 (현재 spinner만 있음)
 - [ ] DECISION_LOG.md 내용 보강

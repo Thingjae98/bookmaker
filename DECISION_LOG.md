@@ -5,6 +5,50 @@
 
 ---
 
+## 📅 2026-04-02 — Toast 알림 / 재시도 로직 / 템플릿 선택 UI / AI 사진 플로우
+
+### 결정 내용
+
+**P0 — Toast 알림 컴포넌트 개선**
+- `src/lib/toast.js`: `window.CustomEvent` 기반 이벤트 버스 구현 (React 컨텍스트 없음)
+- `src/components/Toast.jsx`: layout에 1회 마운트, `bookmaker:toast` 이벤트 수신 → 3.5초 자동 소멸
+- App Router `layout.jsx`는 서버 컴포넌트이므로 컨텍스트 Provider 불가 → 이벤트 버스 패턴 선택
+- `toast.success / .error / .info / .warn(msg)` API로 어느 컴포넌트에서나 호출 가능
+
+**P0 — 에러 재시도 로직**
+- `src/lib/fetchWithRetry.js`: 5xx 서버 오류 시 최대 3회 재시도, 지수 백오프(250ms/500ms/1000ms)
+- 4xx(클라이언트 오류)는 재시도 불필요 → 즉시 반환
+- 에디터 `handleCreateBook`의 책 생성 API 호출에 적용
+
+**P0 (추가) — sweetbook.js 지연 초기화**
+- `SweetbookClient`를 모듈 로드 시점에 초기화 → 빌드 타임 env 없으면 `apiKey is required` 에러 발생
+- `getClient()` 지연 초기화 패턴으로 교체 → 빌드 성공
+
+**P1 — 실제 템플릿 목록 기반 선택 UI**
+- create 페이지: `GET /api/templates` 응답에서 cover/content 분류 후 클릭 가능한 카드 UI 표시
+- 선택된 템플릿 UID가 세션에 저장 → 에디터에서 책 생성 시 사용
+- API 템플릿 없을 경우 기본값 표시로 폴백
+
+**✈️ 여행 포토북 특별 기능**
+- create 페이지에 '여행 감성 설정' 섹션 추가: 분위기(select) + 키워드(text input)
+- generate-story API: `mood` / `keywords` 파라미터 수신 → travel 프롬프트에 반영
+- 에디터 `handleBulkUpload`: 여행 서비스의 경우 `file.lastModified` 기반 날짜 그룹화 → 자동 챕터 제목 생성(1일차·N월N일)
+
+**🤖 AI 사진 플로우 전면 개편**
+- 일괄 업로드 시 `file.lastModified` 기준 날짜순 정렬 (EXIF 라이브러리 없이)
+- 첫 번째 사진 → 앞표지, 마지막 사진 → 뒤표지 자동 설정
+- 사진이 업로드되면 "🤖 AI로 텍스트 자동 생성" 버튼 표시
+  - `mode: 'photo_text'` + `photoCount: N` 파라미터로 generate-story 호출
+  - AI 응답의 title/text를 기존 페이지에 병합 (이미지는 보존)
+- generate-story API: `photoCount`로 생성 페이지 수 제어, `mode: 'photo_text'` 시 캡션형 짧은 문장 생성
+
+### 근거
+- Toast 이벤트 버스: App Router layout이 서버 컴포넌트 → Provider 래핑 불가 → 이벤트 패턴이 유일한 깔끔한 해법
+- EXIF 대신 lastModified: EXIF 파싱 라이브러리 추가 없이 사진 날짜 근사값 획득 가능 (iOS/Android 모두 촬영 직후 저장하므로 lastModified ≈ 촬영 시각)
+- AI 사진 플로우: 사용자 최대 허들은 "글쓰기" → 사진만 올리면 AI가 텍스트 채워주는 경험으로 전환
+
+---
+
 ## 📅 2026-04-02 — 판형 UI: 실제 API UID 매핑 및 템플릿 UID 노출 제거
 
 ### 문제

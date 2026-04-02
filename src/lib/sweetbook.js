@@ -4,11 +4,18 @@
 
 import { SweetbookClient } from 'bookprintapi-nodejs-sdk';
 
-const client = new SweetbookClient({
-  apiKey: process.env.SWEETBOOK_API_KEY,
-  baseUrl: process.env.SWEETBOOK_API_BASE_URL,
-  timeout: 30000,
-});
+// 지연 초기화 — 빌드 타임에 env 없어도 에러 안 남
+let _client = null;
+function getClient() {
+  if (!_client) {
+    _client = new SweetbookClient({
+      apiKey: process.env.SWEETBOOK_API_KEY,
+      baseUrl: process.env.SWEETBOOK_API_BASE_URL,
+      timeout: 30000,
+    });
+  }
+  return _client;
+}
 
 // API 응답을 프론트엔드가 기대하는 { success, data } 구조로 래핑
 function ok(data) {
@@ -18,17 +25,17 @@ function ok(data) {
 // ─── Books API ───────────────────────────────────────────────
 
 export async function createBook({ title, bookSpecUid, creationType = 'TEST', externalRef }) {
-  const data = await client.books.create({ title, bookSpecUid, creationType, externalRef });
+  const data = await getClient().books.create({ title, bookSpecUid, creationType, externalRef });
   return ok(data);
 }
 
 export async function listBooks({ limit = 20, offset = 0 } = {}) {
-  const data = await client.books.list({ limit, offset });
+  const data = await getClient().books.list({ limit, offset });
   return ok(data);
 }
 
 export async function addCover(bookUid, { templateUid, parameters }) {
-  const data = await client.covers.create(bookUid, templateUid, parameters || {});
+  const data = await getClient().covers.create(bookUid, templateUid, parameters || {});
   return ok(data);
 }
 
@@ -36,61 +43,61 @@ export async function uploadPhoto(bookUid, fileBuffer, fileName) {
   // Buffer → Blob → File (Node.js 18+ 내장)
   const blob = new Blob([fileBuffer], { type: 'image/jpeg' });
   const file = new File([blob], fileName, { type: 'image/jpeg' });
-  const data = await client.photos.upload(bookUid, file);
+  const data = await getClient().photos.upload(bookUid, file);
   return ok(data);
 }
 
 export async function listPhotos(bookUid) {
-  const data = await client.photos.list(bookUid);
+  const data = await getClient().photos.list(bookUid);
   return ok(data);
 }
 
 export async function addContents(bookUid, { templateUid, parameters, breakBefore = 'page' }) {
-  const data = await client.contents.insert(bookUid, templateUid, parameters || {}, { breakBefore });
+  const data = await getClient().contents.insert(bookUid, templateUid, parameters || {}, { breakBefore });
   return ok(data);
 }
 
 export async function finalizeBook(bookUid) {
-  const data = await client.books.finalize(bookUid);
+  const data = await getClient().books.finalize(bookUid);
   return ok(data);
 }
 
 export async function deleteContents(bookUid) {
-  await client.contents.clear(bookUid);
+  await getClient().contents.clear(bookUid);
   return ok({});
 }
 
 // ─── Orders API ──────────────────────────────────────────────
 
 export async function createOrder({ items, shipping, externalRef }) {
-  const data = await client.orders.create({ items, shipping, externalRef });
+  const data = await getClient().orders.create({ items, shipping, externalRef });
   return ok(data);
 }
 
 export async function estimateOrder({ items }) {
-  const data = await client.orders.estimate({ items });
+  const data = await getClient().orders.estimate({ items });
   return ok(data);
 }
 
 export async function listOrders({ limit = 20, offset = 0, status } = {}) {
-  const data = await client.orders.list({ limit, offset, status });
+  const data = await getClient().orders.list({ limit, offset, status });
   return ok(data);
 }
 
 export async function getOrder(orderUid) {
-  const data = await client.orders.get(orderUid);
+  const data = await getClient().orders.get(orderUid);
   return ok(data);
 }
 
 export async function cancelOrder(orderUid, cancelReason) {
-  const data = await client.orders.cancel(orderUid, cancelReason);
+  const data = await getClient().orders.cancel(orderUid, cancelReason);
   return ok(data);
 }
 
 // ─── Credits API ─────────────────────────────────────────────
 
 export async function getCredits() {
-  const data = await client.credits.getBalance();
+  const data = await getClient().credits.getBalance();
   return ok(data);
 }
 

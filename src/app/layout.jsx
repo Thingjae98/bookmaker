@@ -1,5 +1,6 @@
 import './globals.css';
 import Header from '@/components/Header';
+import Toast from '@/components/Toast';
 
 export const metadata = {
   title: '북메이커 BookMaker — 나만의 특별한 책을 만드세요',
@@ -11,6 +12,7 @@ export default function RootLayout({ children }) {
     <html lang="ko">
       <body className="min-h-screen">
         <Header />
+        <Toast />
         <main className="pt-16">{children}</main>
       </body>
     </html>

@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { SERVICE_TYPES, BOOK_SPEC_LABELS } from '@/lib/constants';
 import { DUMMY_DATA } from '@/data/dummy';
 import StepIndicator from '@/components/StepIndicator';
+import { toast } from '@/lib/toast';
+import { fetchWithRetry } from '@/lib/fetchWithRetry';
 
 export default function EditorPage() {
   const router = useRouter();
@@ -33,6 +35,9 @@ export default function EditorPage() {
   // AI 초안 미리보기 모달
   const [draftData, setDraftData] = useState(null);       // 생성된 초안 임시 저장
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
+
+  // AI 사진 텍스트 자동생성 (사진 업로드 후 버튼)
+  const [photoAiGenerating, setPhotoAiGenerating] = useState(false);
 
   // 세션 복원
   useEffect(() => {
@@ -107,12 +112,102 @@ export default function EditorPage() {
     else setCoverBack({ file, preview });
   };
 
-  // 사진 일괄 업로드 — 선택된 파일을 페이지 순서대로 배정
+  // 사진 일괄 업로드 — 날짜순 정렬 → 앞/뒤 표지 자동 설정 → 내지 배정
   const handleBulkUpload = (files) => {
-    const arr = Array.from(files);
+    if (!files || files.length === 0) return;
+
+    // file.lastModified 기준 오름차순 정렬 (촬영 시간 근사값)
+    const arr = Array.from(files).sort((a, b) => a.lastModified - b.lastModified);
+
+    // 앞표지 = 첫 번째, 뒤표지 = 마지막
+    setCoverFront({ file: arr[0], preview: URL.createObjectURL(arr[0]) });
+    if (arr.length >= 2) {
+      setCoverBack({ file: arr[arr.length - 1], preview: URL.createObjectURL(arr[arr.length - 1]) });
+    }
+
+    // 여행 서비스: 날짜 기반 일차(Day N) 챕터 제목 계산
+    const isTravel = session?.serviceType === 'travel';
+    let dayStart = null;
+    if (isTravel) {
+      const first = new Date(arr[0].lastModified);
+      dayStart = new Date(first.getFullYear(), first.getMonth(), first.getDate()).getTime();
+    }
+
+    // 전체 사진을 내지 페이지에 배정 (페이지 부족 시 새 페이지 자동 생성)
+    const newPages = [...pages];
+    const newStagedFiles = { ...stagedFiles };
+    let idCounter = Date.now();
+
     arr.forEach((file, i) => {
-      if (i < pages.length) handleFileSelect(file, pages[i].id);
+      const blobUrl = URL.createObjectURL(file);
+      let autoTitle = '';
+      let autoDate = '';
+
+      if (isTravel && dayStart !== null) {
+        const d = new Date(file.lastModified);
+        const dayMs = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+        const dayNum = Math.floor((dayMs - dayStart) / 86400000) + 1;
+        const dateLabel = d.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' });
+        autoTitle = `${dayNum}일차 · ${dateLabel}`;
+        autoDate = d.toISOString().slice(0, 10);
+      }
+
+      if (i < newPages.length) {
+        newPages[i] = { ...newPages[i], image: blobUrl, title: autoTitle || newPages[i].title, date: autoDate || newPages[i].date };
+        newStagedFiles[newPages[i].id] = file;
+      } else {
+        const newId = `page-bulk-${idCounter++}`;
+        newPages.push({ id: newId, title: autoTitle, text: '', date: autoDate, image: blobUrl });
+        newStagedFiles[newId] = file;
+      }
     });
+
+    setPages(newPages);
+    setStagedFiles(newStagedFiles);
+
+    const coverNote = arr.length >= 2 ? ' · 첫/마지막 사진을 표지로 자동 설정했습니다' : '';
+    const travelNote = isTravel ? ' · 날짜순 챕터 제목 적용됨' : '';
+    toast.success(`${arr.length}장 업로드 완료${coverNote}${travelNote}`);
+  };
+
+  // ── 사진 기반 AI 텍스트 자동생성 ────────────────────────────────
+  // 현재 업로드된 사진 수에 맞게 AI가 제목+내용 자동 작성 (이미지는 유지)
+  const handlePhotoAiText = async () => {
+    if (!session || pages.length === 0) return;
+    setPhotoAiGenerating(true);
+    try {
+      const res = await fetchWithRetry('/api/generate-story', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          serviceType: session.serviceType,
+          mode: 'photo_text',
+          photoCount: pages.length,
+          ...session.formData,
+        }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message);
+
+      // 이미지는 보존하고 제목+텍스트만 AI 결과로 교체
+      setPages((prev) =>
+        prev.map((page, i) => {
+          const aiPage = data.data.pages[i % data.data.pages.length];
+          return {
+            ...page,
+            title: aiPage?.title || page.title,
+            text:  aiPage?.text  || page.text,
+          };
+        })
+      );
+
+      const sourceLabel = data.source === 'gemini' ? 'Gemini AI' : '기본 템플릿';
+      toast.success(`AI 텍스트 자동 생성 완료! (${sourceLabel} · ${pages.length}페이지)`);
+    } catch (err) {
+      toast.error(`AI 생성 실패: ${err.message}`);
+    } finally {
+      setPhotoAiGenerating(false);
+    }
   };
 
   // ── AI 초안 생성 ─────────────────────────────────────────────
@@ -217,7 +312,7 @@ export default function EditorPage() {
   // ─── API 호출: 책 생성 + 콘텐츠 추가 + 최종화 ───────────
   const handleCreateBook = async () => {
     if (pages.length < 10) {
-      alert('최소 10개 이상의 페이지가 필요합니다.\n(최종화 시 최소 20페이지 = 표지 + 내지 약 10~15개)');
+      toast.warn('최소 10개 이상의 페이지가 필요합니다. (최종화 시 최소 20페이지)');
       return;
     }
 
@@ -233,9 +328,9 @@ export default function EditorPage() {
         ? `${session.formData.babyName || session.formData.childName || session.formData.heroName || session.formData.petName || session.formData.authorName || ''}의 ${service.name}`
         : service.name;
 
-      // 1. 책 생성
+      // 1. 책 생성 (5xx 오류 시 최대 3회 재시도)
       addLog(`📗 책 생성 중... (${title})`);
-      const bookRes = await fetch('/api/books', {
+      const bookRes = await fetchWithRetry('/api/books', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -428,18 +523,21 @@ export default function EditorPage() {
       if (finalData.success) {
         addLog(`✅ 최종화 완료! (${finalData.data?.pageCount || '?'}페이지)`);
         setBookCreated(true);
+        toast.success(`책 생성 완료! ${finalData.data?.pageCount || ''}페이지 포토북이 준비되었습니다.`);
 
         // 세션에 bookUid 저장
         const updated = { ...session, bookUid: uid, pageCount: finalData.data?.pageCount };
         sessionStorage.setItem('bookmaker_session', JSON.stringify(updated));
       } else {
         addLog(`❌ 최종화 실패: ${finalData.message}`);
+        toast.warn(`최종화 실패: ${finalData.message}`);
         // 페이지 수 부족 등의 에러라도 bookUid는 저장
         const updated = { ...session, bookUid: uid };
         sessionStorage.setItem('bookmaker_session', JSON.stringify(updated));
       }
     } catch (err) {
       addLog(`❌ 오류: ${err.message}`);
+      toast.error(`책 생성 실패: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -731,7 +829,7 @@ export default function EditorPage() {
               </button>
 
               {/* 사진 일괄 업로드 버튼 */}
-              <div className="mb-3">
+              <div className="mb-2">
                 <input
                   id="bulk-upload-input"
                   type="file"
@@ -743,16 +841,30 @@ export default function EditorPage() {
                 <button
                   type="button"
                   onClick={() => document.getElementById('bulk-upload-input').click()}
-                  disabled={pages.length === 0}
-                  className="w-full py-2 rounded-xl text-sm font-medium text-warm-700 border-2 border-warm-200 bg-warm-50 hover:bg-warm-100 hover:border-warm-400 transition-all flex items-center justify-center gap-1.5 disabled:opacity-40"
-                  title="여러 사진을 한번에 선택하면 페이지 순서대로 자동 배정됩니다"
+                  className="w-full py-2 rounded-xl text-sm font-medium text-warm-700 border-2 border-warm-200 bg-warm-50 hover:bg-warm-100 hover:border-warm-400 transition-all flex items-center justify-center gap-1.5"
+                  title="사진을 날짜순으로 정렬 · 첫/마지막 사진이 표지로 자동 설정됩니다"
                 >
                   <span>📸</span> 사진 일괄 업로드
                 </button>
-                {pages.length > 0 && (
-                  <p className="text-xs text-ink-400 text-center mt-1">사진 선택 시 페이지 순서대로 자동 배정</p>
-                )}
+                <p className="text-xs text-ink-400 text-center mt-1">날짜순 자동 정렬 · 첫/마지막 → 표지 자동 설정</p>
               </div>
+
+              {/* AI 텍스트 자동생성 버튼 — 사진 업로드 후 표시 */}
+              {Object.keys(stagedFiles).length > 0 && (
+                <button
+                  type="button"
+                  onClick={handlePhotoAiText}
+                  disabled={photoAiGenerating}
+                  className="w-full mb-3 py-2 rounded-xl text-sm font-medium text-sky-700 border-2 border-sky-200 bg-sky-50 hover:bg-sky-100 hover:border-sky-400 transition-all flex items-center justify-center gap-1.5 disabled:opacity-60"
+                  title="업로드된 사진 수에 맞게 AI가 제목과 내용을 자동 작성합니다"
+                >
+                  {photoAiGenerating ? (
+                    <><span className="spinner" style={{ width: 14, height: 14 }} /> AI 텍스트 생성 중...</>
+                  ) : (
+                    <><span>🤖</span> AI로 텍스트 자동 생성 ({Object.keys(stagedFiles).length}장)</>
+                  )}
+                </button>
+              )}
 
               <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
                 {pages.map((page, idx) => (

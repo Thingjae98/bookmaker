@@ -25,16 +25,25 @@ const SEED_PREFIX = {
 
 // ── 서비스별 프롬프트 빌더 ──────────────────────────────────────
 function buildPrompt(serviceType, params) {
-  const jsonSchema = `응답은 순수 JSON만 반환하세요 (마크다운 없이). pages 배열은 정확히 10개, 각 text는 한국어 2~3문장.
-{"title":"책 제목","pages":[{"title":"페이지 제목","text":"내용"},…10개]}`;
+  const count = Math.max(1, parseInt(params.photoCount, 10) || 10);
+  const isPhotoMode = params.mode === 'photo_text';
+  const textStyle = isPhotoMode
+    ? `각 text는 한국어 1~2문장 (사진 캡션처럼 간결하고 감성적으로).`
+    : `각 text는 한국어 2~3문장.`;
+
+  const jsonSchema = `응답은 순수 JSON만 반환하세요 (마크다운 없이). pages 배열은 정확히 ${count}개, ${textStyle}
+{"title":"책 제목","pages":[{"title":"페이지 제목","text":"내용"},…${count}개]}`;
 
   const prompts = {
-    baby: `따뜻한 육아 일기 작가로서, ${params.babyName || '아이'}의 ${params.period || '6개월'} 성장 기록을 10페이지로 작성하세요. 첫 웃음·뒤집기·이유식 등 월령별 이정표를 시간순으로, 부모 시선으로 따뜻하게. ${jsonSchema}`,
-    kindergarten: `유치원 담임으로서, ${params.childName || '원아'}(${params.className || '꽃반'}) ${params.semester || '1학기'} 알림장 10페이지를 작성하세요. 수업·친구 에피소드·행사·성장 모습 포함. 선생님 어투. ${jsonSchema}`,
-    fairytale: `어린이 동화 작가로서, ${params.heroName || '주인공'}(${params.heroAge || '5살'})이 주인공인 "${params.theme || '숲속 모험'}" 동화를 10페이지로 작성하세요. 교훈: ${params.moralLesson || '용기와 우정'}. 시작→갈등→해결→결말 구조. ${jsonSchema}`,
-    travel: `여행 에세이 작가로서, ${params.destination || '여행지'} 여행("${params.tripName || '특별한 여행'}") 포토북 10페이지를 작성하세요. 출발 설렘→명소→음식→감상 순. ${jsonSchema}`,
-    selfpublish: `편집자로서, "${params.bookTitle || '나의 책'}"(${params.genre || '에세이'}) 챕터 초안 10페이지를 작성하세요. 장르에 맞는 문체, 서론→본론→결론 구조. ${jsonSchema}`,
-    pet: `반려동물 앨범 작가로서, ${params.petName || '우리 아이'}(${params.petType || '강아지'})의 성장 앨범 10페이지를 작성하세요. 첫 만남→적응→에피소드→계절 추억→현재. 보호자 시선으로 따뜻하게. ${jsonSchema}`,
+    baby: `따뜻한 육아 일기 작가로서, ${params.babyName || '아이'}의 ${params.period || '6개월'} 성장 기록을 ${count}페이지로 작성하세요. 첫 웃음·뒤집기·이유식 등 월령별 이정표를 시간순으로, 부모 시선으로 따뜻하게. ${jsonSchema}`,
+    kindergarten: `유치원 담임으로서, ${params.childName || '원아'}(${params.className || '꽃반'}) ${params.semester || '1학기'} 알림장 ${count}페이지를 작성하세요. 수업·친구 에피소드·행사·성장 모습 포함. 선생님 어투. ${jsonSchema}`,
+    fairytale: `어린이 동화 작가로서, ${params.heroName || '주인공'}(${params.heroAge || '5살'})이 주인공인 "${params.theme || '숲속 모험'}" 동화를 ${count}페이지로 작성하세요. 교훈: ${params.moralLesson || '용기와 우정'}. 시작→갈등→해결→결말 구조. ${jsonSchema}`,
+    travel: `감성적인 여행 에세이 작가로서, ${params.destination || '여행지'} 여행("${params.tripName || '특별한 여행'}") 포토북을 ${count}페이지로 작성하세요.
+동행: ${params.companions || ''}. 분위기: ${params.mood || '설렘과 여유'}. 키워드: ${params.keywords || ''}.
+${isPhotoMode ? '각 페이지는 사진 한 장에 어울리는 짧고 감성적인 캡션입니다.' : '출발 설렘→도착→명소→음식→감동의 순간→아쉬운 마지막날 순으로 구성하세요.'}
+읽는 사람이 현장에 있는 것처럼 생생하고 감성적으로 쓰세요. ${jsonSchema}`,
+    selfpublish: `편집자로서, "${params.bookTitle || '나의 책'}"(${params.genre || '에세이'}) 챕터 초안 ${count}페이지를 작성하세요. 장르에 맞는 문체, 서론→본론→결론 구조. ${jsonSchema}`,
+    pet: `반려동물 앨범 작가로서, ${params.petName || '우리 아이'}(${params.petType || '강아지'})의 성장 앨범 ${count}페이지를 작성하세요. 첫 만남→적응→에피소드→계절 추억→현재. 보호자 시선으로 따뜻하게. ${jsonSchema}`,
   };
 
   return prompts[serviceType] || null;
@@ -139,10 +148,15 @@ function generateFallback(serviceType, params) {
   };
 
   const template = templates[serviceType] || templates.fairytale;
+  const count = Math.max(1, parseInt(params.photoCount, 10) || 10);
+
+  // photoCount 맞게 페이지 수 조정 (부족 시 반복, 초과 시 자름)
+  const sourcePgs = template.pages;
+  const targetPgs = Array.from({ length: count }, (_, i) => sourcePgs[i % sourcePgs.length]);
 
   return {
     title: template.title,
-    pages: template.pages.map((p, i) => ({
+    pages: targetPgs.map((p, i) => ({
       id: `ai-${serviceType}-${Date.now()}-${i}`,
       title: p.title,
       text: p.text,
