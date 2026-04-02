@@ -6,12 +6,12 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// 정식 모델명(models/ 접두사) 사용 — 쿼터 소진 시 순차 폴백
+// 실제 동작 확인된 모델 순서 — 쿼터 소진 시 순차 폴백
+// gemini-1.5-* 계열은 이 API 키에서 404, gemini-2.0-* 계열은 429 → 2.5 계열 사용
 const GEMINI_MODELS = [
-  'models/gemini-1.5-flash-8b',
-  'models/gemini-1.5-flash',
-  'models/gemini-2.0-flash',
-  'models/gemini-pro',
+  'gemini-flash-lite-latest',   // 경량·빠름, 쿼터 여유
+  'gemini-2.5-flash',           // 고성능, 쿼터 소진 시 대기
+  'gemini-2.5-pro',             // 최후 수단
 ];
 
 // 모델 시도 간 지연 (동일 API Key 쿼터 과부하 방지)
