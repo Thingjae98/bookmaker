@@ -29,19 +29,6 @@ export default function EditorPage() {
   const [stagedFiles, setStagedFiles] = useState({});
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
-  // 좌측 패널 표지 이미지 (앞/뒤)
-  const [coverFront, setCoverFront] = useState({ file: null, preview: '' });
-  const [coverBack, setCoverBack] = useState({ file: null, preview: '' });
-
-  // AI 초안 생성 모달 (입력 폼)
-  const [showAiPanel, setShowAiPanel] = useState(false);
-  const [aiFormData, setAiFormData] = useState({});
-  const [aiGenerating, setAiGenerating] = useState(false);
-  const [aiError, setAiError] = useState(null);
-
-  // AI 초안 미리보기 모달
-  const [draftData, setDraftData] = useState(null);
-  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
 
   // ── 갤러리 상태 ───────────────────────────────────────────────
   // item shape: { id, file, previewUrl, role: null|'front'|'back'|'content', text: '', isLandscape: false, useSpread: false }
@@ -105,14 +92,6 @@ export default function EditorPage() {
     handleFileSelect(e.dataTransfer.files[0], pageId);
   };
 
-  // 좌측 패널 표지 이미지 선택
-  const handleCoverSelect = (file, type) => {
-    if (!file || !file.type.startsWith('image/')) return;
-    const preview = URL.createObjectURL(file);
-    if (type === 'front') setCoverFront({ file, preview });
-    else setCoverBack({ file, preview });
-  };
-
   // ── 갤러리 헬퍼 함수 ──────────────────────────────────────────
 
   // 이미지 가로형 여부 감지 (width > height × 1.6)
@@ -173,9 +152,6 @@ export default function EditorPage() {
     toast.success(`${arr.length}장이 갤러리에 추가됐습니다`);
   };
 
-  // 일괄 업로드 버튼 → 갤러리에 추가 (자동 표지 지정 없음 — DECISION_LOG 피벗 반영)
-  const handleBulkUpload = (files) => handleGalleryUpload(files);
-
   // 갤러리 아이템 업데이트
   const updateGalleryItem = (idx, updates) => {
     setGallery((prev) => prev.map((item, i) => (i === idx ? { ...item, ...updates } : item)));
@@ -228,72 +204,6 @@ export default function EditorPage() {
     handleGalleryUpload(e.dataTransfer.files);
   };
 
-  // ── AI 초안 생성 ──────────────────────────────────────────────
-
-  const AI_FORM_FIELDS = {
-    baby: [
-      { key: 'babyName', label: '아이 이름', type: 'text', placeholder: '예) 하은이', required: true },
-      { key: 'period', label: '기록 기간', type: 'select', options: ['1개월', '3개월', '6개월', '1년'], required: true },
-      { key: 'message', label: '아이에게 전하는 한마디', type: 'text', placeholder: '예) 사랑해, 우리 아가', required: false },
-    ],
-    kindergarten: [
-      { key: 'childName', label: '원아 이름', type: 'text', placeholder: '예) 김서준', required: true },
-      { key: 'className', label: '반 이름', type: 'text', placeholder: '예) 해바라기반', required: false },
-      { key: 'semester', label: '학기', type: 'select', options: ['1학기', '2학기', '전체'], required: true },
-    ],
-    fairytale: [
-      { key: 'heroName', label: '주인공 이름', type: 'text', placeholder: '예) 하은이', required: true },
-      { key: 'heroAge', label: '주인공 나이', type: 'select', options: ['3살', '4살', '5살', '6살', '7살', '8살'], required: false },
-      { key: 'theme', label: '동화 주제', type: 'text', placeholder: '예) 숲속 친구들과의 모험', required: true },
-      { key: 'moralLesson', label: '담을 교훈', type: 'text', placeholder: '예) 용기와 우정', required: false },
-    ],
-    travel: [
-      { key: 'destination', label: '여행지', type: 'text', placeholder: '예) 제주도', required: true },
-      { key: 'tripName', label: '여행 제목', type: 'text', placeholder: '예) 2025 가족 제주 여행', required: false },
-      { key: 'companions', label: '동행인', type: 'text', placeholder: '예) 가족 3명', required: false },
-    ],
-    selfpublish: [
-      { key: 'bookTitle', label: '책 제목', type: 'text', placeholder: '예) 나의 첫 에세이', required: true },
-      { key: 'genre', label: '장르', type: 'select', options: ['에세이', '시집', '사진집', '일러스트집', '기타'], required: true },
-      { key: 'bookDescription', label: '책 소개 (선택)', type: 'text', placeholder: '어떤 이야기를 담을지 간략히', required: false },
-    ],
-    pet: [
-      { key: 'petName', label: '반려동물 이름', type: 'text', placeholder: '예) 뽀삐', required: true },
-      { key: 'petType', label: '종류', type: 'select', options: ['강아지', '고양이', '토끼', '햄스터', '기타'], required: true },
-      { key: 'ownerMessage', label: '우리 아이에게 한마디', type: 'text', placeholder: '예) 언제나 사랑해!', required: false },
-    ],
-  };
-
-  const handleAiGenerate = async () => {
-    if (!session) return;
-    const fields = AI_FORM_FIELDS[session.serviceType] || [];
-    const missing = fields.filter((f) => f.required && !aiFormData[f.key]).map((f) => f.label);
-    if (missing.length > 0) { setAiError(`필수 항목을 입력해주세요: ${missing.join(', ')}`); return; }
-
-    setAiGenerating(true); setAiError(null);
-    try {
-      const res = await fetch('/api/generate-story', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ serviceType: session.serviceType, ...aiFormData }),
-      });
-      const data = await res.json();
-      if (!data.success) throw new Error(data.message);
-      setDraftData({ ...data.data, source: data.source, notice: data.notice });
-      setShowAiPanel(false);
-      setIsPreviewModalOpen(true);
-      setAiFormData({});
-    } catch (err) {
-      setAiError(err.message);
-    } finally {
-      setAiGenerating(false);
-    }
-  };
-
-  const handleDraftReplace = () => { setPages(draftData.pages); setEditingIdx(0); setDraftData(null); setIsPreviewModalOpen(false); };
-  const handleDraftAppend  = () => { setPages((prev) => [...prev, ...draftData.pages]); setDraftData(null); setIsPreviewModalOpen(false); };
-  const handleDraftCancel  = () => { setDraftData(null); setIsPreviewModalOpen(false); };
-
   // ── 책 생성 API (갤러리 통합) ──────────────────────────────────
   const handleCreateBook = async () => {
     const contentCount = pages.length + gallery.filter((g) => g.role !== 'front' && g.role !== 'back').length;
@@ -345,7 +255,7 @@ export default function EditorPage() {
         setUploadingPhoto(false);
       }
 
-      // 2. 표지 URL 초기화 (기본값 → 좌측 패널 → 갤러리 지정 순으로 덮어씀)
+      // 2. 표지 URL 초기화 (기본값 → 갤러리 지정 순으로 덮어씀)
       let coverFrontUrl = `https://picsum.photos/seed/${session.serviceType}-front/600/600`;
       let coverBackUrl  = `https://picsum.photos/seed/${session.serviceType}-back/600/600`;
 
@@ -358,17 +268,7 @@ export default function EditorPage() {
         addLog(`⚠️ ${label} 업로드 실패: ${d.message}`); return null;
       };
 
-      // 좌측 패널 표지
-      if (coverFront.file) {
-        const url = await uploadCover(coverFront.file, '앞표지(패널)');
-        if (url) coverFrontUrl = url;
-      }
-      if (coverBack.file) {
-        const url = await uploadCover(coverBack.file, '뒤표지(패널)');
-        if (url) coverBackUrl = url;
-      }
-
-      // 갤러리 표지 (우선순위 더 높음)
+      // 갤러리 표지
       const galleryFront   = gallery.find((g) => g.role === 'front');
       const galleryBack    = gallery.find((g) => g.role === 'back');
       const galleryContent = gallery.filter((g) => g.role !== 'front' && g.role !== 'back');
@@ -528,7 +428,6 @@ export default function EditorPage() {
   if (!session) return <div className="min-h-screen flex items-center justify-center"><div className="spinner text-warm-600" /></div>;
 
   const service = SERVICE_TYPES[session.serviceType];
-  const aiFields = AI_FORM_FIELDS[session.serviceType] || [];
   const galleryItem = galleryModal.open ? gallery[galleryModal.idx] : null;
   const modalHasFront = gallery.some((g, i) => g.role === 'front' && i !== galleryModal.idx);
   const modalHasBack  = gallery.some((g, i) => g.role === 'back'  && i !== galleryModal.idx);
@@ -536,96 +435,6 @@ export default function EditorPage() {
   return (
     <div className="min-h-screen pb-20">
       <StepIndicator currentStep="editor" />
-
-      {/* ── AI 초안 미리보기 모달 ── */}
-      {isPreviewModalOpen && draftData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.55)' }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col animate-fade-up">
-            <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-ink-100 flex-shrink-0">
-              <div className="flex items-center gap-2">
-                <span className="text-xl">✨</span>
-                <div>
-                  <h2 className="font-display font-bold text-ink-900">AI 초안 미리보기</h2>
-                  <p className="text-xs text-ink-400 mt-0.5">{draftData.source === 'gemini' ? 'Gemini AI 생성' : '기본 템플릿 생성'} · {draftData.pages.length}페이지</p>
-                </div>
-              </div>
-              <button onClick={handleDraftCancel} className="p-2 text-ink-400 hover:text-ink-700 rounded-lg hover:bg-ink-50">✕</button>
-            </div>
-            {draftData.notice && (
-              <div className="mx-6 mt-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700 flex-shrink-0">⚠️ {draftData.notice}</div>
-            )}
-            <div className="px-6 pt-4 pb-2 flex-shrink-0">
-              <p className="text-sm text-ink-500">책 제목</p>
-              <p className="font-display font-bold text-ink-900 text-base">{draftData.title}</p>
-            </div>
-            <div className="flex-1 overflow-y-auto px-6 pb-4 space-y-2 min-h-0">
-              {draftData.pages.map((page, idx) => (
-                <div key={idx} className="flex gap-3 p-3 bg-ink-50 rounded-xl">
-                  <span className="text-xs font-bold text-ink-400 w-6 flex-shrink-0 mt-0.5">#{idx + 1}</span>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-ink-800 truncate">{page.title}</p>
-                    <p className="text-xs text-ink-500 mt-0.5 line-clamp-2">{page.text}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="px-6 pb-6 pt-4 border-t border-ink-100 flex-shrink-0 space-y-2">
-              <div className="flex gap-2">
-                <button onClick={handleDraftReplace} className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white" style={{ background: 'linear-gradient(135deg, #7c3aed, #a855f7)' }}>전체 페이지 교체</button>
-                <button onClick={handleDraftAppend} className="flex-1 py-2.5 rounded-xl text-sm font-bold text-violet-700 border-2 border-violet-300 bg-violet-50 hover:bg-violet-100">페이지 뒤에 추가</button>
-              </div>
-              <button onClick={handleDraftCancel} className="w-full py-2.5 rounded-xl text-sm font-medium text-ink-500 hover:text-ink-700 hover:bg-ink-50 border border-ink-200">작업 취소</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── AI 초안 생성 모달 (입력 폼) ── */}
-      {showAiPanel && session && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.45)' }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-fade-up">
-            <div className="flex items-center justify-between mb-5">
-              <div className="flex items-center gap-2">
-                <span className="text-xl">✨</span>
-                <div>
-                  <h2 className="font-display font-bold text-ink-900">AI 페이지 초안 생성</h2>
-                  <p className="text-xs text-ink-400 mt-0.5">{SERVICE_TYPES[session.serviceType]?.name} · Gemini AI</p>
-                </div>
-              </div>
-              <button onClick={() => { setShowAiPanel(false); setAiError(null); }} className="p-2 text-ink-400 hover:text-ink-700 rounded-lg hover:bg-ink-50">✕</button>
-            </div>
-            <div className="space-y-3 mb-4">
-              {aiFields.map((field) => (
-                <div key={field.key}>
-                  <label className="block text-sm font-medium text-ink-800 mb-1">{field.label}{field.required && <span className="text-red-400 ml-0.5">*</span>}</label>
-                  {field.type === 'select' ? (
-                    <select className="input-field text-sm" value={aiFormData[field.key] || ''} onChange={(e) => setAiFormData((p) => ({ ...p, [field.key]: e.target.value }))}>
-                      <option value="">선택해주세요</option>
-                      {field.options.map((o) => <option key={o} value={o}>{o}</option>)}
-                    </select>
-                  ) : (
-                    <input type="text" className="input-field text-sm" placeholder={field.placeholder} value={aiFormData[field.key] || ''} onChange={(e) => setAiFormData((p) => ({ ...p, [field.key]: e.target.value }))} />
-                  )}
-                </div>
-              ))}
-            </div>
-            {aiError && <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">{aiError}</div>}
-            {aiGenerating && (
-              <div className="mb-4 space-y-1.5">
-                {['아이디어 구상 중...', '문장 구성 중...', '페이지 편집 중...'].map((hint, i) => (
-                  <div key={i} className="flex items-center gap-2 text-xs text-violet-500 opacity-0 animate-fade-in" style={{ animationDelay: `${i * 0.7}s`, animationFillMode: 'forwards' }}>
-                    <span className="w-1.5 h-1.5 rounded-full bg-violet-400 flex-shrink-0" /> {hint}
-                  </div>
-                ))}
-              </div>
-            )}
-            <button onClick={handleAiGenerate} disabled={aiGenerating} className="w-full py-3 rounded-xl font-bold text-white transition-all disabled:opacity-60" style={{ background: aiGenerating ? '#7c3aed80' : 'linear-gradient(135deg, #7c3aed, #a855f7)' }}>
-              {aiGenerating ? <span className="flex items-center justify-center gap-2"><span className="spinner" />AI가 페이지를 집필 중입니다...</span> : '🪄 AI 초안 생성하기'}
-            </button>
-            <p className="text-xs text-ink-400 text-center mt-3">생성 후 모든 내용을 자유롭게 수정할 수 있습니다</p>
-          </div>
-        </div>
-      )}
 
       {/* ── 갤러리 페이지 구성 모달 ── */}
       {galleryModal.open && galleryItem && (
@@ -765,50 +574,31 @@ export default function EditorPage() {
                 <span className="text-xs text-ink-400 bg-ink-50 px-2 py-0.5 rounded-full">{pages.length}개</span>
               </div>
 
-              {/* 표지 이미지 업로드 (앞/뒤) */}
+              {/* 표지 상태 (갤러리 연동 — 읽기 전용) */}
               <div className="mb-3 p-3 bg-ink-50 rounded-xl">
-                <p className="text-xs font-bold text-ink-600 mb-2">📖 표지 이미지 (패널 직접 업로드)</p>
+                <p className="text-xs font-bold text-ink-600 mb-2">📖 표지 상태</p>
                 <div className="grid grid-cols-2 gap-2">
                   {['front', 'back'].map((type) => {
-                    const cover = type === 'front' ? coverFront : coverBack;
+                    const item = gallery.find((g) => g.role === type);
                     const label = type === 'front' ? '앞표지' : '뒤표지';
-                    const inputId = `cover-${type}-input`;
                     return (
-                      <div key={type}>
-                        <input id={inputId} type="file" accept="image/*" className="hidden" onChange={(e) => handleCoverSelect(e.target.files[0], type)} />
-                        <button type="button" onClick={() => document.getElementById(inputId).click()} className="w-full h-20 rounded-lg border-2 border-dashed border-ink-200 hover:border-warm-400 transition-colors overflow-hidden relative group" title={`${label} 이미지 업로드`}>
-                          {cover.preview ? (
-                            <img src={cover.preview} alt={label} className="w-full h-full object-cover" />
+                      <div key={type} className="text-center">
+                        <div className={`w-full h-20 rounded-lg border-2 overflow-hidden flex items-center justify-center ${item ? 'border-warm-400' : 'border-dashed border-ink-200 bg-white'}`}>
+                          {item ? (
+                            <img src={item.previewUrl} alt={label} className="w-full h-full object-cover" />
                           ) : (
-                            <div className="flex flex-col items-center justify-center h-full text-ink-400 group-hover:text-warm-600 transition-colors">
+                            <div className="flex flex-col items-center text-ink-300">
                               <span className="text-lg">🖼️</span>
-                              <span className="text-xs mt-0.5">{label}</span>
+                              <span className="text-[10px] mt-0.5">미지정</span>
                             </div>
                           )}
-                          {cover.preview && <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><span className="text-white text-xs font-medium">변경</span></div>}
-                        </button>
-                        {cover.preview && (
-                          <button type="button" onClick={() => type === 'front' ? setCoverFront({ file: null, preview: '' }) : setCoverBack({ file: null, preview: '' })} className="w-full text-xs text-red-400 hover:text-red-600 mt-0.5 text-center">삭제</button>
-                        )}
+                        </div>
+                        <p className="text-[10px] text-ink-400 mt-1">{label}{item ? ' ✓' : ''}</p>
                       </div>
                     );
                   })}
                 </div>
-                <p className="text-xs text-ink-400 mt-1">※ 갤러리에서 앞표지/뒤표지를 지정하면 이 값보다 우선됩니다</p>
-              </div>
-
-              {/* AI 초안 생성 버튼 */}
-              <button onClick={() => { setShowAiPanel(true); setAiError(null); }} className="w-full mb-2 py-2 rounded-xl text-sm font-medium text-violet-700 border-2 border-violet-200 bg-violet-50 hover:bg-violet-100 hover:border-violet-400 transition-all flex items-center justify-center gap-1.5">
-                <span>✨</span> AI로 페이지 초안 생성
-              </button>
-
-              {/* 사진 일괄 업로드 버튼 → 갤러리에 추가 */}
-              <div className="mb-3">
-                <input id="bulk-upload-input" type="file" accept="image/*" multiple className="hidden" onChange={(e) => handleBulkUpload(e.target.files)} />
-                <button type="button" onClick={() => document.getElementById('bulk-upload-input').click()} className="w-full py-2 rounded-xl text-sm font-medium text-warm-700 border-2 border-warm-200 bg-warm-50 hover:bg-warm-100 hover:border-warm-400 transition-all flex items-center justify-center gap-1.5">
-                  <span>📸</span> 사진 일괄 업로드 (갤러리)
-                </button>
-                <p className="text-xs text-ink-400 text-center mt-1">업로드 후 아래 갤러리에서 역할을 지정하세요</p>
+                <p className="text-xs text-ink-400 mt-1.5">갤러리에서 앞표지·뒤표지 역할을 지정하세요</p>
               </div>
 
               {/* 페이지 목록 */}
@@ -833,6 +623,105 @@ export default function EditorPage() {
 
           {/* 우측: 편집 영역 */}
           <div className="lg:col-span-2 space-y-6">
+
+            {/* ── 사진 갤러리 ── */}
+            <div className="bg-white rounded-2xl border border-ink-100 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="font-display font-bold text-ink-900">📷 사진 갤러리</h2>
+                  <p className="text-xs text-ink-400 mt-0.5">사진을 업로드하고 썸네일을 클릭해 앞표지·뒤표지·내지 역할을 지정하세요 · 드래그로 순서 변경 가능</p>
+                </div>
+                {gallery.length > 0 && (
+                  <div className="flex items-center gap-2 text-xs text-ink-500">
+                    <span>총 {gallery.length}장</span>
+                    {gallery.find((g) => g.role === 'front') && <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded-full">앞표지 ✓</span>}
+                    {gallery.find((g) => g.role === 'back')  && <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">뒤표지 ✓</span>}
+                  </div>
+                )}
+              </div>
+
+              {/* 드래그 앤 드롭 업로드 존 */}
+              <div
+                onDragOver={(e) => { e.preventDefault(); setGalleryDropActive(true); }}
+                onDragLeave={() => setGalleryDropActive(false)}
+                onDrop={handleGalleryZoneDrop}
+                onClick={() => document.getElementById('gallery-upload-input').click()}
+                className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all mb-5 ${
+                  galleryDropActive ? 'border-warm-600 bg-warm-50' : 'border-ink-200 hover:border-warm-400 hover:bg-ink-50'
+                }`}
+              >
+                <input id="gallery-upload-input" type="file" accept="image/*" multiple className="hidden" onChange={(e) => handleGalleryUpload(e.target.files)} />
+                <p className="text-2xl mb-2">📸</p>
+                <p className="text-sm font-medium text-ink-600">사진을 드래그하거나 클릭하여 업로드</p>
+                <p className="text-xs text-ink-400 mt-1">여러 장 동시 선택 가능 · 가로형 이미지는 자동 감지 (↔)</p>
+              </div>
+
+              {/* 갤러리 그리드 */}
+              {gallery.length > 0 ? (
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3">
+                  {gallery.map((item, idx) => (
+                    <div
+                      key={item.id}
+                      draggable
+                      onDragStart={(e) => handleGalleryDragStart(e, idx)}
+                      onDragOver={(e) => handleGalleryDragOver(e, idx)}
+                      onDragEnd={handleGalleryDragEnd}
+                      onClick={() => setGalleryModal({ open: true, idx })}
+                      className={`relative aspect-square rounded-xl overflow-hidden cursor-pointer border-2 transition-all group select-none ${
+                        galleryDragIdx === idx ? 'opacity-40 scale-95 cursor-grabbing' : 'hover:shadow-lg cursor-grab'
+                      } ${
+                        item.role === 'front'   ? 'border-green-500 ring-2 ring-green-200' :
+                        item.role === 'back'    ? 'border-blue-500  ring-2 ring-blue-200'  :
+                        item.role === 'content' ? 'border-warm-500  ring-2 ring-warm-200'  :
+                        'border-transparent hover:border-ink-300'
+                      }`}
+                    >
+                      <img src={item.previewUrl} alt="" className="w-full h-full object-cover pointer-events-none" draggable={false} />
+
+                      {/* 역할 뱃지 */}
+                      {item.role && (
+                        <div className={`absolute top-1 left-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md leading-none ${
+                          item.role === 'front'   ? 'bg-green-600 text-white' :
+                          item.role === 'back'    ? 'bg-blue-600  text-white' :
+                          'bg-warm-600 text-white'
+                        }`}>
+                          {item.role === 'front' ? '앞' : item.role === 'back' ? '뒤' : '내지'}
+                        </div>
+                      )}
+
+                      {/* 양면 분할 뱃지 */}
+                      {item.useSpread && (
+                        <div className="absolute top-1 right-1 text-[10px] bg-sky-600 text-white px-1.5 py-0.5 rounded-md leading-none">2p</div>
+                      )}
+
+                      {/* 가로형 표시 (분할 안 할 때) */}
+                      {item.isLandscape && !item.useSpread && (
+                        <div className="absolute top-1 right-1 text-[10px] bg-sky-500/80 text-white px-1 py-0.5 rounded leading-none">↔</div>
+                      )}
+
+                      {/* 내지 텍스트 유무 */}
+                      {item.role === 'content' && (
+                        <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-[10px] py-0.5 text-center leading-none">
+                          {item.text.trim() ? '📝' : '🖼️'}
+                        </div>
+                      )}
+
+                      {/* 호버 오버레이 */}
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-all flex items-center justify-center">
+                        <span className="text-white text-lg opacity-0 group-hover:opacity-100 transition-opacity drop-shadow">✏️</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <p className="text-3xl mb-2">🖼️</p>
+                  <p className="text-sm text-ink-400">사진을 업로드하면 여기에 표시됩니다</p>
+                  <p className="text-xs text-ink-300 mt-1">썸네일을 클릭하면 앞표지·뒤표지·내지 역할을 지정할 수 있습니다</p>
+                </div>
+              )}
+            </div>
+
             {editingIdx !== null && pages[editingIdx] ? (
               <div className="bg-white rounded-2xl border border-ink-100 p-6 opacity-0 animate-fade-in" key={editingIdx} style={{ animationFillMode: 'forwards' }}>
                 <div className="flex items-center justify-between mb-6">
@@ -953,105 +842,6 @@ export default function EditorPage() {
           </div>
         </div>
 
-        {/* ── 사진 갤러리 섹션 ── */}
-        <div className="mt-8">
-          <div className="bg-white rounded-2xl border border-ink-100 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="font-display font-bold text-ink-900">📷 사진 갤러리</h2>
-                <p className="text-xs text-ink-400 mt-0.5">사진을 업로드하고 썸네일을 클릭해 앞표지·뒤표지·내지 역할을 지정하세요 · 드래그로 순서 변경 가능</p>
-              </div>
-              {gallery.length > 0 && (
-                <div className="flex items-center gap-2 text-xs text-ink-500">
-                  <span>총 {gallery.length}장</span>
-                  {gallery.find((g) => g.role === 'front') && <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded-full">앞표지 ✓</span>}
-                  {gallery.find((g) => g.role === 'back')  && <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">뒤표지 ✓</span>}
-                </div>
-              )}
-            </div>
-
-            {/* 드래그 앤 드롭 업로드 존 */}
-            <div
-              onDragOver={(e) => { e.preventDefault(); setGalleryDropActive(true); }}
-              onDragLeave={() => setGalleryDropActive(false)}
-              onDrop={handleGalleryZoneDrop}
-              onClick={() => document.getElementById('gallery-upload-input').click()}
-              className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all mb-5 ${
-                galleryDropActive ? 'border-warm-600 bg-warm-50' : 'border-ink-200 hover:border-warm-400 hover:bg-ink-50'
-              }`}
-            >
-              <input id="gallery-upload-input" type="file" accept="image/*" multiple className="hidden" onChange={(e) => handleGalleryUpload(e.target.files)} />
-              <p className="text-2xl mb-2">📸</p>
-              <p className="text-sm font-medium text-ink-600">사진을 드래그하거나 클릭하여 업로드</p>
-              <p className="text-xs text-ink-400 mt-1">여러 장 동시 선택 가능 · 가로형 이미지는 자동 감지 (↔)</p>
-            </div>
-
-            {/* 갤러리 그리드 */}
-            {gallery.length > 0 ? (
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3">
-                {gallery.map((item, idx) => (
-                  <div
-                    key={item.id}
-                    draggable
-                    onDragStart={(e) => handleGalleryDragStart(e, idx)}
-                    onDragOver={(e) => handleGalleryDragOver(e, idx)}
-                    onDragEnd={handleGalleryDragEnd}
-                    onClick={() => setGalleryModal({ open: true, idx })}
-                    className={`relative aspect-square rounded-xl overflow-hidden cursor-pointer border-2 transition-all group select-none ${
-                      galleryDragIdx === idx ? 'opacity-40 scale-95 cursor-grabbing' : 'hover:shadow-lg cursor-grab'
-                    } ${
-                      item.role === 'front'   ? 'border-green-500 ring-2 ring-green-200' :
-                      item.role === 'back'    ? 'border-blue-500  ring-2 ring-blue-200'  :
-                      item.role === 'content' ? 'border-warm-500  ring-2 ring-warm-200'  :
-                      'border-transparent hover:border-ink-300'
-                    }`}
-                  >
-                    <img src={item.previewUrl} alt="" className="w-full h-full object-cover pointer-events-none" draggable={false} />
-
-                    {/* 역할 뱃지 */}
-                    {item.role && (
-                      <div className={`absolute top-1 left-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md leading-none ${
-                        item.role === 'front'   ? 'bg-green-600 text-white' :
-                        item.role === 'back'    ? 'bg-blue-600  text-white' :
-                        'bg-warm-600 text-white'
-                      }`}>
-                        {item.role === 'front' ? '앞' : item.role === 'back' ? '뒤' : '내지'}
-                      </div>
-                    )}
-
-                    {/* 양면 분할 뱃지 */}
-                    {item.useSpread && (
-                      <div className="absolute top-1 right-1 text-[10px] bg-sky-600 text-white px-1.5 py-0.5 rounded-md leading-none">2p</div>
-                    )}
-
-                    {/* 가로형 표시 (분할 안 할 때) */}
-                    {item.isLandscape && !item.useSpread && (
-                      <div className="absolute top-1 right-1 text-[10px] bg-sky-500/80 text-white px-1 py-0.5 rounded leading-none">↔</div>
-                    )}
-
-                    {/* 내지 텍스트 유무 */}
-                    {item.role === 'content' && (
-                      <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-[10px] py-0.5 text-center leading-none">
-                        {item.text.trim() ? '📝' : '🖼️'}
-                      </div>
-                    )}
-
-                    {/* 호버 오버레이 */}
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-all flex items-center justify-center">
-                      <span className="text-white text-lg opacity-0 group-hover:opacity-100 transition-opacity drop-shadow">✏️</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8">
-                <p className="text-3xl mb-2">🖼️</p>
-                <p className="text-sm text-ink-400">사진을 업로드하면 여기에 표시됩니다</p>
-                <p className="text-xs text-ink-300 mt-1">썸네일을 클릭하면 앞표지·뒤표지·내지 역할을 지정할 수 있습니다</p>
-              </div>
-            )}
-          </div>
-        </div>
       </div>
     </div>
   );
