@@ -14,10 +14,10 @@ export async function POST(request) {
     const result = await estimateOrder({ items });
     return NextResponse.json(result);
   } catch (err) {
-    console.error('POST /api/orders/estimate error:', err.response?.data || err.message);
+    console.error('POST /api/orders/estimate error:', err.message);
     return NextResponse.json(
-      { success: false, message: err.response?.data?.message || err.message },
-      { status: err.response?.status || 500 }
+      { success: false, message: err.message },
+      { status: err.statusCode || 500 }
     );
   }
 }

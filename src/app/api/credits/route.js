@@ -7,10 +7,10 @@ export async function GET() {
     const result = await getCredits();
     return NextResponse.json(result);
   } catch (err) {
-    console.error('GET /api/credits error:', err.response?.data || err.message);
+    console.error('GET /api/credits error:', err.message);
     return NextResponse.json(
-      { success: false, message: err.response?.data?.message || err.message },
-      { status: err.response?.status || 500 }
+      { success: false, message: err.message },
+      { status: err.statusCode || 500 }
     );
   }
 }

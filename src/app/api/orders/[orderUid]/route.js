@@ -8,10 +8,10 @@ export async function GET(request, { params }) {
     const result = await getOrder(orderUid);
     return NextResponse.json(result);
   } catch (err) {
-    console.error('GET order detail error:', err.response?.data || err.message);
+    console.error('GET order detail error:', err.message);
     return NextResponse.json(
-      { success: false, message: err.response?.data?.message || err.message },
-      { status: err.response?.status || 500 }
+      { success: false, message: err.message },
+      { status: err.statusCode || 500 }
     );
   }
 }
@@ -26,10 +26,10 @@ export async function DELETE(request, { params }) {
     const result = await cancelOrder(orderUid, cancelReason || '고객 요청 취소');
     return NextResponse.json(result);
   } catch (err) {
-    console.error('DELETE order error:', err.response?.data || err.message);
+    console.error('DELETE order error:', err.message);
     return NextResponse.json(
-      { success: false, message: err.response?.data?.message || err.message },
-      { status: err.response?.status || 500 }
+      { success: false, message: err.message },
+      { status: err.statusCode || 500 }
     );
   }
 }
