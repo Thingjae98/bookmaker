@@ -139,7 +139,6 @@ Authorization: Bearer {SWEETBOOK_API_KEY}
 
 ### 핵심 워크플로우 (책 생성 -> 주문)
 ```
-0. POST /api/generate-story              — (선택) AI 페이지 초안 자동 생성 (Gemini)
 1. POST /books                           — 책 생성 (draft)
 2. POST /books/{bookUid}/photos          — 앞표지 사진 업로드 (multipart)
 2. POST /books/{bookUid}/photos          — 뒤표지 사진 업로드 (multipart)
@@ -159,13 +158,13 @@ Authorization: Bearer {SWEETBOOK_API_KEY}
 - **일괄 업로드**: "📸 사진 일괄 업로드" 버튼 → 여러 사진 선택 → 페이지 순서대로 자동 배정
 - **미업로드 시 기본값**: picsum.photos seed 기반 랜덤 이미지 자동 사용
 
-### AI 페이지 초안 생성 API (`/api/generate-story`)
-- 에디터 페이지의 "✨ AI로 페이지 초안 생성" 버튼 → 서비스별 폼 모달 → Gemini AI
-- create 페이지의 "🤖 AI 더미 생성" 버튼 → 서비스 기본값으로 즉시 Gemini 호출 → 에디터로 이동
-- 6개 서비스 타입 모두 지원: baby / kindergarten / fairytale / travel / selfpublish / pet
+### AI 동화 생성 API (`/api/generate-story`)
+- **AI 동화책 서비스 전용** — create 페이지에서 주인공 이름·나이·주제 입력 후 "🪄 AI 동화 생성하기" 버튼 클릭
+- Gemini AI가 10페이지 분량의 동화(제목 + 각 페이지 텍스트)를 자동 생성 → sessionStorage 저장 → 에디터로 이동
+- 적용 서비스: **fairytale 단독** (다른 5개 서비스는 사용자가 직접 텍스트 입력)
 - 모델 우선순위: gemini-flash-lite-latest → gemini-2.5-flash → gemini-2.5-pro → 로컬 템플릿 폴백
 - 환경변수: `GEMINI_API_KEY` (Google AI Studio에서 무료 발급)
-- **이미지 업그레이드**: Gemini는 텍스트만 생성. 이미지는 사용자 직접 업로드 또는 picsum 자동 배정
+- Gemini는 텍스트만 생성. 이미지는 사용자 직접 업로드 또는 picsum 자동 배정
 
 ### 사용 가능한 테스트 템플릿 UID
 - 표지: tpl_F8d15af9fd
@@ -235,7 +234,7 @@ try {
 6. **표지 이미지 업로드**: 에디터 좌측 패널 앞표지/뒤표지 전용 업로드 존
 7. **사진 일괄 업로드**: "📸 사진 일괄 업로드" 버튼 → 여러 사진을 페이지 순서대로 자동 배정
 8. **블러 미리보기**: 상위 5페이지 선명 노출 + 나머지 blur-md 처리 + 구매 유도 오버레이
-9. **AI 페이지 초안 생성**: 에디터 내 "✨ AI로 페이지 초안 생성" 버튼 → 6개 서비스 전용 폼 → Gemini AI → 10페이지 자동 생성 → 미리보기 모달 → 교체/추가/취소 선택
+9. **AI 동화책 10페이지 자동 생성**: AI 동화책 서비스의 create 단계에서 Gemini AI가 동화 10페이지 자동 생성 → 에디터로 이동해 자유롭게 수정 가능
 
 ---
 
@@ -263,6 +262,9 @@ try {
 
 ## 9. 향후 구현 우선순위 (TODO)
 
+### ⚠️ 코드 정리 필요 (피벗 후 잔존 코드)
+- `src/app/create/[serviceType]/page.jsx` 내 `여행 감성 설정` 섹션 (mood/keywords 입력 UI) — 여행 AI 에세이 기능 취소로 불필요, 제거 필요
+
 ### P0 — 과제 제출 전 필수
 - [x] Books API 연동 (생성, 표지, 내지, 최종화)
 - [x] Orders API 연동 (견적, 생성, 목록, 상세, 취소)
@@ -280,7 +282,6 @@ try {
 - [x] 이미지 파일 직접 업로드 (Drag & Drop + Photos API) — 에디터 내 구현 완료
 - [x] 표지 이미지 (앞/뒤) 전용 업로드 UI — 에디터 좌측 패널
 - [x] 미리보기 블러 티저 UI (상위 5p 공개 + 구매 유도 오버레이)
-- [x] AI 페이지 초안 생성 — 에디터 내 6개 서비스 전체 지원, 미리보기 모달로 교체/추가/취소
 - [x] GET /templates로 실제 템플릿 목록 가져와서 선택 UI — create 페이지 카드 선택 UI
 - [ ] 페이지 미리보기 시각화 (템플릿 레이아웃 렌더링)
 - [ ] Skeleton UI 로딩 (현재 spinner만 있음)
