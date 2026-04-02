@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
-import { SERVICE_TYPES, BOOK_SPECS } from '@/lib/constants';
+import { SERVICE_TYPES, BOOK_SPECS, BOOK_SPEC_LABELS } from '@/lib/constants';
 import { DUMMY_DATA } from '@/data/dummy';
 import StepIndicator from '@/components/StepIndicator';
 
@@ -188,7 +188,7 @@ export default function CreatePage() {
                     />
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="font-medium text-ink-900">{s.name}</span>
+                        <span className="font-medium text-ink-900">{BOOK_SPEC_LABELS[s.uid] || s.name}</span>
                         {s.uid === service.recommendedSpec && (
                           <span className="text-xs bg-warm-600 text-white px-2 py-0.5 rounded-full">추천</span>
                         )}

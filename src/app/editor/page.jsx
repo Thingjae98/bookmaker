@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { SERVICE_TYPES } from '@/lib/constants';
+import { SERVICE_TYPES, BOOK_SPEC_LABELS } from '@/lib/constants';
 import { DUMMY_DATA } from '@/data/dummy';
 import StepIndicator from '@/components/StepIndicator';
 
@@ -283,7 +283,7 @@ export default function EditorPage() {
               콘텐츠 편집
             </h1>
             <p className="text-ink-400 text-sm mt-1">
-              페이지를 추가하고 내용을 편집하세요 · 판형: {session.bookSpecUid}
+              페이지를 추가하고 내용을 편집하세요 · 판형: {BOOK_SPEC_LABELS[session.bookSpecUid] || session.bookSpecUid}
             </p>
           </div>
           <div className="flex gap-2">

@@ -7,7 +7,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { SERVICE_TYPES, BOOK_SPECS } from '@/lib/constants';
+import { SERVICE_TYPES, BOOK_SPECS, BOOK_SPEC_LABELS } from '@/lib/constants';
 import { DUMMY_DATA } from '@/data/dummy';
 import StepIndicator from '@/components/StepIndicator';
 
@@ -181,7 +181,7 @@ export default function PreviewPage() {
             </div>
             <div className="p-3 bg-ink-50 rounded-xl">
               <p className="text-xs text-ink-400 mb-0.5">판형</p>
-              <p className="text-sm font-medium text-ink-800">{spec?.name || session.bookSpecUid}</p>
+              <p className="text-sm font-medium text-ink-800">{BOOK_SPEC_LABELS[session.bookSpecUid] || spec?.name || session.bookSpecUid}</p>
             </div>
             <div className="p-3 bg-ink-50 rounded-xl">
               <p className="text-xs text-ink-400 mb-0.5">Book UID</p>

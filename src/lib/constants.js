@@ -144,6 +144,13 @@ export const BOOK_SPECS = {
   },
 };
 
+// 판형 UID → 사용자 친화적 한글 이름 매핑
+export const BOOK_SPEC_LABELS = {
+  SQUAREBOOK_HC: '정방형 하드커버 (243×248mm)',
+  LAYFLAT_HC: '웨딩/사진집 레이플랫 (243×248mm)',
+  SLIMALBUM_HC: '슬림 앨범 하드커버 (243×248mm)',
+};
+
 // 주문 상태 매핑
 export const ORDER_STATUS = {
   20: { key: 'PAID', label: '결제완료', color: 'blue' },
