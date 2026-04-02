@@ -23,15 +23,9 @@
 - **6가지 서비스 유형 선택**: 육아일기 포토북, 유치원 알림장 책, AI 동화책, 여행 포토북, 1인 출판, 반려동물 성장 앨범
 - **서비스별 맞춤 입력 폼**: 각 서비스 유형에 최적화된 정보 입력 필드
 - **콘텐츠 에디터**: 페이지 추가/삭제/순서변경, 텍스트·이미지 편집, 실시간 미리보기
-- **표지 이미지 업로드**: 에디터 좌측 패널에서 앞표지·뒤표지 각각 업로드 → Photos API 자동 연동
-- **사진 일괄 업로드**: "📸 사진 일괄 업로드" 버튼으로 여러 사진을 한 번에 선택 → 페이지 순서대로 자동 배정
-- **내지 사진 업로드**: 각 페이지 편집 영역 내 Drag & Drop 또는 파일 선택
-- **AI 페이지 초안 생성**: 에디터의 "✨ AI로 페이지 초안 생성" 버튼 → 서비스별 정보 입력 → Gemini AI가 10페이지 초안 자동 생성 → 미리보기 후 교체/추가/취소 선택
-- **AI 더미 생성**: 정보 입력 페이지의 "🤖 AI 더미 생성" 버튼 → Gemini가 서비스별 샘플 콘텐츠를 즉시 생성하여 에디터로 바로 이동
 - **판형 선택**: SQUAREBOOK_HC, LAYFLAT_HC, SLIMALBUM_HC 중 선택 (서비스별 추천 판형 제공)
-- **더미 데이터 자동 채우기**: 정적 샘플 데이터로 즉시 체험 가능
-- **API 호출 로그**: 책 생성 → 표지/내지 사진 업로드 → 앞표지 → 내지 → 뒤표지 → 최종화 과정을 실시간 로그로 확인
-- **블러 미리보기**: 상위 5페이지만 공개, 나머지는 블러 처리 → 구매 유도 오버레이
+- **더미 데이터 자동 채우기**: 테스트용 샘플 데이터로 즉시 체험 가능
+- **API 호출 로그**: 책 생성 → 표지 → 내지 → 최종화 과정을 실시간 로그로 확인
 - **가격 견적 조회**: 주문 전 예상 금액 확인 (상품금액 + 배송비 + 포장비)
 - **주문 생성 & 관리**: 배송지 입력 → 주문 → 주문 내역 조회 → 주문 취소
 
@@ -59,7 +53,6 @@ cp .env.example .env
 # .env 파일을 열고 API Key를 입력하세요:
 #   SWEETBOOK_API_KEY=your_sandbox_api_key_here
 #   SWEETBOOK_API_BASE_URL=https://api-sandbox.sweetbook.com/v1
-#   GEMINI_API_KEY=your_gemini_api_key_here  ← AI 동화 생성 기능에 필요 (https://aistudio.google.com 무료 발급)
 
 # 4. 개발 서버 실행
 npm run dev
@@ -69,14 +62,13 @@ npm run dev
 
 ### 빠른 테스트 순서
 1. 메인 페이지에서 원하는 서비스 선택 (예: 여행 포토북)
-2. **"더미 데이터 채우기"** 클릭(정적) 또는 **"🤖 AI 더미 생성"** 클릭(Gemini 동적)
-3. 에디터 좌측 **"📖 표지 이미지"** 에서 앞표지·뒤표지 이미지 업로드 (선택)
-4. **"📸 사진 일괄 업로드"** 로 내지 사진 한번에 배정 (선택)
-5. 에디터에서 페이지 내용 확인 후 **"📗 책 생성 & 최종화"** 클릭
-6. API 로그에서 앞표지→내지→뒤표지→최종화 과정 확인
-7. **"다음: 미리보기 & 주문"** → 가격 확인
-8. **"다음: 주문하기"** → 더미 배송지 채우기 → **"📦 주문하기"**
-9. 주문 완료! **"주문 내역 보기"**에서 확인
+2. **"더미 데이터 채우기"** 버튼 클릭 → 샘플 데이터 자동 입력
+3. **"다음: 콘텐츠 편집"** 클릭
+4. 에디터에서 페이지 확인 후 **"📗 책 생성 & 최종화"** 클릭
+5. API 로그에서 생성 과정 확인
+6. **"다음: 미리보기 & 주문"** → 가격 확인
+7. **"다음: 주문하기"** → 더미 배송지 채우기 → **"📦 주문하기"**
+8. 주문 완료! **"주문 내역 보기"**에서 확인
 
 ---
 
@@ -86,10 +78,10 @@ npm run dev
 |-----|--------|-----------|------|
 | Books | `POST` | `/v1/books` | 새 책 생성 (draft 상태) |
 | Books | `GET` | `/v1/books` | 책 목록 조회 |
-| Books | `POST` | `/v1/books/{bookUid}/photos` | 사용자 사진 업로드 (multipart) |
-| Books | `GET` | `/v1/books/{bookUid}/photos` | 업로드된 사진 목록 조회 |
 | Books | `POST` | `/v1/books/{bookUid}/cover` | 표지 추가 (템플릿 + 파라미터) |
 | Books | `POST` | `/v1/books/{bookUid}/contents` | 내지 페이지 추가 (반복 호출) |
+| Books | `POST` | `/v1/books/{bookUid}/photos` | 사진 업로드 |
+| Books | `GET` | `/v1/books/{bookUid}/photos` | 업로드된 사진 목록 조회 |
 | Books | `POST` | `/v1/books/{bookUid}/finalization` | 책 최종화 (편집 완료) |
 | Orders | `POST` | `/v1/orders` | 주문 생성 (충전금 차감) |
 | Orders | `POST` | `/v1/orders/estimate` | 주문 전 가격 견적 조회 |
@@ -149,10 +141,9 @@ Book Print API의 핵심 가치는 **"콘텐츠를 책으로 만드는 것"**입
 | 프레임워크 | Next.js 14 (App Router) |
 | 프론트엔드 | React 18, Tailwind CSS |
 | 백엔드 | Next.js API Routes (서버리스) |
-| API 클라이언트 | bookprintapi-nodejs-sdk (공식 SDK) |
+| HTTP 클라이언트 | Axios |
 | API 연동 | SweetBook Book Print API (Sandbox) |
-| 파일 업로드 | HTML5 File API + Drag & Drop + FormData |
-| AI 생성 | Google Gemini 2.0 Flash (@google/generative-ai) |
+| 폼 데이터 | form-data (multipart/form-data 처리) |
 
 ### 프로젝트 구조
 

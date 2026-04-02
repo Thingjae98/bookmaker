@@ -20,6 +20,10 @@ export default function EditorPage() {
   const [stagedFiles, setStagedFiles] = useState({}); // { pageId: File } — 업로드 대기 파일
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
+  // 표지 이미지 (앞/뒤) — 책 생성 시 Photos API로 업로드
+  const [coverFront, setCoverFront] = useState({ file: null, preview: '' });
+  const [coverBack, setCoverBack] = useState({ file: null, preview: '' });
+
   // AI 초안 생성 모달 (입력 폼)
   const [showAiPanel, setShowAiPanel] = useState(false);
   const [aiFormData, setAiFormData] = useState({});
@@ -93,6 +97,22 @@ export default function EditorPage() {
     e.preventDefault();
     const file = e.dataTransfer.files[0];
     handleFileSelect(file, pageId);
+  };
+
+  // 표지 이미지 선택 (앞표지 / 뒤표지)
+  const handleCoverSelect = (file, type) => {
+    if (!file || !file.type.startsWith('image/')) return;
+    const preview = URL.createObjectURL(file);
+    if (type === 'front') setCoverFront({ file, preview });
+    else setCoverBack({ file, preview });
+  };
+
+  // 사진 일괄 업로드 — 선택된 파일을 페이지 순서대로 배정
+  const handleBulkUpload = (files) => {
+    const arr = Array.from(files);
+    arr.forEach((file, i) => {
+      if (i < pages.length) handleFileSelect(file, pages[i].id);
+    });
   };
 
   // ── AI 초안 생성 ─────────────────────────────────────────────
@@ -265,10 +285,48 @@ export default function EditorPage() {
         addLog(`✅ 사진 업로드 완료 (${Object.keys(uploadedUrlMap).length}/${stagedEntries.length}장 성공)`);
       }
 
-      // 2. 표지 추가 — 템플릿 79yjMH3qRPly (일기장A): coverPhoto + title + dateRange 필수
-      addLog('🎨 표지 추가 중...');
-      const firstImage = pages.find(p => p.image && p.image.startsWith('http'))?.image;
-      const coverPhoto = firstImage || `https://picsum.photos/seed/${session.serviceType}-cover/600/600`;
+      // 2. 표지 이미지 업로드 (사용자가 업로드한 경우)
+      addLog('🖼️ 표지 이미지 처리 중...');
+      let coverFrontUrl = `https://picsum.photos/seed/${session.serviceType}-cover-front/600/600`;
+      let coverBackUrl  = `https://picsum.photos/seed/${session.serviceType}-cover-back/600/600`;
+
+      if (coverFront.file) {
+        try {
+          const fd = new FormData();
+          fd.append('file', coverFront.file);
+          const r = await fetch(`/api/books/${uid}/photos`, { method: 'POST', body: fd });
+          const d = await r.json();
+          const uploadedUrl = d.data?.url || d.data?.photoUrl || d.data?.fileUrl;
+          if (d.success && uploadedUrl) {
+            coverFrontUrl = uploadedUrl;
+            addLog(`✅ 앞표지 업로드 완료: ${uploadedUrl}`);
+          } else {
+            addLog(`⚠️ 앞표지 업로드 실패: ${d.message} — 기본 이미지 사용`);
+          }
+        } catch (e) { addLog(`⚠️ 앞표지 업로드 오류: ${e.message}`); }
+      } else {
+        addLog('ℹ️ 앞표지 이미지 미업로드 — 기본 이미지 사용');
+      }
+
+      if (coverBack.file) {
+        try {
+          const fd = new FormData();
+          fd.append('file', coverBack.file);
+          const r = await fetch(`/api/books/${uid}/photos`, { method: 'POST', body: fd });
+          const d = await r.json();
+          const uploadedUrl = d.data?.url || d.data?.photoUrl || d.data?.fileUrl;
+          if (d.success && uploadedUrl) {
+            coverBackUrl = uploadedUrl;
+            addLog(`✅ 뒤표지 업로드 완료: ${uploadedUrl}`);
+          } else {
+            addLog(`⚠️ 뒤표지 업로드 실패: ${d.message} — 기본 이미지 사용`);
+          }
+        } catch (e) { addLog(`⚠️ 뒤표지 업로드 오류: ${e.message}`); }
+      }
+
+      // 3-a. 앞표지 추가 — 템플릿 79yjMH3qRPly
+      addLog('🎨 앞표지 추가 중...');
+      const coverPhoto = coverFrontUrl;
       const dateRange = session.formData.period || session.formData.semester
         ? `${session.formData.year || '2025'}년 ${session.formData.semester || session.formData.period || ''}`
         : pages[0]?.date
@@ -334,6 +392,25 @@ export default function EditorPage() {
         }
       }
       addLog(`✅ 전체 ${pagesForApi.length}개 페이지 추가 완료`);
+
+      // 3-c. 뒤표지 — 마지막 콘텐츠 페이지로 추가 (전면 이미지)
+      addLog('🎨 뒤표지 추가 중...');
+      const backCoverRes = await fetch(`/api/books/${uid}/contents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          templateUid: 'vHA59XPPKqak',
+          parameters: {
+            date: new Date().toISOString().slice(0, 10),
+            title: '뒤표지',
+            diaryText: '',
+            diaryPhoto: coverBackUrl,
+          },
+          breakBefore: 'page',
+        }),
+      });
+      const backCoverData = await backCoverRes.json();
+      addLog(backCoverData.success ? '✅ 뒤표지 추가 완료' : `⚠️ 뒤표지: ${backCoverData.message}`);
 
       // 4. 최종화
       addLog('🔒 책 최종화 중...');
@@ -587,13 +664,90 @@ export default function EditorPage() {
                 </span>
               </div>
 
+              {/* ── 표지 이미지 업로드 (앞/뒤) ── */}
+              <div className="mb-3 p-3 bg-ink-50 rounded-xl">
+                <p className="text-xs font-bold text-ink-600 mb-2">📖 표지 이미지</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {/* 앞표지 */}
+                  {['front', 'back'].map((type) => {
+                    const cover = type === 'front' ? coverFront : coverBack;
+                    const label = type === 'front' ? '앞표지' : '뒤표지';
+                    const inputId = `cover-${type}-input`;
+                    return (
+                      <div key={type}>
+                        <input
+                          id={inputId}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => handleCoverSelect(e.target.files[0], type)}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => document.getElementById(inputId).click()}
+                          className="w-full h-20 rounded-lg border-2 border-dashed border-ink-200 hover:border-warm-400 transition-colors overflow-hidden relative group"
+                          title={`${label} 이미지 업로드`}
+                        >
+                          {cover.preview ? (
+                            <img src={cover.preview} alt={label} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="flex flex-col items-center justify-center h-full text-ink-400 group-hover:text-warm-600 transition-colors">
+                              <span className="text-lg">🖼️</span>
+                              <span className="text-xs mt-0.5">{label}</span>
+                            </div>
+                          )}
+                          {cover.preview && (
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                              <span className="text-white text-xs font-medium">변경</span>
+                            </div>
+                          )}
+                        </button>
+                        {cover.preview && (
+                          <button
+                            type="button"
+                            onClick={() => type === 'front' ? setCoverFront({ file: null, preview: '' }) : setCoverBack({ file: null, preview: '' })}
+                            className="w-full text-xs text-red-400 hover:text-red-600 mt-0.5 text-center"
+                          >
+                            삭제
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* AI 초안 생성 버튼 */}
               <button
                 onClick={() => { setShowAiPanel(true); setAiError(null); }}
-                className="w-full mb-3 py-2 rounded-xl text-sm font-medium text-violet-700 border-2 border-violet-200 bg-violet-50 hover:bg-violet-100 hover:border-violet-400 transition-all flex items-center justify-center gap-1.5"
+                className="w-full mb-2 py-2 rounded-xl text-sm font-medium text-violet-700 border-2 border-violet-200 bg-violet-50 hover:bg-violet-100 hover:border-violet-400 transition-all flex items-center justify-center gap-1.5"
               >
                 <span>✨</span> AI로 페이지 초안 생성
               </button>
+
+              {/* 사진 일괄 업로드 버튼 */}
+              <div className="mb-3">
+                <input
+                  id="bulk-upload-input"
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => handleBulkUpload(e.target.files)}
+                />
+                <button
+                  type="button"
+                  onClick={() => document.getElementById('bulk-upload-input').click()}
+                  disabled={pages.length === 0}
+                  className="w-full py-2 rounded-xl text-sm font-medium text-warm-700 border-2 border-warm-200 bg-warm-50 hover:bg-warm-100 hover:border-warm-400 transition-all flex items-center justify-center gap-1.5 disabled:opacity-40"
+                  title="여러 사진을 한번에 선택하면 페이지 순서대로 자동 배정됩니다"
+                >
+                  <span>📸</span> 사진 일괄 업로드
+                </button>
+                {pages.length > 0 && (
+                  <p className="text-xs text-ink-400 text-center mt-1">사진 선택 시 페이지 순서대로 자동 배정</p>
+                )}
+              </div>
 
               <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
                 {pages.map((page, idx) => (

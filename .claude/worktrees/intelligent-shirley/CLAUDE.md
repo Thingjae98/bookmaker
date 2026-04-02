@@ -31,7 +31,8 @@
 | 프레임워크 | Next.js (App Router) | 14.x |
 | 프론트엔드 | React | 18.x |
 | 스타일링 | Tailwind CSS | 3.x |
-| API 클라이언트 | bookprintapi-nodejs-sdk | 1.x |
+| HTTP 클라이언트 | Axios | 1.7.x |
+| Multipart 처리 | form-data | 4.x |
 | 패키지 매니저 | npm | - |
 
 ### 사용하면 안 되는 것
@@ -104,7 +105,7 @@ bookmaker/
 
 ### 4-1. API 통신 흐름 (절대 준수)
 ```
-[브라우저] -> fetch('/api/books') -> [Next.js API Route] -> SweetBook SDK -> [api-sandbox.sweetbook.com]
+[브라우저] -> fetch('/api/books') -> [Next.js API Route] -> axios(sweetbook API) -> [api-sandbox.sweetbook.com]
 ```
 - 프론트엔드(브라우저)는 절대로 api.sweetbook.com이나 api-sandbox.sweetbook.com에 직접 요청하지 않음
 - 모든 외부 API 호출은 src/lib/sweetbook.js를 통해 서버 사이드에서만 실행
@@ -136,33 +137,13 @@ Authorization: Bearer {SWEETBOOK_API_KEY}
 
 ### 핵심 워크플로우 (책 생성 -> 주문)
 ```
-0. POST /api/generate-story              — (선택) AI 페이지 초안 자동 생성 (Gemini)
 1. POST /books                           — 책 생성 (draft)
-2. POST /books/{bookUid}/photos          — 앞표지 사진 업로드 (multipart)
-2. POST /books/{bookUid}/photos          — 뒤표지 사진 업로드 (multipart)
-2. POST /books/{bookUid}/photos          — 내지 사진들 업로드 (multipart, 반복)
-3. POST /books/{bookUid}/cover           — 앞표지 추가 (업로드된 URL 사용)
-4. POST /books/{bookUid}/contents        — 내지 추가 (multipart, 반복)
-4. POST /books/{bookUid}/contents        — 뒤표지 추가 (마지막 contents 페이지로 처리)
-5. POST /books/{bookUid}/finalization    — 최종화 (편집 완료)
-6. POST /orders/estimate                 — 가격 견적 조회
-7. POST /orders                          — 주문 생성 (충전금 차감)
+2. POST /books/{bookUid}/cover           — 표지 추가 (multipart)
+3. POST /books/{bookUid}/contents        — 내지 추가 (multipart, 반복)
+4. POST /books/{bookUid}/finalization    — 최종화 (편집 완료)
+5. POST /orders/estimate                 — 가격 견적 조회
+6. POST /orders                          — 주문 생성 (충전금 차감)
 ```
-
-### 이미지 업로드 전략
-- **앞표지**: 에디터 좌측 패널 "📖 표지 이미지 > 앞표지" 업로드 → Photos API → URL 획득 → cover 템플릿에 사용
-- **뒤표지**: 에디터 좌측 패널 "📖 표지 이미지 > 뒤표지" 업로드 → Photos API → URL 획득 → 마지막 contents 페이지로 추가
-- **내지 이미지**: 각 페이지 편집 영역 내 Drag & Drop / 파일 선택 → 책 생성 시 Photos API 자동 업로드
-- **일괄 업로드**: "📸 사진 일괄 업로드" 버튼 → 여러 사진 선택 → 페이지 순서대로 자동 배정
-- **미업로드 시 기본값**: picsum.photos seed 기반 랜덤 이미지 자동 사용
-
-### AI 페이지 초안 생성 API (`/api/generate-story`)
-- 에디터 페이지의 "✨ AI로 페이지 초안 생성" 버튼 → 서비스별 폼 모달 → Gemini AI
-- create 페이지의 "🤖 AI 더미 생성" 버튼 → 서비스 기본값으로 즉시 Gemini 호출 → 에디터로 이동
-- 6개 서비스 타입 모두 지원: baby / kindergarten / fairytale / travel / selfpublish / pet
-- 모델 우선순위: gemini-flash-lite-latest → gemini-2.5-flash → gemini-2.5-pro → 로컬 템플릿 폴백
-- 환경변수: `GEMINI_API_KEY` (Google AI Studio에서 무료 발급)
-- **이미지 업그레이드**: Gemini는 텍스트만 생성. 이미지는 사용자 직접 업로드 또는 picsum 자동 배정
 
 ### 사용 가능한 테스트 템플릿 UID
 - 표지: tpl_F8d15af9fd
@@ -203,10 +184,10 @@ try {
   const result = await sweetbookFunction(params);
   return NextResponse.json(result, { status: 201 });
 } catch (err) {
-  console.error('에러 컨텍스트:', err.message);
+  console.error('에러 컨텍스트:', err.response?.data || err.message);
   return NextResponse.json(
-    { success: false, message: err.message },
-    { status: err.statusCode || 500 }
+    { success: false, message: err.response?.data?.message || err.message },
+    { status: err.response?.status || 500 }
   );
 }
 ```
@@ -226,12 +207,8 @@ try {
 1. **로딩 UI**: API 호출 중 spinner 클래스 또는 스켈레톤 UI
 2. **토스트 알림**: 성공/실패 시 사용자에게 직관적 피드백
 3. **에러 핸들링**: API 실패 시 에러 메시지를 화면에 표시 (빨간 배경 박스)
-4. **더미 데이터**: "더미 데이터 채우기" 버튼(정적) + "🤖 AI 더미 생성" 버튼(Gemini 동적)
+4. **더미 데이터**: "더미 데이터 채우기" 버튼으로 즉시 체험 가능
 5. **API 로그**: 에디터에서 책 생성 과정을 실시간 로그로 표시
-6. **표지 이미지 업로드**: 에디터 좌측 패널 앞표지/뒤표지 전용 업로드 존
-7. **사진 일괄 업로드**: "📸 사진 일괄 업로드" 버튼 → 여러 사진을 페이지 순서대로 자동 배정
-8. **블러 미리보기**: 상위 5페이지 선명 노출 + 나머지 blur-md 처리 + 구매 유도 오버레이
-9. **AI 페이지 초안 생성**: 에디터 내 "✨ AI로 페이지 초안 생성" 버튼 → 6개 서비스 전용 폼 → Gemini AI → 10페이지 자동 생성 → 미리보기 모달 → 교체/추가/취소 선택
 
 ---
 
@@ -264,17 +241,12 @@ try {
 - [x] Orders API 연동 (견적, 생성, 목록, 상세, 취소)
 - [x] 6가지 서비스별 더미 데이터
 - [x] README.md 완성
-- [x] 실제 Sandbox API Key 연동 (.env 설정)
+- [ ] 실제 Sandbox API Key로 E2E 테스트
 - [ ] Toast 알림 컴포넌트 개선
 - [ ] 에러 발생 시 재시도 로직
 
 ### P1 — 면접 전 개선
-- [x] 이미지 파일 직접 업로드 (Drag & Drop + Photos API) — 에디터 내 구현 완료
-- [x] 표지 이미지 (앞/뒤) 전용 업로드 UI — 에디터 좌측 패널
-- [x] 사진 일괄 업로드 — 페이지 순서대로 자동 배정
-- [x] AI 더미 생성 버튼 — create 페이지에서 Gemini 호출 후 에디터로 바로 이동
-- [x] 미리보기 블러 티저 UI (상위 5p 공개 + 구매 유도 오버레이)
-- [x] AI 페이지 초안 생성 — 에디터 내 6개 서비스 전체 지원, 미리보기 모달로 교체/추가/취소
+- [ ] 이미지 파일 직접 업로드 (Drag & Drop + Photos API)
 - [ ] GET /templates로 실제 템플릿 목록 가져와서 선택 UI
 - [ ] 페이지 미리보기 시각화 (템플릿 레이아웃 렌더링)
 - [ ] Skeleton UI 로딩 (현재 spinner만 있음)

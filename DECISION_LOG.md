@@ -314,6 +314,75 @@ const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
 - `draftData`가 null이면 미리보기 모달 렌더링 자체를 스킵 (조건부 렌더링)
 - 3버튼 중 어떤 것을 눌러도 반드시 `setDraftData(null)` + `setIsPreviewModalOpen(false)` 실행 → 상태 오염 없음
 
+---
+
+## 📅 2026-04-02 — [기능 추가] 표지 이미지 입력 / 사진 일괄 업로드 / AI 더미 생성 / Gemini 모델 확정
+
+### 배경 & 목적
+
+사용자 흐름 점검 중 누락된 항목 발견:
+1. 앞표지·뒤표지 이미지를 별도로 입력받는 UI 없음 → 책의 표지가 기본 picsum 이미지로만 처리됨
+2. 여러 장의 내지 사진을 한 번에 업로드하는 방법 없음 → 페이지마다 개별 업로드 필요
+3. "더미 데이터 채우기"가 정적 템플릿만 제공 → Gemini AI 동적 생성 경로 없음
+4. Gemini 모델 목록이 실제 API 키 지원 모델과 불일치 → 429/404 오류 반복
+
+### 구현 내용
+
+#### 1. 앞표지 / 뒤표지 이미지 업로드 (editor/page.jsx)
+
+**UI**: 에디터 좌측 패널 상단 "📖 표지 이미지" 섹션 → 2칸 그리드 (앞표지 / 뒤표지)
+- 클릭 또는 Drag & Drop으로 파일 선택
+- 이미지 선택 시 즉시 썸네일 미리보기
+- 삭제 버튼으로 기본 이미지로 롤백
+
+**업로드 흐름** (handleCreateBook):
+```
+책 UID 생성 → 앞표지 file → Photos API → URL 획득 → cover 템플릿 파라미터에 사용
+            → 뒤표지 file → Photos API → URL 획득 → 마지막 contents 페이지로 추가
+```
+- 미업로드 시 `picsum.photos/seed/{serviceType}-cover-front` 기본 이미지 자동 사용
+
+#### 2. 사진 일괄 업로드 (editor/page.jsx)
+
+**UI**: "📸 사진 일괄 업로드" 버튼 (AI 초안 버튼 아래)
+- `<input type="file" multiple accept="image/*">` 활성화
+- 선택된 파일 배열을 pages 배열과 index 매칭하여 자동 배정
+- 기존 `handleFileSelect` 재사용 → blob URL 미리보기 + stagedFiles에 저장
+
+#### 3. AI 더미 생성 버튼 (create/[serviceType]/page.jsx)
+
+**UI**: 기존 "더미 데이터 채우기" 옆에 "🤖 AI 더미 생성" 버튼 추가 (2-column flex)
+
+**흐름**:
+1. DUMMY_DATA[serviceType].meta를 기본 파라미터로 사용
+2. `/api/generate-story` 호출 (Gemini)
+3. 생성된 pages → sessionStorage → 에디터로 이동
+4. 에디터에서 `aiGenerated: true` 배지 표시
+
+**정적 더미와의 차이점**:
+| 항목 | 정적 더미 | AI 더미 |
+|------|---------|---------|
+| 텍스트 | 고정 샘플 | Gemini 생성 (매번 다름) |
+| 이미지 | picsum seed 고정 | picsum seed (동일) |
+| 이동 경로 | 에디터 (더미 페이지 로드) | 에디터 (AI 페이지 로드) |
+| 소요 시간 | 즉시 | 2~5초 (API 호출) |
+
+#### 4. Gemini 모델 확정 (generate-story/route.js)
+
+**문제**: 기존 모델 목록(`gemini-1.5-flash-8b`, `gemini-1.5-flash`, `gemini-2.0-flash`, `gemini-pro`)이 실제 API 키로 모두 404 또는 429 반환
+
+**진단 방법**: `GET /v1beta/models?key={API_KEY}` ListModels API로 실제 지원 모델 목록 확인
+
+**확정 모델 (v1beta, generateContent 지원)**:
+| 모델 | 상태 | 우선순위 |
+|------|------|---------|
+| `gemini-flash-lite-latest` | ✅ 동작 확인 | 1순위 |
+| `gemini-2.5-flash` | ✅ 동작 확인 | 2순위 |
+| `gemini-2.5-pro` | ✅ 동작 확인 | 3순위 (쿼터 높음) |
+
+- 모델명 접두사 `models/` 제거 (SDK가 자동으로 v1beta 경로 사용)
+- 재시도 간 1,000ms delay 유지
+
 <!-- 새 기록 추가 시 아래 템플릿 복사 -->
 <!--
 ## 📅 YYYY-MM-DD — 제목
