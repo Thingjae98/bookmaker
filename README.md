@@ -24,6 +24,7 @@
 - **서비스별 맞춤 입력 폼**: 각 서비스 유형에 최적화된 정보 입력 필드
 - **콘텐츠 에디터**: 페이지 추가/삭제/순서변경, 텍스트·이미지 편집, 실시간 미리보기
 - **사진 직접 업로드**: 에디터 내 Drag & Drop 또는 파일 선택으로 사진 업로드 → SweetBook Photos API 자동 연동
+- **AI 페이지 초안 생성**: 에디터의 "✨ AI로 페이지 초안 생성" 버튼 → 서비스별 정보 입력 → Gemini AI가 10페이지 초안 자동 생성 (6개 서비스 전체 지원)
 - **판형 선택**: SQUAREBOOK_HC, LAYFLAT_HC, SLIMALBUM_HC 중 선택 (서비스별 추천 판형 제공)
 - **더미 데이터 자동 채우기**: 테스트용 샘플 데이터로 즉시 체험 가능
 - **API 호출 로그**: 책 생성 → 사진 업로드 → 표지 → 내지 → 최종화 과정을 실시간 로그로 확인
@@ -55,6 +56,7 @@ cp .env.example .env
 # .env 파일을 열고 API Key를 입력하세요:
 #   SWEETBOOK_API_KEY=your_sandbox_api_key_here
 #   SWEETBOOK_API_BASE_URL=https://api-sandbox.sweetbook.com/v1
+#   GEMINI_API_KEY=your_gemini_api_key_here  ← AI 동화 생성 기능에 필요 (https://aistudio.google.com 무료 발급)
 
 # 4. 개발 서버 실행
 npm run dev
@@ -146,6 +148,7 @@ Book Print API의 핵심 가치는 **"콘텐츠를 책으로 만드는 것"**입
 | API 클라이언트 | bookprintapi-nodejs-sdk (공식 SDK) |
 | API 연동 | SweetBook Book Print API (Sandbox) |
 | 파일 업로드 | HTML5 File API + Drag & Drop + FormData |
+| AI 생성 | Google Gemini 1.5 Flash (@google/generative-ai) |
 
 ### 프로젝트 구조
 

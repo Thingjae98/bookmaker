@@ -136,6 +136,7 @@ Authorization: Bearer {SWEETBOOK_API_KEY}
 
 ### 핵심 워크플로우 (책 생성 -> 주문)
 ```
+0. POST /api/generate-story              — (선택) AI 페이지 초안 자동 생성 (Gemini)
 1. POST /books                           — 책 생성 (draft)
 2. POST /books/{bookUid}/photos          — 사용자 사진 업로드 (선택, multipart)
 3. POST /books/{bookUid}/cover           — 표지 추가 (multipart)
@@ -144,6 +145,11 @@ Authorization: Bearer {SWEETBOOK_API_KEY}
 6. POST /orders/estimate                 — 가격 견적 조회
 7. POST /orders                          — 주문 생성 (충전금 차감)
 ```
+
+### AI 페이지 초안 생성 API (`/api/generate-story`)
+- 에디터 페이지의 "✨ AI로 페이지 초안 생성" 버튼 → 서비스별 폼 모달 → Gemini 1.5 Flash
+- 6개 서비스 타입 모두 지원: baby / kindergarten / fairytale / travel / selfpublish / pet
+- 환경변수: `GEMINI_API_KEY` (Google AI Studio에서 무료 발급)
 
 ### 사용 가능한 테스트 템플릿 UID
 - 표지: tpl_F8d15af9fd
@@ -211,6 +217,7 @@ try {
 5. **API 로그**: 에디터에서 책 생성 과정을 실시간 로그로 표시
 6. **사진 업로드 UI**: 에디터 내 Drag & Drop + 파일 피커 → Books Photos API 자동 연동
 7. **블러 미리보기**: 상위 5페이지 선명 노출 + 나머지 blur-md 처리 + 구매 유도 오버레이
+8. **AI 페이지 초안 생성**: 에디터 내 "✨ AI로 페이지 초안 생성" 버튼 → 6개 서비스 전용 폼 → Gemini API → 10페이지 자동 생성
 
 ---
 
@@ -250,6 +257,7 @@ try {
 ### P1 — 면접 전 개선
 - [x] 이미지 파일 직접 업로드 (Drag & Drop + Photos API) — 에디터 내 구현 완료
 - [x] 미리보기 블러 티저 UI (상위 5p 공개 + 구매 유도 오버레이)
+- [x] AI 페이지 초안 생성 — 에디터 내 6개 서비스 전체 지원 (Gemini 1.5 Flash)
 - [ ] GET /templates로 실제 템플릿 목록 가져와서 선택 UI
 - [ ] 페이지 미리보기 시각화 (템플릿 레이아웃 렌더링)
 - [ ] Skeleton UI 로딩 (현재 spinner만 있음)

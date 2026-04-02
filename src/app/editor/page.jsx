@@ -20,6 +20,12 @@ export default function EditorPage() {
   const [stagedFiles, setStagedFiles] = useState({}); // { pageId: File } — 업로드 대기 파일
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
+  // AI 초안 생성 모달
+  const [showAiPanel, setShowAiPanel] = useState(false);
+  const [aiFormData, setAiFormData] = useState({});
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiError, setAiError] = useState(null);
+
   // 세션 복원
   useEffect(() => {
     const raw = sessionStorage.getItem('bookmaker_session');
@@ -83,6 +89,86 @@ export default function EditorPage() {
     e.preventDefault();
     const file = e.dataTransfer.files[0];
     handleFileSelect(file, pageId);
+  };
+
+  // ── AI 초안 생성 ─────────────────────────────────────────────
+
+  // 서비스별 AI 입력 폼 필드 정의
+  const AI_FORM_FIELDS = {
+    baby: [
+      { key: 'babyName', label: '아이 이름', type: 'text', placeholder: '예) 하은이', required: true },
+      { key: 'period', label: '기록 기간', type: 'select', options: ['1개월', '3개월', '6개월', '1년'], required: true },
+      { key: 'message', label: '아이에게 전하는 한마디', type: 'text', placeholder: '예) 사랑해, 우리 아가', required: false },
+    ],
+    kindergarten: [
+      { key: 'childName', label: '원아 이름', type: 'text', placeholder: '예) 김서준', required: true },
+      { key: 'className', label: '반 이름', type: 'text', placeholder: '예) 해바라기반', required: false },
+      { key: 'semester', label: '학기', type: 'select', options: ['1학기', '2학기', '전체'], required: true },
+    ],
+    fairytale: [
+      { key: 'heroName', label: '주인공 이름', type: 'text', placeholder: '예) 하은이', required: true },
+      { key: 'heroAge', label: '주인공 나이', type: 'select', options: ['3살', '4살', '5살', '6살', '7살', '8살'], required: false },
+      { key: 'theme', label: '동화 주제', type: 'text', placeholder: '예) 숲속 친구들과의 모험', required: true },
+      { key: 'moralLesson', label: '담을 교훈', type: 'text', placeholder: '예) 용기와 우정', required: false },
+    ],
+    travel: [
+      { key: 'destination', label: '여행지', type: 'text', placeholder: '예) 제주도', required: true },
+      { key: 'tripName', label: '여행 제목', type: 'text', placeholder: '예) 2025 가족 제주 여행', required: false },
+      { key: 'companions', label: '동행인', type: 'text', placeholder: '예) 가족 3명', required: false },
+    ],
+    selfpublish: [
+      { key: 'bookTitle', label: '책 제목', type: 'text', placeholder: '예) 나의 첫 에세이', required: true },
+      { key: 'genre', label: '장르', type: 'select', options: ['에세이', '시집', '사진집', '일러스트집', '기타'], required: true },
+      { key: 'bookDescription', label: '책 소개 (선택)', type: 'text', placeholder: '어떤 이야기를 담을지 간략히', required: false },
+    ],
+    pet: [
+      { key: 'petName', label: '반려동물 이름', type: 'text', placeholder: '예) 뽀삐', required: true },
+      { key: 'petType', label: '종류', type: 'select', options: ['강아지', '고양이', '토끼', '햄스터', '기타'], required: true },
+      { key: 'ownerMessage', label: '우리 아이에게 한마디', type: 'text', placeholder: '예) 언제나 사랑해!', required: false },
+    ],
+  };
+
+  const handleAiGenerate = async () => {
+    if (!session) return;
+    const fields = AI_FORM_FIELDS[session.serviceType] || [];
+    const missing = fields.filter((f) => f.required && !aiFormData[f.key]).map((f) => f.label);
+    if (missing.length > 0) {
+      setAiError(`필수 항목을 입력해주세요: ${missing.join(', ')}`);
+      return;
+    }
+
+    setAiGenerating(true);
+    setAiError(null);
+
+    try {
+      const res = await fetch('/api/generate-story', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ serviceType: session.serviceType, ...aiFormData }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message);
+
+      const newPages = data.data.pages;
+
+      if (pages.length > 0) {
+        // 기존 페이지가 있으면 교체 또는 추가 선택
+        const choice = window.confirm(
+          `현재 ${pages.length}개 페이지가 있습니다.\n\n확인: AI 생성 페이지로 교체\n취소: 기존 페이지 뒤에 추가`
+        );
+        setPages(choice ? newPages : (prev) => [...prev, ...newPages]);
+      } else {
+        setPages(newPages);
+      }
+
+      setEditingIdx(0);
+      setShowAiPanel(false);
+      setAiFormData({});
+    } catch (err) {
+      setAiError(err.message);
+    } finally {
+      setAiGenerating(false);
+    }
   };
 
   // 페이지 순서 변경
@@ -274,9 +360,104 @@ export default function EditorPage() {
 
   const service = SERVICE_TYPES[session.serviceType];
 
+  const aiFields = session ? (AI_FORM_FIELDS[session.serviceType] || []) : [];
+
   return (
     <div className="min-h-screen pb-20">
       <StepIndicator currentStep="editor" />
+
+      {/* ── AI 초안 생성 모달 ── */}
+      {showAiPanel && session && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.45)' }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-fade-up">
+            {/* 모달 헤더 */}
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">✨</span>
+                <div>
+                  <h2 className="font-display font-bold text-ink-900">AI 페이지 초안 생성</h2>
+                  <p className="text-xs text-ink-400 mt-0.5">{SERVICE_TYPES[session.serviceType]?.name} · Gemini AI</p>
+                </div>
+              </div>
+              <button
+                onClick={() => { setShowAiPanel(false); setAiError(null); }}
+                className="p-2 text-ink-400 hover:text-ink-700 transition-colors rounded-lg hover:bg-ink-50"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* 서비스별 입력 폼 */}
+            <div className="space-y-3 mb-4">
+              {aiFields.map((field) => (
+                <div key={field.key}>
+                  <label className="block text-sm font-medium text-ink-800 mb-1">
+                    {field.label}
+                    {field.required && <span className="text-red-400 ml-0.5">*</span>}
+                  </label>
+                  {field.type === 'select' ? (
+                    <select
+                      className="input-field text-sm"
+                      value={aiFormData[field.key] || ''}
+                      onChange={(e) => setAiFormData((p) => ({ ...p, [field.key]: e.target.value }))}
+                    >
+                      <option value="">선택해주세요</option>
+                      {field.options.map((o) => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      className="input-field text-sm"
+                      placeholder={field.placeholder}
+                      value={aiFormData[field.key] || ''}
+                      onChange={(e) => setAiFormData((p) => ({ ...p, [field.key]: e.target.value }))}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* 에러 메시지 */}
+            {aiError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">
+                {aiError}
+              </div>
+            )}
+
+            {/* 생성 중 힌트 */}
+            {aiGenerating && (
+              <div className="mb-4 space-y-1.5">
+                {['아이디어 구상 중...', '문장 구성 중...', '페이지 편집 중...'].map((hint, i) => (
+                  <div key={i} className="flex items-center gap-2 text-xs text-violet-500 opacity-0 animate-fade-in" style={{ animationDelay: `${i * 0.7}s`, animationFillMode: 'forwards' }}>
+                    <span className="w-1.5 h-1.5 rounded-full bg-violet-400 flex-shrink-0" />
+                    {hint}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* 버튼 */}
+            <button
+              onClick={handleAiGenerate}
+              disabled={aiGenerating}
+              className="w-full py-3 rounded-xl font-bold text-white transition-all disabled:opacity-60"
+              style={{ background: aiGenerating ? '#7c3aed80' : 'linear-gradient(135deg, #7c3aed, #a855f7)' }}
+            >
+              {aiGenerating ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="spinner" />
+                  AI가 페이지를 집필 중입니다...
+                </span>
+              ) : (
+                '🪄 AI 초안 생성하기'
+              )}
+            </button>
+            <p className="text-xs text-ink-400 text-center mt-3">
+              생성 후 모든 내용을 자유롭게 수정할 수 있습니다
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="max-w-5xl mx-auto px-6">
         {/* 헤더 */}
@@ -309,12 +490,20 @@ export default function EditorPage() {
           {/* 좌측: 페이지 목록 */}
           <div className="lg:col-span-1">
             <div className="bg-white rounded-2xl border border-ink-100 p-4 sticky top-20">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center justify-between mb-3">
                 <h2 className="font-display font-bold text-ink-900">페이지 목록</h2>
                 <span className="text-xs text-ink-400 bg-ink-50 px-2 py-0.5 rounded-full">
                   {pages.length}개
                 </span>
               </div>
+
+              {/* AI 초안 생성 버튼 */}
+              <button
+                onClick={() => { setShowAiPanel(true); setAiError(null); }}
+                className="w-full mb-3 py-2 rounded-xl text-sm font-medium text-violet-700 border-2 border-violet-200 bg-violet-50 hover:bg-violet-100 hover:border-violet-400 transition-all flex items-center justify-center gap-1.5"
+              >
+                <span>✨</span> AI로 페이지 초안 생성
+              </button>
 
               <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
                 {pages.map((page, idx) => (
