@@ -31,8 +31,7 @@
 | 프레임워크 | Next.js (App Router) | 14.x |
 | 프론트엔드 | React | 18.x |
 | 스타일링 | Tailwind CSS | 3.x |
-| HTTP 클라이언트 | Axios | 1.7.x |
-| Multipart 처리 | form-data | 4.x |
+| API 클라이언트 | bookprintapi-nodejs-sdk | 1.x |
 | 패키지 매니저 | npm | - |
 
 ### 사용하면 안 되는 것
@@ -105,7 +104,7 @@ bookmaker/
 
 ### 4-1. API 통신 흐름 (절대 준수)
 ```
-[브라우저] -> fetch('/api/books') -> [Next.js API Route] -> axios(sweetbook API) -> [api-sandbox.sweetbook.com]
+[브라우저] -> fetch('/api/books') -> [Next.js API Route] -> SweetBook SDK -> [api-sandbox.sweetbook.com]
 ```
 - 프론트엔드(브라우저)는 절대로 api.sweetbook.com이나 api-sandbox.sweetbook.com에 직접 요청하지 않음
 - 모든 외부 API 호출은 src/lib/sweetbook.js를 통해 서버 사이드에서만 실행
@@ -184,10 +183,10 @@ try {
   const result = await sweetbookFunction(params);
   return NextResponse.json(result, { status: 201 });
 } catch (err) {
-  console.error('에러 컨텍스트:', err.response?.data || err.message);
+  console.error('에러 컨텍스트:', err.message);
   return NextResponse.json(
-    { success: false, message: err.response?.data?.message || err.message },
-    { status: err.response?.status || 500 }
+    { success: false, message: err.message },
+    { status: err.statusCode || 500 }
   );
 }
 ```

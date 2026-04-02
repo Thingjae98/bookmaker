@@ -141,9 +141,8 @@ Book Print API의 핵심 가치는 **"콘텐츠를 책으로 만드는 것"**입
 | 프레임워크 | Next.js 14 (App Router) |
 | 프론트엔드 | React 18, Tailwind CSS |
 | 백엔드 | Next.js API Routes (서버리스) |
-| HTTP 클라이언트 | Axios |
+| API 클라이언트 | bookprintapi-nodejs-sdk (공식 SDK) |
 | API 연동 | SweetBook Book Print API (Sandbox) |
-| 폼 데이터 | form-data (multipart/form-data 처리) |
 
 ### 프로젝트 구조
 
