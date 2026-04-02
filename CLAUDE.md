@@ -147,7 +147,7 @@ Authorization: Bearer {SWEETBOOK_API_KEY}
 ```
 
 ### AI 페이지 초안 생성 API (`/api/generate-story`)
-- 에디터 페이지의 "✨ AI로 페이지 초안 생성" 버튼 → 서비스별 폼 모달 → Gemini 1.5 Flash
+- 에디터 페이지의 "✨ AI로 페이지 초안 생성" 버튼 → 서비스별 폼 모달 → Gemini 2.0 Flash
 - 6개 서비스 타입 모두 지원: baby / kindergarten / fairytale / travel / selfpublish / pet
 - 환경변수: `GEMINI_API_KEY` (Google AI Studio에서 무료 발급)
 
@@ -257,7 +257,7 @@ try {
 ### P1 — 면접 전 개선
 - [x] 이미지 파일 직접 업로드 (Drag & Drop + Photos API) — 에디터 내 구현 완료
 - [x] 미리보기 블러 티저 UI (상위 5p 공개 + 구매 유도 오버레이)
-- [x] AI 페이지 초안 생성 — 에디터 내 6개 서비스 전체 지원 (Gemini 1.5 Flash)
+- [x] AI 페이지 초안 생성 — 에디터 내 6개 서비스 전체 지원 (Gemini 2.0 Flash)
 - [ ] GET /templates로 실제 템플릿 목록 가져와서 선택 UI
 - [ ] 페이지 미리보기 시각화 (템플릿 레이아웃 렌더링)
 - [ ] Skeleton UI 로딩 (현재 spinner만 있음)

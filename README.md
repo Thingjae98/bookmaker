@@ -148,7 +148,7 @@ Book Print API의 핵심 가치는 **"콘텐츠를 책으로 만드는 것"**입
 | API 클라이언트 | bookprintapi-nodejs-sdk (공식 SDK) |
 | API 연동 | SweetBook Book Print API (Sandbox) |
 | 파일 업로드 | HTML5 File API + Drag & Drop + FormData |
-| AI 생성 | Google Gemini 1.5 Flash (@google/generative-ai) |
+| AI 생성 | Google Gemini 2.0 Flash (@google/generative-ai) |
 
 ### 프로젝트 구조
 
