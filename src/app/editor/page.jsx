@@ -223,6 +223,11 @@ export default function EditorPage() {
 
     setLoading(true);
     try {
+      // 세션에서 템플릿 UID 읽기 (create 페이지에서 GET /templates로 조회한 값)
+      const coverTplUid    = session.coverTemplateUid    || '79yjMH3qRPly';
+      const contentTplUid  = session.contentTemplateUid  || 'vHA59XPPKqak';
+      addLog(`📋 템플릿 — 표지: ${coverTplUid} / 내지: ${contentTplUid}`);
+
       const service = SERVICE_TYPES[session.serviceType];
       const title = session.formData.bookTitle || session.formData.tripName || session.formData.babyName
         ? `${session.formData.babyName || session.formData.childName || session.formData.heroName || session.formData.petName || session.formData.authorName || ''}의 ${service.name}`
@@ -324,7 +329,7 @@ export default function EditorPage() {
         } catch (e) { addLog(`⚠️ 뒤표지 업로드 오류: ${e.message}`); }
       }
 
-      // 3-a. 앞표지 추가 — 템플릿 79yjMH3qRPly
+      // 3-a. 앞표지 추가 — GET /templates에서 조회한 커버 템플릿 사용
       addLog('🎨 앞표지 추가 중...');
       const coverPhoto = coverFrontUrl;
       const dateRange = session.formData.period || session.formData.semester
@@ -336,7 +341,7 @@ export default function EditorPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          templateUid: '79yjMH3qRPly',
+          templateUid: coverTplUid,
           parameters: {
             coverPhoto,
             title,
@@ -380,7 +385,7 @@ export default function EditorPage() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            templateUid: 'vHA59XPPKqak',
+            templateUid: contentTplUid,
             parameters: params,
             breakBefore: 'page',
           }),

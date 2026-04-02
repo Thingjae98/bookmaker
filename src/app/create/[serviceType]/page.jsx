@@ -19,11 +19,69 @@ export default function CreatePage() {
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiError, setAiError] = useState(null);
 
+  // API에서 불러온 판형 목록 (GET /book-specs)
+  const [bookSpecs, setBookSpecs] = useState([]);
+  const [specsLoading, setSpecsLoading] = useState(true);
+
+  // API에서 불러온 템플릿 (GET /templates?bookSpecUid=..)
+  const [coverTemplateUid, setCoverTemplateUid] = useState('79yjMH3qRPly');   // 기본값 폴백
+  const [contentTemplateUid, setContentTemplateUid] = useState('vHA59XPPKqak'); // 기본값 폴백
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+
+  // 1단계: 마운트 시 GET /book-specs 호출
   useEffect(() => {
-    if (service) {
-      setSelectedSpec(service.recommendedSpec);
-    }
+    const loadBookSpecs = async () => {
+      setSpecsLoading(true);
+      try {
+        const res = await fetch('/api/book-specs');
+        const data = await res.json();
+        if (data.success && Array.isArray(data.data)) {
+          setBookSpecs(data.data);
+          // 추천 판형 자동 선택 (API 데이터 기준)
+          if (service) {
+            const recommended = data.data.find(s => s.bookSpecUid === service.recommendedSpec);
+            setSelectedSpec(recommended ? recommended.bookSpecUid : data.data[0]?.bookSpecUid || service.recommendedSpec);
+          }
+        } else {
+          // API 실패 시 constants 폴백
+          setBookSpecs(Object.values(BOOK_SPECS).map(s => ({ bookSpecUid: s.uid, name: s.name, ...s })));
+          if (service) setSelectedSpec(service.recommendedSpec);
+        }
+      } catch {
+        setBookSpecs(Object.values(BOOK_SPECS).map(s => ({ bookSpecUid: s.uid, name: s.name, ...s })));
+        if (service) setSelectedSpec(service.recommendedSpec);
+      } finally {
+        setSpecsLoading(false);
+      }
+    };
+    loadBookSpecs();
   }, [service]);
+
+  // 2단계: 판형 선택 시 GET /templates?bookSpecUid=.. 호출
+  useEffect(() => {
+    if (!selectedSpec) return;
+    const loadTemplates = async () => {
+      setTemplatesLoading(true);
+      try {
+        const res = await fetch(`/api/templates?bookSpecUid=${selectedSpec}&limit=50`);
+        const data = await res.json();
+        if (data.success && Array.isArray(data.data) && data.data.length > 0) {
+          // cover 종류 템플릿 첫 번째
+          const coverTpl = data.data.find(t => t.templateKind === 'cover' || t.category === 'cover');
+          // content 종류 템플릿 첫 번째
+          const contentTpl = data.data.find(t => t.templateKind === 'content' || t.category === 'content');
+          if (coverTpl) setCoverTemplateUid(coverTpl.templateUid);
+          if (contentTpl) setContentTemplateUid(contentTpl.templateUid);
+        }
+        // API 응답에 템플릿이 없으면 기존 하드코딩 값 유지
+      } catch {
+        // 실패 시 기본값 유지
+      } finally {
+        setTemplatesLoading(false);
+      }
+    };
+    loadTemplates();
+  }, [selectedSpec]);
 
   if (!service) {
     return (
@@ -82,6 +140,8 @@ export default function CreatePage() {
         serviceType,
         formData: { ...formData, bookTitle: data.data.title },
         bookSpecUid: selectedSpec,
+        coverTemplateUid,
+        contentTemplateUid,
         useDummy: false,
         aiGenerated: true,
         aiTitle: data.data.title,
@@ -108,11 +168,13 @@ export default function CreatePage() {
       return;
     }
 
-    // 세션 스토리지에 저장 후 에디터로 이동
+    // 세션 스토리지에 저장 후 에디터로 이동 (템플릿 UID 포함)
     const sessionData = {
       serviceType,
       formData,
       bookSpecUid: selectedSpec,
+      coverTemplateUid,
+      contentTemplateUid,
       useDummy,
     };
     sessionStorage.setItem('bookmaker_session', JSON.stringify(sessionData));
@@ -213,44 +275,58 @@ export default function CreatePage() {
             })}
           </div>
 
-          {/* 판형 선택 */}
+          {/* 판형 선택 — GET /api/book-specs 실시간 조회 */}
           <div className="bg-white rounded-2xl border border-ink-100 p-6">
-            <h2 className="font-display font-bold text-lg text-ink-900 mb-4">판형 선택</h2>
-            <div className="space-y-3">
-              {Object.values(BOOK_SPECS).map((s) => (
-                <label
-                  key={s.uid}
-                  className={`block p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                    selectedSpec === s.uid
-                      ? 'border-warm-600 bg-warm-50'
-                      : 'border-ink-100 hover:border-ink-200'
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <input
-                      type="radio"
-                      name="bookSpec"
-                      value={s.uid}
-                      checked={selectedSpec === s.uid}
-                      onChange={() => setSelectedSpec(s.uid)}
-                      className="mt-1 accent-warm-600"
-                    />
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-ink-900">{BOOK_SPEC_LABELS[s.uid] || s.name}</span>
-                        {s.uid === service.recommendedSpec && (
-                          <span className="text-xs bg-warm-600 text-white px-2 py-0.5 rounded-full">추천</span>
-                        )}
-                      </div>
-                      <p className="text-sm text-ink-400 mt-1">
-                        {s.size} · {s.cover} · {s.binding} · {s.pages}
-                      </p>
-                      <p className="text-xs text-ink-400 mt-0.5">{s.description}</p>
-                    </div>
-                  </div>
-                </label>
-              ))}
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-display font-bold text-lg text-ink-900">판형 선택</h2>
+              {specsLoading && <span className="text-xs text-ink-400 flex items-center gap-1"><span className="spinner" style={{width:12,height:12}} /> API 조회 중...</span>}
+              {templatesLoading && <span className="text-xs text-violet-500 flex items-center gap-1"><span className="spinner" style={{width:12,height:12}} /> 템플릿 조회 중...</span>}
             </div>
+            <div className="space-y-3">
+              {(bookSpecs.length > 0 ? bookSpecs : Object.values(BOOK_SPECS).map(s => ({ bookSpecUid: s.uid, ...s }))).map((s) => {
+                const uid = s.bookSpecUid || s.uid;
+                const localSpec = BOOK_SPECS[uid];
+                return (
+                  <label
+                    key={uid}
+                    className={`block p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                      selectedSpec === uid
+                        ? 'border-warm-600 bg-warm-50'
+                        : 'border-ink-100 hover:border-ink-200'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="radio"
+                        name="bookSpec"
+                        value={uid}
+                        checked={selectedSpec === uid}
+                        onChange={() => setSelectedSpec(uid)}
+                        className="mt-1 accent-warm-600"
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-ink-900">{BOOK_SPEC_LABELS[uid] || s.name}</span>
+                          {uid === service.recommendedSpec && (
+                            <span className="text-xs bg-warm-600 text-white px-2 py-0.5 rounded-full">추천</span>
+                          )}
+                        </div>
+                        <p className="text-sm text-ink-400 mt-1">
+                          {localSpec ? `${localSpec.size} · ${localSpec.cover} · ${localSpec.binding} · ${localSpec.pages}` : s.description || uid}
+                        </p>
+                      </div>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+            {/* 템플릿 로드 결과 표시 */}
+            {!templatesLoading && selectedSpec && (
+              <p className="mt-3 text-xs text-ink-400">
+                표지 템플릿: <code className="bg-ink-50 px-1 rounded">{coverTemplateUid}</code>
+                &nbsp;·&nbsp;내지 템플릿: <code className="bg-ink-50 px-1 rounded">{contentTemplateUid}</code>
+              </p>
+            )}
           </div>
 
           {/* AI 동화 생성 패널 (fairytale 전용) */}
