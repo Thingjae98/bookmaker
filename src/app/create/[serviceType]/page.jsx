@@ -320,12 +320,27 @@ export default function CreatePage() {
                 );
               })}
             </div>
-            {/* 템플릿 로드 결과 표시 */}
+            {/* 템플릿 로드 결과 — 사용자 친화적 표시 */}
             {!templatesLoading && selectedSpec && (
-              <p className="mt-3 text-xs text-ink-400">
-                표지 템플릿: <code className="bg-ink-50 px-1 rounded">{coverTemplateUid}</code>
-                &nbsp;·&nbsp;내지 템플릿: <code className="bg-ink-50 px-1 rounded">{contentTemplateUid}</code>
-              </p>
+              <div className="mt-3 p-3 bg-ink-50 rounded-xl">
+                <p className="text-xs font-medium text-ink-600 mb-1.5">📄 선택된 템플릿</p>
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-ink-500">앞표지 템플릿</span>
+                    <span className="font-medium text-ink-700">
+                      {coverTemplateUid === '79yjMH3qRPly' ? '일기장 표지형 (기본)' : '커스텀 표지'}
+                      <span className="ml-1 text-ink-400 font-normal">({coverTemplateUid})</span>
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-ink-500">내지 템플릿</span>
+                    <span className="font-medium text-ink-700">
+                      {contentTemplateUid === 'vHA59XPPKqak' ? '사진+텍스트 일기형 (기본)' : '커스텀 내지'}
+                      <span className="ml-1 text-ink-400 font-normal">({contentTemplateUid})</span>
+                    </span>
+                  </div>
+                </div>
+              </div>
             )}
           </div>
 

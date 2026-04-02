@@ -8,7 +8,7 @@ export async function POST(request, { params }) {
     const result = await finalizeBook(bookUid);
     return NextResponse.json(result);
   } catch (err) {
-    console.error('POST finalize error:', err.message);
+    console.error('POST finalize 상세 에러:', err.response?.data || err.message || err);
     return NextResponse.json(
       { success: false, message: err.message },
       { status: err.statusCode || 500 }

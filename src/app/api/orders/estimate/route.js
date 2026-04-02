@@ -14,7 +14,7 @@ export async function POST(request) {
     const result = await estimateOrder({ items });
     return NextResponse.json(result);
   } catch (err) {
-    console.error('POST /api/orders/estimate error:', err.message);
+    console.error('POST /api/orders/estimate 상세 에러:', err.response?.data || err.message || err);
     return NextResponse.json(
       { success: false, message: err.message },
       { status: err.statusCode || 500 }

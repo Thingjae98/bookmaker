@@ -107,7 +107,11 @@ async function sweetFetch(path, params = {}) {
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${API_KEY}` },
   });
-  return res.json();
+  const json = await res.json();
+  if (!res.ok) {
+    console.error(`스위트북 API 상세 에러 [${res.status}] ${path}:`, json);
+  }
+  return json;
 }
 
 export async function listTemplates({ bookSpecUid, category, templateKind, limit = 50, offset = 0 } = {}) {

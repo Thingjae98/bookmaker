@@ -15,7 +15,7 @@ export async function POST(request, { params }) {
     const result = await addContents(bookUid, { templateUid, parameters, breakBefore });
     return NextResponse.json(result, { status: 201 });
   } catch (err) {
-    console.error('POST contents error:', err.message);
+    console.error('POST contents 상세 에러:', err.response?.data || err.message || err);
     return NextResponse.json(
       { success: false, message: err.message },
       { status: err.statusCode || 500 }

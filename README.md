@@ -109,6 +109,10 @@ npm run dev
 | Claude (Anthropic) | API 문서 분석 및 워크플로우 설계 |
 | Claude (Anthropic) | 더미 데이터 생성 (6가지 서비스 유형별 10~12개 샘플 페이지) |
 | Claude (Anthropic) | README.md 작성 |
+| Gemini (Google) | AI 페이지 초안 생성 기능 — 에디터 내 서비스별 10페이지 콘텐츠 자동 생성 |
+| Gemini (Google) | 모델 404 에러 해결 — `gemini-1.5-flash` 계열이 v1beta API에서 미지원임을 ListModels API로 확인, `gemini-flash-lite-latest` → `gemini-2.5-flash` 순으로 대체 |
+| Gemini (Google) | 429 할당량 초과 에러 해결 — 모델 순차 폴백(gemini-flash-lite-latest → 2.5-flash → 2.5-pro) + 시도 간 1초 delay + 로컬 템플릿 폴백 구현 |
+| Gemini (Google) | 6개 서비스 타입별 한국어 프롬프트 작성 및 JSON 스키마 응답 파싱 |
 
 ---
 
