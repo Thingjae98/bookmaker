@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+// 에디터 페이지 — 포토북 콘텐츠 편집, 갤러리 사진 관리, 표지 지정, Canvas 양면 분할, 책 생성 API 호출
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { SERVICE_TYPES, BOOK_SPEC_LABELS } from '@/lib/constants';
@@ -9,9 +10,15 @@ import StepIndicator from '@/components/StepIndicator';
 import { toast } from '@/lib/toast';
 import { fetchWithRetry } from '@/lib/fetchWithRetry';
 
+// 텍스트 유무에 따른 내지 템플릿 동적 분기
+const TEMPLATE_TEXT_IMAGE = 'cnH0Ud1nl1f9'; // 사진+텍스트형
+const TEMPLATE_IMAGE_ONLY = '6dJ0Qy6ZmXej'; // 이미지 전용
+
 export default function EditorPage() {
   const router = useRouter();
   const [session, setSession] = useState(null);
+
+  // ── 페이지 편집 패널 상태 ──────────────────────────────────────
   const [pages, setPages] = useState([]);
   const [editingIdx, setEditingIdx] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -19,10 +26,10 @@ export default function EditorPage() {
   const [bookUid, setBookUid] = useState(null);
   const [apiLog, setApiLog] = useState([]);
   const [showLog, setShowLog] = useState(false);
-  const [stagedFiles, setStagedFiles] = useState({}); // { pageId: File } — 업로드 대기 파일
+  const [stagedFiles, setStagedFiles] = useState({});
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
-  // 표지 이미지 (앞/뒤) — 책 생성 시 Photos API로 업로드
+  // 좌측 패널 표지 이미지 (앞/뒤)
   const [coverFront, setCoverFront] = useState({ file: null, preview: '' });
   const [coverBack, setCoverBack] = useState({ file: null, preview: '' });
 
@@ -33,62 +40,59 @@ export default function EditorPage() {
   const [aiError, setAiError] = useState(null);
 
   // AI 초안 미리보기 모달
-  const [draftData, setDraftData] = useState(null);       // 생성된 초안 임시 저장
+  const [draftData, setDraftData] = useState(null);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
 
-  // AI 사진 텍스트 자동생성 (사진 업로드 후 버튼)
-  const [photoAiGenerating, setPhotoAiGenerating] = useState(false);
+  // ── 갤러리 상태 ───────────────────────────────────────────────
+  // item shape: { id, file, previewUrl, role: null|'front'|'back'|'content', text: '', isLandscape: false, useSpread: false }
+  const [gallery, setGallery] = useState([]);
+  const [galleryModal, setGalleryModal] = useState({ open: false, idx: null });
+  const [galleryDragIdx, setGalleryDragIdx] = useState(null);
+  const [galleryDropActive, setGalleryDropActive] = useState(false);
 
-  // 세션 복원
+  // ── 세션 복원 ─────────────────────────────────────────────────
   useEffect(() => {
     const raw = sessionStorage.getItem('bookmaker_session');
     if (!raw) { router.push('/'); return; }
     const data = JSON.parse(raw);
     setSession(data);
 
-    // 페이지 초기화 우선순위: AI 생성 > 더미 데이터
     const aiPages = sessionStorage.getItem('bookmaker_ai_pages');
     if (aiPages) {
       setPages(JSON.parse(aiPages));
-      sessionStorage.removeItem('bookmaker_ai_pages'); // 1회 사용 후 삭제
+      sessionStorage.removeItem('bookmaker_ai_pages');
     } else if (data.useDummy) {
       const dummy = DUMMY_DATA[data.serviceType];
-      if (dummy) {
-        setPages(dummy.pages.map((p, i) => ({ ...p, id: `page-${i}` })));
-      }
+      if (dummy) setPages(dummy.pages.map((p, i) => ({ ...p, id: `page-${i}` })));
     }
   }, [router]);
 
-  const addLog = (msg) => {
-    setApiLog((prev) => [...prev, { time: new Date().toLocaleTimeString(), msg }]);
-  };
+  const addLog = (msg) => setApiLog((prev) => [...prev, { time: new Date().toLocaleTimeString(), msg }]);
 
-  // 페이지 추가
+  // ── 페이지 편집 패널 함수 ──────────────────────────────────────
   const addPage = () => {
-    const newPage = {
-      id: `page-${Date.now()}`,
-      title: '',
-      text: '',
-      date: '',
-      image: '',
-    };
+    const newPage = { id: `page-${Date.now()}`, title: '', text: '', date: '', image: '' };
     setPages((prev) => [...prev, newPage]);
     setEditingIdx(pages.length);
   };
-
-  // 페이지 수정
   const updatePage = (idx, field, value) => {
     setPages((prev) => prev.map((p, i) => (i === idx ? { ...p, [field]: value } : p)));
   };
-
-  // 페이지 삭제
   const removePage = (idx) => {
     setPages((prev) => prev.filter((_, i) => i !== idx));
     if (editingIdx === idx) setEditingIdx(null);
     else if (editingIdx > idx) setEditingIdx(editingIdx - 1);
   };
+  const movePage = (idx, direction) => {
+    const next = [...pages];
+    const target = idx + direction;
+    if (target < 0 || target >= next.length) return;
+    [next[idx], next[target]] = [next[target], next[idx]];
+    setPages(next);
+    setEditingIdx(target);
+  };
 
-  // 파일 선택 → blob URL 즉시 미리보기, 파일은 staged 보관
+  // 페이지 편집 패널 파일 선택
   const handleFileSelect = (file, pageId) => {
     if (!file || !file.type.startsWith('image/')) return;
     const blobUrl = URL.createObjectURL(file);
@@ -96,15 +100,12 @@ export default function EditorPage() {
     if (idx >= 0) updatePage(idx, 'image', blobUrl);
     setStagedFiles((prev) => ({ ...prev, [pageId]: file }));
   };
-
-  // 드래그 앤 드롭 핸들러
   const handleDrop = (e, pageId) => {
     e.preventDefault();
-    const file = e.dataTransfer.files[0];
-    handleFileSelect(file, pageId);
+    handleFileSelect(e.dataTransfer.files[0], pageId);
   };
 
-  // 표지 이미지 선택 (앞표지 / 뒤표지)
+  // 좌측 패널 표지 이미지 선택
   const handleCoverSelect = (file, type) => {
     if (!file || !file.type.startsWith('image/')) return;
     const preview = URL.createObjectURL(file);
@@ -112,107 +113,123 @@ export default function EditorPage() {
     else setCoverBack({ file, preview });
   };
 
-  // 사진 일괄 업로드 — 날짜순 정렬 → 앞/뒤 표지 자동 설정 → 내지 배정
-  const handleBulkUpload = (files) => {
-    if (!files || files.length === 0) return;
+  // ── 갤러리 헬퍼 함수 ──────────────────────────────────────────
 
-    // file.lastModified 기준 오름차순 정렬 (촬영 시간 근사값)
-    const arr = Array.from(files).sort((a, b) => a.lastModified - b.lastModified);
-
-    // 앞표지 = 첫 번째, 뒤표지 = 마지막
-    setCoverFront({ file: arr[0], preview: URL.createObjectURL(arr[0]) });
-    if (arr.length >= 2) {
-      setCoverBack({ file: arr[arr.length - 1], preview: URL.createObjectURL(arr[arr.length - 1]) });
-    }
-
-    // 여행 서비스: 날짜 기반 일차(Day N) 챕터 제목 계산
-    const isTravel = session?.serviceType === 'travel';
-    let dayStart = null;
-    if (isTravel) {
-      const first = new Date(arr[0].lastModified);
-      dayStart = new Date(first.getFullYear(), first.getMonth(), first.getDate()).getTime();
-    }
-
-    // 전체 사진을 내지 페이지에 배정 (페이지 부족 시 새 페이지 자동 생성)
-    const newPages = [...pages];
-    const newStagedFiles = { ...stagedFiles };
-    let idCounter = Date.now();
-
-    arr.forEach((file, i) => {
-      const blobUrl = URL.createObjectURL(file);
-      let autoTitle = '';
-      let autoDate = '';
-
-      if (isTravel && dayStart !== null) {
-        const d = new Date(file.lastModified);
-        const dayMs = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-        const dayNum = Math.floor((dayMs - dayStart) / 86400000) + 1;
-        const dateLabel = d.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' });
-        autoTitle = `${dayNum}일차 · ${dateLabel}`;
-        autoDate = d.toISOString().slice(0, 10);
-      }
-
-      if (i < newPages.length) {
-        newPages[i] = { ...newPages[i], image: blobUrl, title: autoTitle || newPages[i].title, date: autoDate || newPages[i].date };
-        newStagedFiles[newPages[i].id] = file;
-      } else {
-        const newId = `page-bulk-${idCounter++}`;
-        newPages.push({ id: newId, title: autoTitle, text: '', date: autoDate, image: blobUrl });
-        newStagedFiles[newId] = file;
-      }
+  // 이미지 가로형 여부 감지 (width > height × 1.6)
+  const detectLandscape = (file) =>
+    new Promise((resolve) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => { URL.revokeObjectURL(url); resolve(img.naturalWidth > img.naturalHeight * 1.6); };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(false); };
+      img.src = url;
     });
 
-    setPages(newPages);
-    setStagedFiles(newStagedFiles);
+  // Canvas API: 이미지를 좌/우로 정확히 반분할 → [leftBlob, rightBlob] (최고 화질 JPEG)
+  const splitImageHalves = (file) =>
+    new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const halfW = Math.floor(img.naturalWidth / 2);
+        const rightW = img.naturalWidth - halfW;
+        const h = img.naturalHeight;
 
-    const coverNote = arr.length >= 2 ? ' · 첫/마지막 사진을 표지로 자동 설정했습니다' : '';
-    const travelNote = isTravel ? ' · 날짜순 챕터 제목 적용됨' : '';
-    toast.success(`${arr.length}장 업로드 완료${coverNote}${travelNote}`);
+        const leftCanvas = document.createElement('canvas');
+        leftCanvas.width = halfW; leftCanvas.height = h;
+        leftCanvas.getContext('2d').drawImage(img, 0, 0, halfW, h, 0, 0, halfW, h);
+
+        const rightCanvas = document.createElement('canvas');
+        rightCanvas.width = rightW; rightCanvas.height = h;
+        rightCanvas.getContext('2d').drawImage(img, halfW, 0, rightW, h, 0, 0, rightW, h);
+
+        Promise.all([
+          new Promise((res) => leftCanvas.toBlob(res, 'image/jpeg', 1.0)),
+          new Promise((res) => rightCanvas.toBlob(res, 'image/jpeg', 1.0)),
+        ]).then(([lb, rb]) => resolve([lb, rb])).catch(reject);
+      };
+      img.onerror = (e) => { URL.revokeObjectURL(url); reject(e); };
+      img.src = url;
+    });
+
+  // 파일들을 갤러리에 추가 (가로형 여부 자동 감지)
+  const handleGalleryUpload = async (files) => {
+    if (!files || files.length === 0) return;
+    const arr = Array.from(files).filter((f) => f.type.startsWith('image/'));
+    if (arr.length === 0) return;
+    const newItems = await Promise.all(
+      arr.map(async (file) => ({
+        id: `gallery-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        file,
+        previewUrl: URL.createObjectURL(file),
+        role: null,
+        text: '',
+        isLandscape: await detectLandscape(file),
+        useSpread: false,
+      }))
+    );
+    setGallery((prev) => [...prev, ...newItems]);
+    toast.success(`${arr.length}장이 갤러리에 추가됐습니다`);
   };
 
-  // ── 사진 기반 AI 텍스트 자동생성 ────────────────────────────────
-  // 현재 업로드된 사진 수에 맞게 AI가 제목+내용 자동 작성 (이미지는 유지)
-  const handlePhotoAiText = async () => {
-    if (!session || pages.length === 0) return;
-    setPhotoAiGenerating(true);
-    try {
-      const res = await fetchWithRetry('/api/generate-story', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          serviceType: session.serviceType,
-          mode: 'photo_text',
-          photoCount: pages.length,
-          ...session.formData,
-        }),
-      });
-      const data = await res.json();
-      if (!data.success) throw new Error(data.message);
+  // 일괄 업로드 버튼 → 갤러리에 추가 (자동 표지 지정 없음 — DECISION_LOG 피벗 반영)
+  const handleBulkUpload = (files) => handleGalleryUpload(files);
 
-      // 이미지는 보존하고 제목+텍스트만 AI 결과로 교체
-      setPages((prev) =>
-        prev.map((page, i) => {
-          const aiPage = data.data.pages[i % data.data.pages.length];
-          return {
-            ...page,
-            title: aiPage?.title || page.title,
-            text:  aiPage?.text  || page.text,
-          };
-        })
-      );
-
-      const sourceLabel = data.source === 'gemini' ? 'Gemini AI' : '기본 템플릿';
-      toast.success(`AI 텍스트 자동 생성 완료! (${sourceLabel} · ${pages.length}페이지)`);
-    } catch (err) {
-      toast.error(`AI 생성 실패: ${err.message}`);
-    } finally {
-      setPhotoAiGenerating(false);
-    }
+  // 갤러리 아이템 업데이트
+  const updateGalleryItem = (idx, updates) => {
+    setGallery((prev) => prev.map((item, i) => (i === idx ? { ...item, ...updates } : item)));
   };
 
-  // ── AI 초안 생성 ─────────────────────────────────────────────
+  // 갤러리 아이템 삭제
+  const removeGalleryItem = (idx) => {
+    setGallery((prev) => {
+      const item = prev[idx];
+      if (item?.previewUrl?.startsWith('blob:')) URL.revokeObjectURL(item.previewUrl);
+      return prev.filter((_, i) => i !== idx);
+    });
+    if (galleryModal.open && galleryModal.idx === idx) setGalleryModal({ open: false, idx: null });
+  };
 
-  // 서비스별 AI 입력 폼 필드 정의
+  // 역할 지정 — 앞표지/뒤표지 중복 시 기존 지정 자동 해제
+  const assignGalleryRole = (idx, role) => {
+    setGallery((prev) =>
+      prev.map((item, i) => {
+        if (i === idx) return { ...item, role };
+        if (role === 'front' && item.role === 'front') return { ...item, role: null };
+        if (role === 'back' && item.role === 'back') return { ...item, role: null };
+        return item;
+      })
+    );
+  };
+
+  // 갤러리 드래그 리오더
+  const handleGalleryDragStart = (e, idx) => {
+    setGalleryDragIdx(idx);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+  const handleGalleryDragOver = (e, idx) => {
+    e.preventDefault();
+    if (galleryDragIdx === null || galleryDragIdx === idx) return;
+    setGallery((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(galleryDragIdx, 1);
+      next.splice(idx, 0, moved);
+      return next;
+    });
+    setGalleryDragIdx(idx);
+  };
+  const handleGalleryDragEnd = () => setGalleryDragIdx(null);
+
+  // 갤러리 드롭 존 (신규 파일 업로드)
+  const handleGalleryZoneDrop = (e) => {
+    e.preventDefault();
+    setGalleryDropActive(false);
+    handleGalleryUpload(e.dataTransfer.files);
+  };
+
+  // ── AI 초안 생성 ──────────────────────────────────────────────
+
   const AI_FORM_FIELDS = {
     baby: [
       { key: 'babyName', label: '아이 이름', type: 'text', placeholder: '예) 하은이', required: true },
@@ -251,14 +268,9 @@ export default function EditorPage() {
     if (!session) return;
     const fields = AI_FORM_FIELDS[session.serviceType] || [];
     const missing = fields.filter((f) => f.required && !aiFormData[f.key]).map((f) => f.label);
-    if (missing.length > 0) {
-      setAiError(`필수 항목을 입력해주세요: ${missing.join(', ')}`);
-      return;
-    }
+    if (missing.length > 0) { setAiError(`필수 항목을 입력해주세요: ${missing.join(', ')}`); return; }
 
-    setAiGenerating(true);
-    setAiError(null);
-
+    setAiGenerating(true); setAiError(null);
     try {
       const res = await fetch('/api/generate-story', {
         method: 'POST',
@@ -267,8 +279,6 @@ export default function EditorPage() {
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.message);
-
-      // 즉시 적용하지 않고 임시 저장 → 미리보기 모달로 이동
       setDraftData({ ...data.data, source: data.source, notice: data.notice });
       setShowAiPanel(false);
       setIsPreviewModalOpen(true);
@@ -280,232 +290,212 @@ export default function EditorPage() {
     }
   };
 
-  // AI 초안 미리보기 모달 액션 핸들러
-  const handleDraftReplace = () => {
-    setPages(draftData.pages);
-    setEditingIdx(0);
-    setDraftData(null);
-    setIsPreviewModalOpen(false);
-  };
+  const handleDraftReplace = () => { setPages(draftData.pages); setEditingIdx(0); setDraftData(null); setIsPreviewModalOpen(false); };
+  const handleDraftAppend  = () => { setPages((prev) => [...prev, ...draftData.pages]); setDraftData(null); setIsPreviewModalOpen(false); };
+  const handleDraftCancel  = () => { setDraftData(null); setIsPreviewModalOpen(false); };
 
-  const handleDraftAppend = () => {
-    setPages((prev) => [...prev, ...draftData.pages]);
-    setDraftData(null);
-    setIsPreviewModalOpen(false);
-  };
-
-  const handleDraftCancel = () => {
-    setDraftData(null);
-    setIsPreviewModalOpen(false);
-  };
-
-  // 페이지 순서 변경
-  const movePage = (idx, direction) => {
-    const newPages = [...pages];
-    const target = idx + direction;
-    if (target < 0 || target >= newPages.length) return;
-    [newPages[idx], newPages[target]] = [newPages[target], newPages[idx]];
-    setPages(newPages);
-    setEditingIdx(target);
-  };
-
-  // ─── API 호출: 책 생성 + 콘텐츠 추가 + 최종화 ───────────
+  // ── 책 생성 API (갤러리 통합) ──────────────────────────────────
   const handleCreateBook = async () => {
-    if (pages.length < 10) {
-      toast.warn('최소 10개 이상의 페이지가 필요합니다. (최종화 시 최소 20페이지)');
+    const contentCount = pages.length + gallery.filter((g) => g.role !== 'front' && g.role !== 'back').length;
+    if (contentCount < 1) {
+      toast.warn('최소 1개 이상의 페이지 또는 갤러리 사진이 필요합니다.');
       return;
     }
 
     setLoading(true);
     try {
-      // 세션에서 템플릿 UID 읽기 (create 페이지에서 GET /templates로 조회한 값)
-      const coverTplUid    = session.coverTemplateUid    || '79yjMH3qRPly';
-      const contentTplUid  = session.contentTemplateUid  || 'vHA59XPPKqak';
-      addLog(`📋 템플릿 — 표지: ${coverTplUid} / 내지: ${contentTplUid}`);
+      const coverTplUid = session.coverTemplateUid || 'tpl_F8d15af9fd';
+      addLog(`📋 표지 템플릿: ${coverTplUid}`);
 
       const service = SERVICE_TYPES[session.serviceType];
-      const title = session.formData.bookTitle || session.formData.tripName || session.formData.babyName
-        ? `${session.formData.babyName || session.formData.childName || session.formData.heroName || session.formData.petName || session.formData.authorName || ''}의 ${service.name}`
-        : service.name;
+      const fd = session.formData;
+      const name = fd.babyName || fd.childName || fd.heroName || fd.petName || fd.authorName || '';
+      const title = name ? `${name}의 ${service.name}` : fd.bookTitle || fd.tripName || service.name;
 
-      // 1. 책 생성 (5xx 오류 시 최대 3회 재시도)
+      // 1. 책 생성
       addLog(`📗 책 생성 중... (${title})`);
       const bookRes = await fetchWithRetry('/api/books', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title,
-          bookSpecUid: session.bookSpecUid,
-          creationType: 'TEST',
-          externalRef: `bookmaker-${Date.now()}`,
-        }),
+        body: JSON.stringify({ title, bookSpecUid: session.bookSpecUid, creationType: 'TEST', externalRef: `bookmaker-${Date.now()}` }),
       });
       const bookData = await bookRes.json();
-
-      if (!bookData.success) {
-        throw new Error(bookData.message || '책 생성 실패');
-      }
+      if (!bookData.success) throw new Error(bookData.message || '책 생성 실패');
 
       const uid = bookData.data.bookUid;
       setBookUid(uid);
       addLog(`✅ 책 생성 완료: ${uid}`);
 
-      // 1-b. staged 파일을 Photos API로 업로드 → blob URL을 실제 URL로 교체
-      const uploadedUrlMap = {}; // pageId → 업로드된 실제 URL
+      // 1-b. 편집 패널 staged 파일 업로드
+      const uploadedUrlMap = {};
       const stagedEntries = Object.entries(stagedFiles);
       if (stagedEntries.length > 0) {
         setUploadingPhoto(true);
-        addLog(`📸 사진 ${stagedEntries.length}장 업로드 시작...`);
+        addLog(`📸 편집 패널 사진 ${stagedEntries.length}장 업로드 중...`);
         for (const [pageId, file] of stagedEntries) {
           try {
-            const fd = new FormData();
-            fd.append('file', file);
-            addLog(`📤 업로드 중: ${file.name}`);
-            const photoRes = await fetch(`/api/books/${uid}/photos`, {
-              method: 'POST',
-              body: fd,
-            });
-            const photoData = await photoRes.json();
-            if (photoData.success) {
-              const uploadedUrl = photoData.data?.url || photoData.data?.photoUrl || photoData.data?.fileUrl;
-              if (uploadedUrl) {
-                uploadedUrlMap[pageId] = uploadedUrl;
-                addLog(`✅ 업로드 완료: ${uploadedUrl}`);
-              } else {
-                addLog(`⚠️ 업로드 성공 but URL 없음 (API 응답 확인 필요)`);
-              }
-            } else {
-              addLog(`⚠️ 사진 업로드 실패: ${photoData.message}`);
-            }
-          } catch (uploadErr) {
-            addLog(`⚠️ 업로드 오류 (${file.name}): ${uploadErr.message}`);
-          }
+            const form = new FormData(); form.append('file', file);
+            const r = await fetch(`/api/books/${uid}/photos`, { method: 'POST', body: form });
+            const d = await r.json();
+            const url = d.data?.url || d.data?.photoUrl || d.data?.fileUrl;
+            if (d.success && url) { uploadedUrlMap[pageId] = url; addLog(`✅ ${file.name}`); }
+            else addLog(`⚠️ ${file.name}: ${d.message}`);
+          } catch (e) { addLog(`⚠️ 업로드 오류: ${e.message}`); }
         }
         setUploadingPhoto(false);
-        addLog(`✅ 사진 업로드 완료 (${Object.keys(uploadedUrlMap).length}/${stagedEntries.length}장 성공)`);
       }
 
-      // 2. 표지 이미지 업로드 (사용자가 업로드한 경우)
-      addLog('🖼️ 표지 이미지 처리 중...');
-      let coverFrontUrl = `https://picsum.photos/seed/${session.serviceType}-cover-front/600/600`;
-      let coverBackUrl  = `https://picsum.photos/seed/${session.serviceType}-cover-back/600/600`;
+      // 2. 표지 URL 초기화 (기본값 → 좌측 패널 → 갤러리 지정 순으로 덮어씀)
+      let coverFrontUrl = `https://picsum.photos/seed/${session.serviceType}-front/600/600`;
+      let coverBackUrl  = `https://picsum.photos/seed/${session.serviceType}-back/600/600`;
 
+      const uploadCover = async (file, label) => {
+        const form = new FormData(); form.append('file', file);
+        const r = await fetch(`/api/books/${uid}/photos`, { method: 'POST', body: form });
+        const d = await r.json();
+        const url = d.data?.url || d.data?.photoUrl || d.data?.fileUrl;
+        if (d.success && url) { addLog(`✅ ${label} 업로드 완료`); return url; }
+        addLog(`⚠️ ${label} 업로드 실패: ${d.message}`); return null;
+      };
+
+      // 좌측 패널 표지
       if (coverFront.file) {
-        try {
-          const fd = new FormData();
-          fd.append('file', coverFront.file);
-          const r = await fetch(`/api/books/${uid}/photos`, { method: 'POST', body: fd });
-          const d = await r.json();
-          const uploadedUrl = d.data?.url || d.data?.photoUrl || d.data?.fileUrl;
-          if (d.success && uploadedUrl) {
-            coverFrontUrl = uploadedUrl;
-            addLog(`✅ 앞표지 업로드 완료: ${uploadedUrl}`);
-          } else {
-            addLog(`⚠️ 앞표지 업로드 실패: ${d.message} — 기본 이미지 사용`);
-          }
-        } catch (e) { addLog(`⚠️ 앞표지 업로드 오류: ${e.message}`); }
-      } else {
-        addLog('ℹ️ 앞표지 이미지 미업로드 — 기본 이미지 사용');
+        const url = await uploadCover(coverFront.file, '앞표지(패널)');
+        if (url) coverFrontUrl = url;
       }
-
       if (coverBack.file) {
-        try {
-          const fd = new FormData();
-          fd.append('file', coverBack.file);
-          const r = await fetch(`/api/books/${uid}/photos`, { method: 'POST', body: fd });
-          const d = await r.json();
-          const uploadedUrl = d.data?.url || d.data?.photoUrl || d.data?.fileUrl;
-          if (d.success && uploadedUrl) {
-            coverBackUrl = uploadedUrl;
-            addLog(`✅ 뒤표지 업로드 완료: ${uploadedUrl}`);
-          } else {
-            addLog(`⚠️ 뒤표지 업로드 실패: ${d.message} — 기본 이미지 사용`);
-          }
-        } catch (e) { addLog(`⚠️ 뒤표지 업로드 오류: ${e.message}`); }
+        const url = await uploadCover(coverBack.file, '뒤표지(패널)');
+        if (url) coverBackUrl = url;
       }
 
-      // 3-a. 앞표지 추가 — GET /templates에서 조회한 커버 템플릿 사용
+      // 갤러리 표지 (우선순위 더 높음)
+      const galleryFront   = gallery.find((g) => g.role === 'front');
+      const galleryBack    = gallery.find((g) => g.role === 'back');
+      const galleryContent = gallery.filter((g) => g.role !== 'front' && g.role !== 'back');
+
+      if (galleryFront?.file) {
+        const url = await uploadCover(galleryFront.file, '앞표지(갤러리)');
+        if (url) coverFrontUrl = url;
+      }
+      if (galleryBack?.file) {
+        const url = await uploadCover(galleryBack.file, '뒤표지(갤러리)');
+        if (url) coverBackUrl = url;
+      }
+
+      // 2-c. 갤러리 내지 사진 업로드 (양면 분할 포함)
+      const galleryPageData = [];
+      if (galleryContent.length > 0) {
+        addLog(`📸 갤러리 내지 ${galleryContent.length}장 처리 중...`);
+        for (const item of galleryContent) {
+          if (item.useSpread && item.isLandscape && item.file) {
+            addLog(`↔️ 양면 분할: ${item.file.name}`);
+            try {
+              const [leftBlob, rightBlob] = await splitImageHalves(item.file);
+              const leftFile  = new File([leftBlob],  'spread-left.jpg',  { type: 'image/jpeg' });
+              const rightFile = new File([rightBlob], 'spread-right.jpg', { type: 'image/jpeg' });
+
+              const fL = new FormData(); fL.append('file', leftFile);
+              const rL = await fetch(`/api/books/${uid}/photos`, { method: 'POST', body: fL });
+              const dL = await rL.json();
+              const leftUrl = dL.data?.url || dL.data?.photoUrl || dL.data?.fileUrl;
+
+              const fR = new FormData(); fR.append('file', rightFile);
+              const rR = await fetch(`/api/books/${uid}/photos`, { method: 'POST', body: fR });
+              const dR = await rR.json();
+              const rightUrl = dR.data?.url || dR.data?.photoUrl || dR.data?.fileUrl;
+
+              galleryPageData.push({ imageUrl: leftUrl,  text: item.text });
+              galleryPageData.push({ imageUrl: rightUrl, text: '' });
+              addLog(`✅ 양면 분할 완료 → 2페이지 생성`);
+            } catch (e) {
+              addLog(`⚠️ 양면 분할 실패(${e.message}) — 원본 단일 업로드`);
+              if (item.file) {
+                const form = new FormData(); form.append('file', item.file);
+                const r = await fetch(`/api/books/${uid}/photos`, { method: 'POST', body: form });
+                const d = await r.json();
+                galleryPageData.push({ imageUrl: d.data?.url || d.data?.photoUrl || d.data?.fileUrl, text: item.text });
+              }
+            }
+          } else if (item.file) {
+            const form = new FormData(); form.append('file', item.file);
+            const r = await fetch(`/api/books/${uid}/photos`, { method: 'POST', body: form });
+            const d = await r.json();
+            galleryPageData.push({ imageUrl: d.data?.url || d.data?.photoUrl || d.data?.fileUrl, text: item.text });
+          }
+        }
+        addLog(`✅ 갤러리 내지 처리 완료 (→${galleryPageData.length}페이지)`);
+      }
+
+      // 3-a. 앞표지 추가
       addLog('🎨 앞표지 추가 중...');
-      const coverPhoto = coverFrontUrl;
-      const dateRange = session.formData.period || session.formData.semester
-        ? `${session.formData.year || '2025'}년 ${session.formData.semester || session.formData.period || ''}`
-        : pages[0]?.date
-          ? `${pages[0].date} ~ ${pages[pages.length - 1]?.date || ''}`
-          : '2025';
+      const dateRange = fd.period || fd.semester
+        ? `${fd.year || '2025'}년 ${fd.semester || fd.period || ''}`
+        : pages[0]?.date ? `${pages[0].date} ~ ${pages[pages.length - 1]?.date || ''}` : '2025';
       const coverRes = await fetch(`/api/books/${uid}/cover`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          templateUid: coverTplUid,
-          parameters: {
-            coverPhoto,
-            title,
-            dateRange,
-          },
-        }),
+        body: JSON.stringify({ templateUid: coverTplUid, parameters: { coverPhoto: coverFrontUrl, title, dateRange } }),
       });
       const coverData = await coverRes.json();
-      addLog(coverData.success ? '✅ 표지 추가 완료' : `⚠️ 표지: ${coverData.message}`);
+      addLog(coverData.success ? '✅ 앞표지 추가 완료' : `⚠️ 앞표지: ${coverData.message}`);
 
-      // 3. 콘텐츠 페이지 추가 — 템플릿 vHA59XPPKqak (일기장B): date + title + diaryText 필수
-      // API 최소 24p 요건 충족을 위해 페이지가 부족하면 반복 추가
-      const MIN_PAGES = 24;
-      const pagesForApi = [...pages];
+      // 3-b. 내지 추가 — 갤러리 내지 + 편집 패널 페이지 통합
+      // 텍스트 유무에 따라 템플릿 동적 분기 (cnH0Ud1nl1f9 vs 6dJ0Qy6ZmXej)
+      const galleryApiPages = galleryPageData.map((gp, i) => ({
+        id: `gallery-api-${i}`, title: '', text: gp.text || '',
+        date: new Date().toISOString().slice(0, 10),
+        image: gp.imageUrl || '', _fromGallery: true,
+      }));
+
+      const combinedPages = [...galleryApiPages, ...pages];
+      const pagesForApi = [...combinedPages];
       let repeatIdx = 0;
+      const MIN_PAGES = 24;
       while (pagesForApi.length < MIN_PAGES) {
-        pagesForApi.push({ ...pages[repeatIdx % pages.length], title: `${pages[repeatIdx % pages.length].title} (${Math.floor(repeatIdx / pages.length) + 2}회차)` });
+        const src = combinedPages[repeatIdx % Math.max(combinedPages.length, 1)];
+        if (!src) break;
+        pagesForApi.push({ ...src, id: `repeat-${repeatIdx}`, title: `${src.title || ''} (${Math.floor(repeatIdx / combinedPages.length) + 2}회차)` });
         repeatIdx++;
       }
-      if (pagesForApi.length > pages.length) {
-        addLog(`📋 API 최소 페이지(24p) 충족을 위해 ${pagesForApi.length - pages.length}개 페이지 반복 추가`);
-      }
+      if (pagesForApi.length > combinedPages.length)
+        addLog(`📋 최소 24p 충족 위해 ${pagesForApi.length - combinedPages.length}페이지 반복 추가`);
 
       for (let i = 0; i < pagesForApi.length; i++) {
         const page = pagesForApi[i];
-        addLog(`📄 페이지 ${i + 1}/${pagesForApi.length} 추가 중...`);
+        addLog(`📄 페이지 ${i + 1}/${pagesForApi.length}...`);
+
+        const hasText = !!(page.text || page.teacherComment || '').trim();
+        const templateUid = hasText ? TEMPLATE_TEXT_IMAGE : TEMPLATE_IMAGE_ONLY;
+
+        const resolvedImage = page._fromGallery
+          ? page.image
+          : (uploadedUrlMap[page.id] || (page.image?.startsWith('http') ? page.image : null));
 
         const params = {
           date: page.date || new Date().toISOString().slice(0, 10),
           title: page.title || `페이지 ${i + 1}`,
-          diaryText: page.text || page.teacherComment || '내용이 없습니다.',
+          diaryText: page.text || page.teacherComment || '',
         };
-
-        // 이미지가 있을 경우 — 업로드된 실제 URL 우선, blob URL은 스킵
-        const resolvedImage = uploadedUrlMap[page.id] || (page.image?.startsWith('http') ? page.image : null);
-        if (resolvedImage) {
-          params.diaryPhoto = resolvedImage;
-        }
+        if (resolvedImage) params.diaryPhoto = resolvedImage;
 
         const contentRes = await fetch(`/api/books/${uid}/contents`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            templateUid: contentTplUid,
-            parameters: params,
-            breakBefore: 'page',
-          }),
+          body: JSON.stringify({ templateUid, parameters: params, breakBefore: 'page' }),
         });
         const contentData = await contentRes.json();
-
-        if (!contentData.success) {
-          addLog(`⚠️ 페이지 ${i + 1}: ${contentData.message}`);
-        }
+        if (!contentData.success) addLog(`⚠️ 페이지 ${i + 1}: ${contentData.message}`);
       }
-      addLog(`✅ 전체 ${pagesForApi.length}개 페이지 추가 완료`);
+      addLog(`✅ 내지 ${pagesForApi.length}페이지 추가 완료`);
 
-      // 3-c. 뒤표지 — 마지막 콘텐츠 페이지로 추가 (전면 이미지)
+      // 3-c. 뒤표지
       addLog('🎨 뒤표지 추가 중...');
       const backCoverRes = await fetch(`/api/books/${uid}/contents`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          templateUid: 'vHA59XPPKqak',
-          parameters: {
-            date: new Date().toISOString().slice(0, 10),
-            title: '뒤표지',
-            diaryText: '',
-            diaryPhoto: coverBackUrl,
-          },
+          templateUid: TEMPLATE_IMAGE_ONLY,
+          parameters: { date: new Date().toISOString().slice(0, 10), title: '뒤표지', diaryText: '', diaryPhoto: coverBackUrl },
           breakBefore: 'page',
         }),
       });
@@ -514,26 +504,18 @@ export default function EditorPage() {
 
       // 4. 최종화
       addLog('🔒 책 최종화 중...');
-      const finalRes = await fetch(`/api/books/${uid}/finalize`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
+      const finalRes = await fetch(`/api/books/${uid}/finalize`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
       const finalData = await finalRes.json();
 
       if (finalData.success) {
         addLog(`✅ 최종화 완료! (${finalData.data?.pageCount || '?'}페이지)`);
         setBookCreated(true);
-        toast.success(`책 생성 완료! ${finalData.data?.pageCount || ''}페이지 포토북이 준비되었습니다.`);
-
-        // 세션에 bookUid 저장
-        const updated = { ...session, bookUid: uid, pageCount: finalData.data?.pageCount };
-        sessionStorage.setItem('bookmaker_session', JSON.stringify(updated));
+        toast.success(`책 생성 완료! ${finalData.data?.pageCount || ''}페이지 포토북이 준비됐습니다.`);
+        sessionStorage.setItem('bookmaker_session', JSON.stringify({ ...session, bookUid: uid, pageCount: finalData.data?.pageCount }));
       } else {
         addLog(`❌ 최종화 실패: ${finalData.message}`);
         toast.warn(`최종화 실패: ${finalData.message}`);
-        // 페이지 수 부족 등의 에러라도 bookUid는 저장
-        const updated = { ...session, bookUid: uid };
-        sessionStorage.setItem('bookmaker_session', JSON.stringify(updated));
+        sessionStorage.setItem('bookmaker_session', JSON.stringify({ ...session, bookUid: uid }));
       }
     } catch (err) {
       addLog(`❌ 오류: ${err.message}`);
@@ -543,17 +525,13 @@ export default function EditorPage() {
     }
   };
 
-  const goToPreview = () => {
-    router.push('/preview');
-  };
-
-  if (!session) {
-    return <div className="min-h-screen flex items-center justify-center"><div className="spinner text-warm-600" /></div>;
-  }
+  if (!session) return <div className="min-h-screen flex items-center justify-center"><div className="spinner text-warm-600" /></div>;
 
   const service = SERVICE_TYPES[session.serviceType];
-
-  const aiFields = session ? (AI_FORM_FIELDS[session.serviceType] || []) : [];
+  const aiFields = AI_FORM_FIELDS[session.serviceType] || [];
+  const galleryItem = galleryModal.open ? gallery[galleryModal.idx] : null;
+  const modalHasFront = gallery.some((g, i) => g.role === 'front' && i !== galleryModal.idx);
+  const modalHasBack  = gallery.some((g, i) => g.role === 'back'  && i !== galleryModal.idx);
 
   return (
     <div className="min-h-screen pb-20">
@@ -563,39 +541,23 @@ export default function EditorPage() {
       {isPreviewModalOpen && draftData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.55)' }}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col animate-fade-up">
-            {/* 모달 헤더 */}
             <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-ink-100 flex-shrink-0">
               <div className="flex items-center gap-2">
                 <span className="text-xl">✨</span>
                 <div>
                   <h2 className="font-display font-bold text-ink-900">AI 초안 미리보기</h2>
-                  <p className="text-xs text-ink-400 mt-0.5">
-                    {draftData.source === 'gemini' ? 'Gemini AI 생성' : '기본 템플릿 생성'} · {draftData.pages.length}페이지
-                  </p>
+                  <p className="text-xs text-ink-400 mt-0.5">{draftData.source === 'gemini' ? 'Gemini AI 생성' : '기본 템플릿 생성'} · {draftData.pages.length}페이지</p>
                 </div>
               </div>
-              <button
-                onClick={handleDraftCancel}
-                className="p-2 text-ink-400 hover:text-ink-700 transition-colors rounded-lg hover:bg-ink-50"
-              >
-                ✕
-              </button>
+              <button onClick={handleDraftCancel} className="p-2 text-ink-400 hover:text-ink-700 rounded-lg hover:bg-ink-50">✕</button>
             </div>
-
-            {/* 폴백 사용 안내 */}
             {draftData.notice && (
-              <div className="mx-6 mt-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700 flex-shrink-0">
-                ⚠️ {draftData.notice}
-              </div>
+              <div className="mx-6 mt-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700 flex-shrink-0">⚠️ {draftData.notice}</div>
             )}
-
-            {/* 책 제목 */}
             <div className="px-6 pt-4 pb-2 flex-shrink-0">
               <p className="text-sm text-ink-500">책 제목</p>
               <p className="font-display font-bold text-ink-900 text-base">{draftData.title}</p>
             </div>
-
-            {/* 페이지 목록 스크롤 영역 */}
             <div className="flex-1 overflow-y-auto px-6 pb-4 space-y-2 min-h-0">
               {draftData.pages.map((page, idx) => (
                 <div key={idx} className="flex gap-3 p-3 bg-ink-50 rounded-xl">
@@ -607,30 +569,12 @@ export default function EditorPage() {
                 </div>
               ))}
             </div>
-
-            {/* 하단 버튼 3종 */}
             <div className="px-6 pb-6 pt-4 border-t border-ink-100 flex-shrink-0 space-y-2">
               <div className="flex gap-2">
-                <button
-                  onClick={handleDraftReplace}
-                  className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white transition-all"
-                  style={{ background: 'linear-gradient(135deg, #7c3aed, #a855f7)' }}
-                >
-                  전체 페이지 교체
-                </button>
-                <button
-                  onClick={handleDraftAppend}
-                  className="flex-1 py-2.5 rounded-xl text-sm font-bold text-violet-700 border-2 border-violet-300 bg-violet-50 hover:bg-violet-100 transition-all"
-                >
-                  페이지 뒤에 추가
-                </button>
+                <button onClick={handleDraftReplace} className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white" style={{ background: 'linear-gradient(135deg, #7c3aed, #a855f7)' }}>전체 페이지 교체</button>
+                <button onClick={handleDraftAppend} className="flex-1 py-2.5 rounded-xl text-sm font-bold text-violet-700 border-2 border-violet-300 bg-violet-50 hover:bg-violet-100">페이지 뒤에 추가</button>
               </div>
-              <button
-                onClick={handleDraftCancel}
-                className="w-full py-2.5 rounded-xl text-sm font-medium text-ink-500 hover:text-ink-700 hover:bg-ink-50 transition-all border border-ink-200"
-              >
-                작업 취소
-              </button>
+              <button onClick={handleDraftCancel} className="w-full py-2.5 rounded-xl text-sm font-medium text-ink-500 hover:text-ink-700 hover:bg-ink-50 border border-ink-200">작업 취소</button>
             </div>
           </div>
         </div>
@@ -640,7 +584,6 @@ export default function EditorPage() {
       {showAiPanel && session && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.45)' }}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-fade-up">
-            {/* 모달 헤더 */}
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-2">
                 <span className="text-xl">✨</span>
@@ -649,82 +592,146 @@ export default function EditorPage() {
                   <p className="text-xs text-ink-400 mt-0.5">{SERVICE_TYPES[session.serviceType]?.name} · Gemini AI</p>
                 </div>
               </div>
-              <button
-                onClick={() => { setShowAiPanel(false); setAiError(null); }}
-                className="p-2 text-ink-400 hover:text-ink-700 transition-colors rounded-lg hover:bg-ink-50"
-              >
-                ✕
-              </button>
+              <button onClick={() => { setShowAiPanel(false); setAiError(null); }} className="p-2 text-ink-400 hover:text-ink-700 rounded-lg hover:bg-ink-50">✕</button>
             </div>
-
-            {/* 서비스별 입력 폼 */}
             <div className="space-y-3 mb-4">
               {aiFields.map((field) => (
                 <div key={field.key}>
-                  <label className="block text-sm font-medium text-ink-800 mb-1">
-                    {field.label}
-                    {field.required && <span className="text-red-400 ml-0.5">*</span>}
-                  </label>
+                  <label className="block text-sm font-medium text-ink-800 mb-1">{field.label}{field.required && <span className="text-red-400 ml-0.5">*</span>}</label>
                   {field.type === 'select' ? (
-                    <select
-                      className="input-field text-sm"
-                      value={aiFormData[field.key] || ''}
-                      onChange={(e) => setAiFormData((p) => ({ ...p, [field.key]: e.target.value }))}
-                    >
+                    <select className="input-field text-sm" value={aiFormData[field.key] || ''} onChange={(e) => setAiFormData((p) => ({ ...p, [field.key]: e.target.value }))}>
                       <option value="">선택해주세요</option>
                       {field.options.map((o) => <option key={o} value={o}>{o}</option>)}
                     </select>
                   ) : (
-                    <input
-                      type="text"
-                      className="input-field text-sm"
-                      placeholder={field.placeholder}
-                      value={aiFormData[field.key] || ''}
-                      onChange={(e) => setAiFormData((p) => ({ ...p, [field.key]: e.target.value }))}
-                    />
+                    <input type="text" className="input-field text-sm" placeholder={field.placeholder} value={aiFormData[field.key] || ''} onChange={(e) => setAiFormData((p) => ({ ...p, [field.key]: e.target.value }))} />
                   )}
                 </div>
               ))}
             </div>
-
-            {/* 에러 메시지 */}
-            {aiError && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">
-                {aiError}
-              </div>
-            )}
-
-            {/* 생성 중 힌트 */}
+            {aiError && <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">{aiError}</div>}
             {aiGenerating && (
               <div className="mb-4 space-y-1.5">
                 {['아이디어 구상 중...', '문장 구성 중...', '페이지 편집 중...'].map((hint, i) => (
                   <div key={i} className="flex items-center gap-2 text-xs text-violet-500 opacity-0 animate-fade-in" style={{ animationDelay: `${i * 0.7}s`, animationFillMode: 'forwards' }}>
-                    <span className="w-1.5 h-1.5 rounded-full bg-violet-400 flex-shrink-0" />
-                    {hint}
+                    <span className="w-1.5 h-1.5 rounded-full bg-violet-400 flex-shrink-0" /> {hint}
                   </div>
                 ))}
               </div>
             )}
-
-            {/* 버튼 */}
-            <button
-              onClick={handleAiGenerate}
-              disabled={aiGenerating}
-              className="w-full py-3 rounded-xl font-bold text-white transition-all disabled:opacity-60"
-              style={{ background: aiGenerating ? '#7c3aed80' : 'linear-gradient(135deg, #7c3aed, #a855f7)' }}
-            >
-              {aiGenerating ? (
-                <span className="flex items-center justify-center gap-2">
-                  <span className="spinner" />
-                  AI가 페이지를 집필 중입니다...
-                </span>
-              ) : (
-                '🪄 AI 초안 생성하기'
-              )}
+            <button onClick={handleAiGenerate} disabled={aiGenerating} className="w-full py-3 rounded-xl font-bold text-white transition-all disabled:opacity-60" style={{ background: aiGenerating ? '#7c3aed80' : 'linear-gradient(135deg, #7c3aed, #a855f7)' }}>
+              {aiGenerating ? <span className="flex items-center justify-center gap-2"><span className="spinner" />AI가 페이지를 집필 중입니다...</span> : '🪄 AI 초안 생성하기'}
             </button>
-            <p className="text-xs text-ink-400 text-center mt-3">
-              생성 후 모든 내용을 자유롭게 수정할 수 있습니다
-            </p>
+            <p className="text-xs text-ink-400 text-center mt-3">생성 후 모든 내용을 자유롭게 수정할 수 있습니다</p>
+          </div>
+        </div>
+      )}
+
+      {/* ── 갤러리 페이지 구성 모달 ── */}
+      {galleryModal.open && galleryItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)' }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md animate-fade-up overflow-hidden">
+            {/* 헤더 */}
+            <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-ink-100">
+              <h2 className="font-display font-bold text-ink-900">페이지 구성 설정</h2>
+              <button onClick={() => setGalleryModal({ open: false, idx: null })} className="p-2 text-ink-400 hover:text-ink-700 rounded-lg hover:bg-ink-50">✕</button>
+            </div>
+
+            <div className="px-6 pt-4 pb-1">
+              {/* 사진 미리보기 */}
+              <img src={galleryItem.previewUrl} alt="미리보기" className="w-full h-44 object-cover rounded-xl" />
+              <p className="text-xs text-ink-400 mt-1 text-center truncate">
+                {galleryItem.file?.name}
+                {galleryItem.isLandscape && <span className="text-sky-500 ml-1">· 가로형 이미지</span>}
+              </p>
+
+              {/* 역할 지정 */}
+              <div className="mt-4">
+                <p className="text-sm font-medium text-ink-800 mb-2">이 사진의 역할</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { role: 'front',   label: '앞표지', icon: '📗', disabled: modalHasFront },
+                    { role: 'back',    label: '뒤표지', icon: '📘', disabled: modalHasBack  },
+                    { role: 'content', label: '내지',   icon: '📄', disabled: false },
+                  ].map(({ role, label, icon, disabled }) => (
+                    <button
+                      key={role}
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => assignGalleryRole(galleryModal.idx, galleryItem.role === role ? null : role)}
+                      className={`py-3 rounded-xl border-2 text-sm font-medium transition-all flex flex-col items-center gap-1 ${
+                        galleryItem.role === role
+                          ? 'border-warm-600 bg-warm-50 text-warm-800'
+                          : disabled
+                          ? 'border-ink-100 text-ink-300 cursor-not-allowed bg-ink-50'
+                          : 'border-ink-200 text-ink-600 hover:border-ink-400'
+                      }`}
+                    >
+                      <span className="text-xl">{icon}</span>
+                      <span>{label}</span>
+                      {disabled && <span className="text-[10px] text-ink-300">이미 지정됨</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 내지 텍스트 입력 */}
+              {galleryItem.role === 'content' && (
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-ink-800 mb-1">
+                    텍스트 입력
+                    <span className="ml-1 text-xs font-normal text-ink-400">(선택)</span>
+                  </label>
+                  <textarea
+                    className="input-field min-h-[72px] text-sm"
+                    placeholder="이 페이지에 들어갈 텍스트 (비우면 이미지 전용 템플릿 사용)"
+                    value={galleryItem.text}
+                    onChange={(e) => updateGalleryItem(galleryModal.idx, { text: e.target.value })}
+                  />
+                  <p className={`text-xs mt-1 ${galleryItem.text.trim() ? 'text-green-600' : 'text-ink-400'}`}>
+                    {galleryItem.text.trim()
+                      ? '✓ 사진+텍스트 템플릿(cnH0Ud1nl1f9) 적용 예정'
+                      : '이미지 전용 템플릿(6dJ0Qy6ZmXej) 적용 예정'}
+                  </p>
+                </div>
+              )}
+
+              {/* 양면(Spread) 분할 옵션 — 가로형 + 내지일 때만 표시 */}
+              {galleryItem.isLandscape && galleryItem.role === 'content' && (
+                <div className="mt-3 p-3 bg-sky-50 border border-sky-200 rounded-xl">
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={galleryItem.useSpread}
+                      onChange={(e) => updateGalleryItem(galleryModal.idx, { useSpread: e.target.checked })}
+                      className="mt-0.5 accent-sky-600"
+                    />
+                    <div>
+                      <p className="text-sm font-medium text-sky-900">↔ 양면(2p) 꽉 차게 배치</p>
+                      <p className="text-xs text-sky-600 mt-0.5">Canvas API로 좌/우 반분할 → 연속된 2페이지에 펼침(Spread)으로 배치</p>
+                    </div>
+                  </label>
+                </div>
+              )}
+            </div>
+
+            {/* 하단 버튼 */}
+            <div className="px-6 py-5 flex gap-2">
+              <button
+                type="button"
+                onClick={() => { removeGalleryItem(galleryModal.idx); }}
+                className="px-4 py-2 rounded-xl text-sm text-red-500 hover:text-red-700 hover:bg-red-50 border border-red-200 transition-all"
+              >
+                삭제
+              </button>
+              <button
+                type="button"
+                onClick={() => setGalleryModal({ open: false, idx: null })}
+                className="flex-1 py-2 rounded-xl text-sm font-bold text-white bg-warm-600 hover:bg-warm-800 transition-all"
+              >
+                확인
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -736,24 +743,17 @@ export default function EditorPage() {
             <h1 className="font-display font-bold text-2xl text-ink-900 flex items-center gap-2">
               <span>{service.icon}</span>
               콘텐츠 편집
-              {session.aiGenerated && (
-                <span className="text-xs bg-violet-100 text-violet-700 border border-violet-200 px-2 py-0.5 rounded-full font-normal">✨ AI 생성</span>
-              )}
+              {session.aiGenerated && <span className="text-xs bg-violet-100 text-violet-700 border border-violet-200 px-2 py-0.5 rounded-full font-normal">✨ AI 생성</span>}
             </h1>
             <p className="text-ink-400 text-sm mt-1">
               {session.aiGenerated
                 ? `AI가 생성한 "${session.aiTitle}" · 자유롭게 수정하세요`
-                : `페이지를 추가하고 내용을 편집하세요 · 판형: ${BOOK_SPEC_LABELS[session.bookSpecUid] || session.bookSpecUid}`}
+                : `페이지를 추가하거나 아래 갤러리에서 사진을 업로드하세요 · 판형: ${BOOK_SPEC_LABELS[session.bookSpecUid] || session.bookSpecUid}`}
             </p>
           </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setShowLog(!showLog)}
-              className="btn-secondary text-sm !px-3 !py-2"
-            >
-              {showLog ? 'API 로그 닫기' : 'API 로그'}
-            </button>
-          </div>
+          <button onClick={() => setShowLog(!showLog)} className="btn-secondary text-sm !px-3 !py-2">
+            {showLog ? 'API 로그 닫기' : 'API 로그'}
+          </button>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -762,35 +762,21 @@ export default function EditorPage() {
             <div className="bg-white rounded-2xl border border-ink-100 p-4 sticky top-20">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="font-display font-bold text-ink-900">페이지 목록</h2>
-                <span className="text-xs text-ink-400 bg-ink-50 px-2 py-0.5 rounded-full">
-                  {pages.length}개
-                </span>
+                <span className="text-xs text-ink-400 bg-ink-50 px-2 py-0.5 rounded-full">{pages.length}개</span>
               </div>
 
-              {/* ── 표지 이미지 업로드 (앞/뒤) ── */}
+              {/* 표지 이미지 업로드 (앞/뒤) */}
               <div className="mb-3 p-3 bg-ink-50 rounded-xl">
-                <p className="text-xs font-bold text-ink-600 mb-2">📖 표지 이미지</p>
+                <p className="text-xs font-bold text-ink-600 mb-2">📖 표지 이미지 (패널 직접 업로드)</p>
                 <div className="grid grid-cols-2 gap-2">
-                  {/* 앞표지 */}
                   {['front', 'back'].map((type) => {
                     const cover = type === 'front' ? coverFront : coverBack;
                     const label = type === 'front' ? '앞표지' : '뒤표지';
                     const inputId = `cover-${type}-input`;
                     return (
                       <div key={type}>
-                        <input
-                          id={inputId}
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => handleCoverSelect(e.target.files[0], type)}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => document.getElementById(inputId).click()}
-                          className="w-full h-20 rounded-lg border-2 border-dashed border-ink-200 hover:border-warm-400 transition-colors overflow-hidden relative group"
-                          title={`${label} 이미지 업로드`}
-                        >
+                        <input id={inputId} type="file" accept="image/*" className="hidden" onChange={(e) => handleCoverSelect(e.target.files[0], type)} />
+                        <button type="button" onClick={() => document.getElementById(inputId).click()} className="w-full h-20 rounded-lg border-2 border-dashed border-ink-200 hover:border-warm-400 transition-colors overflow-hidden relative group" title={`${label} 이미지 업로드`}>
                           {cover.preview ? (
                             <img src={cover.preview} alt={label} className="w-full h-full object-cover" />
                           ) : (
@@ -799,107 +785,47 @@ export default function EditorPage() {
                               <span className="text-xs mt-0.5">{label}</span>
                             </div>
                           )}
-                          {cover.preview && (
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                              <span className="text-white text-xs font-medium">변경</span>
-                            </div>
-                          )}
+                          {cover.preview && <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><span className="text-white text-xs font-medium">변경</span></div>}
                         </button>
                         {cover.preview && (
-                          <button
-                            type="button"
-                            onClick={() => type === 'front' ? setCoverFront({ file: null, preview: '' }) : setCoverBack({ file: null, preview: '' })}
-                            className="w-full text-xs text-red-400 hover:text-red-600 mt-0.5 text-center"
-                          >
-                            삭제
-                          </button>
+                          <button type="button" onClick={() => type === 'front' ? setCoverFront({ file: null, preview: '' }) : setCoverBack({ file: null, preview: '' })} className="w-full text-xs text-red-400 hover:text-red-600 mt-0.5 text-center">삭제</button>
                         )}
                       </div>
                     );
                   })}
                 </div>
+                <p className="text-xs text-ink-400 mt-1">※ 갤러리에서 앞표지/뒤표지를 지정하면 이 값보다 우선됩니다</p>
               </div>
 
               {/* AI 초안 생성 버튼 */}
-              <button
-                onClick={() => { setShowAiPanel(true); setAiError(null); }}
-                className="w-full mb-2 py-2 rounded-xl text-sm font-medium text-violet-700 border-2 border-violet-200 bg-violet-50 hover:bg-violet-100 hover:border-violet-400 transition-all flex items-center justify-center gap-1.5"
-              >
+              <button onClick={() => { setShowAiPanel(true); setAiError(null); }} className="w-full mb-2 py-2 rounded-xl text-sm font-medium text-violet-700 border-2 border-violet-200 bg-violet-50 hover:bg-violet-100 hover:border-violet-400 transition-all flex items-center justify-center gap-1.5">
                 <span>✨</span> AI로 페이지 초안 생성
               </button>
 
-              {/* 사진 일괄 업로드 버튼 */}
-              <div className="mb-2">
-                <input
-                  id="bulk-upload-input"
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  className="hidden"
-                  onChange={(e) => handleBulkUpload(e.target.files)}
-                />
-                <button
-                  type="button"
-                  onClick={() => document.getElementById('bulk-upload-input').click()}
-                  className="w-full py-2 rounded-xl text-sm font-medium text-warm-700 border-2 border-warm-200 bg-warm-50 hover:bg-warm-100 hover:border-warm-400 transition-all flex items-center justify-center gap-1.5"
-                  title="사진을 날짜순으로 정렬 · 첫/마지막 사진이 표지로 자동 설정됩니다"
-                >
-                  <span>📸</span> 사진 일괄 업로드
+              {/* 사진 일괄 업로드 버튼 → 갤러리에 추가 */}
+              <div className="mb-3">
+                <input id="bulk-upload-input" type="file" accept="image/*" multiple className="hidden" onChange={(e) => handleBulkUpload(e.target.files)} />
+                <button type="button" onClick={() => document.getElementById('bulk-upload-input').click()} className="w-full py-2 rounded-xl text-sm font-medium text-warm-700 border-2 border-warm-200 bg-warm-50 hover:bg-warm-100 hover:border-warm-400 transition-all flex items-center justify-center gap-1.5">
+                  <span>📸</span> 사진 일괄 업로드 (갤러리)
                 </button>
-                <p className="text-xs text-ink-400 text-center mt-1">날짜순 자동 정렬 · 첫/마지막 → 표지 자동 설정</p>
+                <p className="text-xs text-ink-400 text-center mt-1">업로드 후 아래 갤러리에서 역할을 지정하세요</p>
               </div>
 
-              {/* AI 텍스트 자동생성 버튼 — 사진 업로드 후 표시 */}
-              {Object.keys(stagedFiles).length > 0 && (
-                <button
-                  type="button"
-                  onClick={handlePhotoAiText}
-                  disabled={photoAiGenerating}
-                  className="w-full mb-3 py-2 rounded-xl text-sm font-medium text-sky-700 border-2 border-sky-200 bg-sky-50 hover:bg-sky-100 hover:border-sky-400 transition-all flex items-center justify-center gap-1.5 disabled:opacity-60"
-                  title="업로드된 사진 수에 맞게 AI가 제목과 내용을 자동 작성합니다"
-                >
-                  {photoAiGenerating ? (
-                    <><span className="spinner" style={{ width: 14, height: 14 }} /> AI 텍스트 생성 중...</>
-                  ) : (
-                    <><span>🤖</span> AI로 텍스트 자동 생성 ({Object.keys(stagedFiles).length}장)</>
-                  )}
-                </button>
-              )}
-
+              {/* 페이지 목록 */}
               <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
                 {pages.map((page, idx) => (
-                  <button
-                    key={page.id}
-                    onClick={() => setEditingIdx(idx)}
-                    className={`w-full text-left p-3 rounded-xl text-sm transition-all ${
-                      editingIdx === idx
-                        ? 'bg-warm-50 border-2 border-warm-600'
-                        : 'bg-ink-50 border-2 border-transparent hover:border-ink-200'
-                    }`}
-                  >
+                  <button key={page.id} onClick={() => setEditingIdx(idx)} className={`w-full text-left p-3 rounded-xl text-sm transition-all ${editingIdx === idx ? 'bg-warm-50 border-2 border-warm-600' : 'bg-ink-50 border-2 border-transparent hover:border-ink-200'}`}>
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-ink-400 w-5">#{idx + 1}</span>
-                      <span className="text-ink-800 truncate flex-1">
-                        {page.title || page.date || `페이지 ${idx + 1}`}
-                      </span>
+                      <span className="text-ink-800 truncate flex-1">{page.title || page.date || `페이지 ${idx + 1}`}</span>
                     </div>
-                    {page.text && (
-                      <p className="text-xs text-ink-400 mt-1 ml-7 truncate">{page.text}</p>
-                    )}
+                    {page.text && <p className="text-xs text-ink-400 mt-1 ml-7 truncate">{page.text}</p>}
                   </button>
                 ))}
-
-                {pages.length === 0 && (
-                  <p className="text-sm text-ink-400 text-center py-8">
-                    아직 페이지가 없습니다
-                  </p>
-                )}
+                {pages.length === 0 && <p className="text-sm text-ink-400 text-center py-8">아직 페이지가 없습니다</p>}
               </div>
 
-              <button
-                onClick={addPage}
-                className="mt-4 w-full py-2.5 border-2 border-dashed border-ink-200 rounded-xl text-sm text-ink-400 hover:border-warm-600 hover:text-warm-600 transition-colors"
-              >
+              <button onClick={addPage} className="mt-4 w-full py-2.5 border-2 border-dashed border-ink-200 rounded-xl text-sm text-ink-400 hover:border-warm-600 hover:text-warm-600 transition-colors">
                 + 페이지 추가
               </button>
             </div>
@@ -910,177 +836,69 @@ export default function EditorPage() {
             {editingIdx !== null && pages[editingIdx] ? (
               <div className="bg-white rounded-2xl border border-ink-100 p-6 opacity-0 animate-fade-in" key={editingIdx} style={{ animationFillMode: 'forwards' }}>
                 <div className="flex items-center justify-between mb-6">
-                  <h3 className="font-display font-bold text-lg text-ink-900">
-                    페이지 #{editingIdx + 1} 편집
-                  </h3>
+                  <h3 className="font-display font-bold text-lg text-ink-900">페이지 #{editingIdx + 1} 편집</h3>
                   <div className="flex gap-2">
-                    <button
-                      onClick={() => movePage(editingIdx, -1)}
-                      disabled={editingIdx === 0}
-                      className="p-2 text-ink-400 hover:text-ink-800 disabled:opacity-30 transition-colors"
-                      title="위로"
-                    >
-                      ↑
-                    </button>
-                    <button
-                      onClick={() => movePage(editingIdx, 1)}
-                      disabled={editingIdx === pages.length - 1}
-                      className="p-2 text-ink-400 hover:text-ink-800 disabled:opacity-30 transition-colors"
-                      title="아래로"
-                    >
-                      ↓
-                    </button>
-                    <button
-                      onClick={() => removePage(editingIdx)}
-                      className="p-2 text-red-400 hover:text-red-600 transition-colors"
-                      title="삭제"
-                    >
-                      🗑
-                    </button>
+                    <button onClick={() => movePage(editingIdx, -1)} disabled={editingIdx === 0} className="p-2 text-ink-400 hover:text-ink-800 disabled:opacity-30" title="위로">↑</button>
+                    <button onClick={() => movePage(editingIdx, 1)} disabled={editingIdx === pages.length - 1} className="p-2 text-ink-400 hover:text-ink-800 disabled:opacity-30" title="아래로">↓</button>
+                    <button onClick={() => removePage(editingIdx)} className="p-2 text-red-400 hover:text-red-600" title="삭제">🗑</button>
                   </div>
                 </div>
 
                 <div className="space-y-4">
-                  {/* 날짜 */}
                   <div>
                     <label className="block text-sm font-medium text-ink-800 mb-1">날짜</label>
-                    <input
-                      type="date"
-                      className="input-field"
-                      value={pages[editingIdx].date || ''}
-                      onChange={(e) => updatePage(editingIdx, 'date', e.target.value)}
-                    />
+                    <input type="date" className="input-field" value={pages[editingIdx].date || ''} onChange={(e) => updatePage(editingIdx, 'date', e.target.value)} />
                   </div>
-
-                  {/* 제목 */}
                   <div>
                     <label className="block text-sm font-medium text-ink-800 mb-1">제목</label>
-                    <input
-                      type="text"
-                      className="input-field"
-                      placeholder="페이지 제목을 입력하세요"
-                      value={pages[editingIdx].title || ''}
-                      onChange={(e) => updatePage(editingIdx, 'title', e.target.value)}
-                    />
+                    <input type="text" className="input-field" placeholder="페이지 제목을 입력하세요" value={pages[editingIdx].title || ''} onChange={(e) => updatePage(editingIdx, 'title', e.target.value)} />
                   </div>
-
-                  {/* 텍스트 */}
                   <div>
                     <label className="block text-sm font-medium text-ink-800 mb-1">내용</label>
-                    <textarea
-                      className="input-field min-h-[120px]"
-                      placeholder="페이지에 들어갈 텍스트를 입력하세요"
-                      value={pages[editingIdx].text || ''}
-                      onChange={(e) => updatePage(editingIdx, 'text', e.target.value)}
-                    />
+                    <textarea className="input-field min-h-[120px]" placeholder="페이지에 들어갈 텍스트를 입력하세요" value={pages[editingIdx].text || ''} onChange={(e) => updatePage(editingIdx, 'text', e.target.value)} />
                   </div>
-
-                  {/* 이미지 — 파일 업로드 또는 URL 입력 */}
                   <div>
                     <label className="block text-sm font-medium text-ink-800 mb-2">사진</label>
-
-                    {/* 드래그 앤 드롭 업로드 존 */}
-                    <div
-                      className="relative border-2 border-dashed border-ink-200 rounded-xl p-5 text-center hover:border-warm-400 transition-colors cursor-pointer group"
-                      onDragOver={(e) => e.preventDefault()}
-                      onDrop={(e) => handleDrop(e, pages[editingIdx].id)}
-                      onClick={() => document.getElementById(`file-input-${editingIdx}`).click()}
-                    >
-                      <input
-                        id={`file-input-${editingIdx}`}
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e) => handleFileSelect(e.target.files[0], pages[editingIdx].id)}
-                      />
-
+                    <div className="relative border-2 border-dashed border-ink-200 rounded-xl p-5 text-center hover:border-warm-400 transition-colors cursor-pointer group" onDragOver={(e) => e.preventDefault()} onDrop={(e) => handleDrop(e, pages[editingIdx].id)} onClick={() => document.getElementById(`file-input-${editingIdx}`).click()}>
+                      <input id={`file-input-${editingIdx}`} type="file" accept="image/*" className="hidden" onChange={(e) => handleFileSelect(e.target.files[0], pages[editingIdx].id)} />
                       {pages[editingIdx].image ? (
                         <div className="flex items-center gap-4">
-                          <img
-                            src={pages[editingIdx].image}
-                            alt="미리보기"
-                            className="w-20 h-20 object-cover rounded-lg flex-shrink-0"
-                            onError={(e) => { e.target.style.display = 'none'; }}
-                          />
+                          <img src={pages[editingIdx].image} alt="미리보기" className="w-20 h-20 object-cover rounded-lg flex-shrink-0" onError={(e) => { e.target.style.display = 'none'; }} />
                           <div className="text-left flex-1 min-w-0">
                             {stagedFiles[pages[editingIdx].id] ? (
                               <>
-                                <p className="text-sm font-medium text-ink-800 truncate">
-                                  {stagedFiles[pages[editingIdx].id].name}
-                                </p>
-                                <p className="text-xs text-ink-400 mt-0.5">
-                                  {(stagedFiles[pages[editingIdx].id].size / 1024).toFixed(0)} KB · 책 생성 시 자동 업로드
-                                </p>
+                                <p className="text-sm font-medium text-ink-800 truncate">{stagedFiles[pages[editingIdx].id].name}</p>
+                                <p className="text-xs text-ink-400 mt-0.5">{(stagedFiles[pages[editingIdx].id].size / 1024).toFixed(0)} KB · 책 생성 시 자동 업로드</p>
                               </>
                             ) : (
                               <p className="text-xs text-ink-400 truncate">{pages[editingIdx].image}</p>
                             )}
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                updatePage(editingIdx, 'image', '');
-                                setStagedFiles((prev) => {
-                                  const next = { ...prev };
-                                  delete next[pages[editingIdx].id];
-                                  return next;
-                                });
-                              }}
-                              className="mt-1 text-xs text-red-400 hover:text-red-600"
-                            >
-                              삭제
-                            </button>
+                            <button type="button" onClick={(e) => { e.stopPropagation(); updatePage(editingIdx, 'image', ''); setStagedFiles((prev) => { const next = { ...prev }; delete next[pages[editingIdx].id]; return next; }); }} className="mt-1 text-xs text-red-400 hover:text-red-600">삭제</button>
                           </div>
-                          <span className="text-xs text-ink-300 group-hover:text-warm-500 transition-colors">클릭하여 변경</span>
+                          <span className="text-xs text-ink-300 group-hover:text-warm-500">클릭하여 변경</span>
                         </div>
                       ) : (
                         <div className="py-2">
                           <p className="text-2xl mb-2">🖼️</p>
-                          <p className="text-sm font-medium text-ink-600 group-hover:text-warm-600 transition-colors">
-                            클릭하거나 파일을 드래그하세요
-                          </p>
+                          <p className="text-sm font-medium text-ink-600 group-hover:text-warm-600">클릭하거나 파일을 드래그하세요</p>
                           <p className="text-xs text-ink-400 mt-1">JPG, PNG, WEBP · 최대 10MB</p>
                         </div>
                       )}
                     </div>
-
-                    {/* URL 직접 입력 (더미 데이터 / 외부 URL용 fallback) */}
                     <div className="mt-2">
                       <p className="text-xs text-ink-400 mb-1">또는 이미지 URL 직접 입력</p>
-                      <input
-                        type="text"
-                        className="input-field text-xs"
-                        placeholder="https://example.com/image.jpg"
-                        value={pages[editingIdx].image?.startsWith('blob:') ? '' : (pages[editingIdx].image || '')}
-                        onChange={(e) => {
-                          updatePage(editingIdx, 'image', e.target.value);
-                          // URL 입력 시 staged 파일 제거
-                          setStagedFiles((prev) => {
-                            const next = { ...prev };
-                            delete next[pages[editingIdx].id];
-                            return next;
-                          });
-                        }}
-                      />
+                      <input type="text" className="input-field text-xs" placeholder="https://example.com/image.jpg" value={pages[editingIdx].image?.startsWith('blob:') ? '' : (pages[editingIdx].image || '')} onChange={(e) => { updatePage(editingIdx, 'image', e.target.value); setStagedFiles((prev) => { const next = { ...prev }; delete next[pages[editingIdx].id]; return next; }); }} />
                     </div>
                   </div>
-
-                  {/* 서비스별 추가 필드 (유치원 알림장) */}
                   {session.serviceType === 'kindergarten' && (
                     <>
                       <div>
                         <label className="block text-sm font-medium text-ink-800 mb-1">요일</label>
-                        <input type="text" className="input-field" placeholder="월요일"
-                          value={pages[editingIdx].dayOfWeek || ''}
-                          onChange={(e) => updatePage(editingIdx, 'dayOfWeek', e.target.value)}
-                        />
+                        <input type="text" className="input-field" placeholder="월요일" value={pages[editingIdx].dayOfWeek || ''} onChange={(e) => updatePage(editingIdx, 'dayOfWeek', e.target.value)} />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-ink-800 mb-1">선생님 코멘트</label>
-                        <textarea className="input-field min-h-[80px]" placeholder="선생님의 한마디"
-                          value={pages[editingIdx].teacherComment || ''}
-                          onChange={(e) => updatePage(editingIdx, 'teacherComment', e.target.value)}
-                        />
+                        <textarea className="input-field min-h-[80px]" placeholder="선생님의 한마디" value={pages[editingIdx].teacherComment || ''} onChange={(e) => updatePage(editingIdx, 'teacherComment', e.target.value)} />
                       </div>
                     </>
                   )}
@@ -1098,67 +916,140 @@ export default function EditorPage() {
               <div className="bg-ink-900 rounded-2xl p-6 text-sm font-mono">
                 <h3 className="text-warm-200 font-bold mb-3">📋 API 호출 로그</h3>
                 <div className="space-y-1 max-h-[300px] overflow-y-auto">
-                  {apiLog.length === 0 ? (
-                    <p className="text-ink-400">아직 API 호출 기록이 없습니다.</p>
-                  ) : (
-                    apiLog.map((log, i) => (
-                      <div key={i} className="text-ink-200">
-                        <span className="text-ink-400">[{log.time}]</span> {log.msg}
-                      </div>
-                    ))
-                  )}
+                  {apiLog.length === 0 ? <p className="text-ink-400">아직 API 호출 기록이 없습니다.</p> : apiLog.map((log, i) => (
+                    <div key={i} className="text-ink-200"><span className="text-ink-400">[{log.time}]</span> {log.msg}</div>
+                  ))}
                 </div>
               </div>
             )}
 
-            {/* 하단 액션 */}
+            {/* 하단 책 생성 액션 */}
             <div className="bg-white rounded-2xl border border-ink-100 p-6">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h3 className="font-display font-bold text-ink-900">
-                    {bookCreated ? '✅ 책이 생성되었습니다!' : '책 생성하기'}
-                  </h3>
+                  <h3 className="font-display font-bold text-ink-900">{bookCreated ? '✅ 책이 생성되었습니다!' : '책 생성하기'}</h3>
                   <p className="text-sm text-ink-400 mt-1">
                     {bookCreated
                       ? `BookUID: ${bookUid} — 다음 단계로 진행하세요`
-                      : `현재 ${pages.length}개 페이지 · API를 호출하여 책을 생성합니다`}
+                      : `편집 패널 ${pages.length}페이지 + 갤러리 ${gallery.filter((g) => g.role !== 'front' && g.role !== 'back').length}장`}
                   </p>
                 </div>
               </div>
-
               <div className="flex gap-3">
-                <Link href={`/create/${session?.serviceType}`} className="btn-secondary flex-1 text-center">
-                  뒤로
-                </Link>
+                <Link href={`/create/${session?.serviceType}`} className="btn-secondary flex-1 text-center">뒤로</Link>
                 {!bookCreated ? (
-                  <button
-                    onClick={handleCreateBook}
-                    disabled={loading || pages.length < 1}
-                    className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-50"
-                  >
+                  <button onClick={handleCreateBook} disabled={loading} className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-50">
                     {loading ? (
-                      <>
-                        <span className="spinner" />
-                        {uploadingPhoto ? '사진 업로드 중...' : 'API 호출 중...'}
-                      </>
+                      <><span className="spinner" />{uploadingPhoto ? '사진 업로드 중...' : 'API 호출 중...'}</>
                     ) : (
-                      <>
-                        📗 책 생성 & 최종화
-                        {Object.keys(stagedFiles).length > 0 && (
-                          <span className="ml-1.5 text-xs bg-warm-200 text-warm-800 px-1.5 py-0.5 rounded-full">
-                            사진 {Object.keys(stagedFiles).length}장
-                          </span>
-                        )}
-                      </>
+                      <>📗 책 생성 &amp; 최종화</>
                     )}
                   </button>
                 ) : (
-                  <button onClick={goToPreview} className="btn-primary flex-1">
-                    다음: 미리보기 & 주문 →
-                  </button>
+                  <button onClick={() => router.push('/preview')} className="btn-primary flex-1">다음: 미리보기 &amp; 주문 →</button>
                 )}
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* ── 사진 갤러리 섹션 ── */}
+        <div className="mt-8">
+          <div className="bg-white rounded-2xl border border-ink-100 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="font-display font-bold text-ink-900">📷 사진 갤러리</h2>
+                <p className="text-xs text-ink-400 mt-0.5">사진을 업로드하고 썸네일을 클릭해 앞표지·뒤표지·내지 역할을 지정하세요 · 드래그로 순서 변경 가능</p>
+              </div>
+              {gallery.length > 0 && (
+                <div className="flex items-center gap-2 text-xs text-ink-500">
+                  <span>총 {gallery.length}장</span>
+                  {gallery.find((g) => g.role === 'front') && <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded-full">앞표지 ✓</span>}
+                  {gallery.find((g) => g.role === 'back')  && <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">뒤표지 ✓</span>}
+                </div>
+              )}
+            </div>
+
+            {/* 드래그 앤 드롭 업로드 존 */}
+            <div
+              onDragOver={(e) => { e.preventDefault(); setGalleryDropActive(true); }}
+              onDragLeave={() => setGalleryDropActive(false)}
+              onDrop={handleGalleryZoneDrop}
+              onClick={() => document.getElementById('gallery-upload-input').click()}
+              className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all mb-5 ${
+                galleryDropActive ? 'border-warm-600 bg-warm-50' : 'border-ink-200 hover:border-warm-400 hover:bg-ink-50'
+              }`}
+            >
+              <input id="gallery-upload-input" type="file" accept="image/*" multiple className="hidden" onChange={(e) => handleGalleryUpload(e.target.files)} />
+              <p className="text-2xl mb-2">📸</p>
+              <p className="text-sm font-medium text-ink-600">사진을 드래그하거나 클릭하여 업로드</p>
+              <p className="text-xs text-ink-400 mt-1">여러 장 동시 선택 가능 · 가로형 이미지는 자동 감지 (↔)</p>
+            </div>
+
+            {/* 갤러리 그리드 */}
+            {gallery.length > 0 ? (
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3">
+                {gallery.map((item, idx) => (
+                  <div
+                    key={item.id}
+                    draggable
+                    onDragStart={(e) => handleGalleryDragStart(e, idx)}
+                    onDragOver={(e) => handleGalleryDragOver(e, idx)}
+                    onDragEnd={handleGalleryDragEnd}
+                    onClick={() => setGalleryModal({ open: true, idx })}
+                    className={`relative aspect-square rounded-xl overflow-hidden cursor-pointer border-2 transition-all group select-none ${
+                      galleryDragIdx === idx ? 'opacity-40 scale-95 cursor-grabbing' : 'hover:shadow-lg cursor-grab'
+                    } ${
+                      item.role === 'front'   ? 'border-green-500 ring-2 ring-green-200' :
+                      item.role === 'back'    ? 'border-blue-500  ring-2 ring-blue-200'  :
+                      item.role === 'content' ? 'border-warm-500  ring-2 ring-warm-200'  :
+                      'border-transparent hover:border-ink-300'
+                    }`}
+                  >
+                    <img src={item.previewUrl} alt="" className="w-full h-full object-cover pointer-events-none" draggable={false} />
+
+                    {/* 역할 뱃지 */}
+                    {item.role && (
+                      <div className={`absolute top-1 left-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md leading-none ${
+                        item.role === 'front'   ? 'bg-green-600 text-white' :
+                        item.role === 'back'    ? 'bg-blue-600  text-white' :
+                        'bg-warm-600 text-white'
+                      }`}>
+                        {item.role === 'front' ? '앞' : item.role === 'back' ? '뒤' : '내지'}
+                      </div>
+                    )}
+
+                    {/* 양면 분할 뱃지 */}
+                    {item.useSpread && (
+                      <div className="absolute top-1 right-1 text-[10px] bg-sky-600 text-white px-1.5 py-0.5 rounded-md leading-none">2p</div>
+                    )}
+
+                    {/* 가로형 표시 (분할 안 할 때) */}
+                    {item.isLandscape && !item.useSpread && (
+                      <div className="absolute top-1 right-1 text-[10px] bg-sky-500/80 text-white px-1 py-0.5 rounded leading-none">↔</div>
+                    )}
+
+                    {/* 내지 텍스트 유무 */}
+                    {item.role === 'content' && (
+                      <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-[10px] py-0.5 text-center leading-none">
+                        {item.text.trim() ? '📝' : '🖼️'}
+                      </div>
+                    )}
+
+                    {/* 호버 오버레이 */}
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-all flex items-center justify-center">
+                      <span className="text-white text-lg opacity-0 group-hover:opacity-100 transition-opacity drop-shadow">✏️</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <p className="text-3xl mb-2">🖼️</p>
+                <p className="text-sm text-ink-400">사진을 업로드하면 여기에 표시됩니다</p>
+                <p className="text-xs text-ink-300 mt-1">썸네일을 클릭하면 앞표지·뒤표지·내지 역할을 지정할 수 있습니다</p>
+              </div>
+            )}
           </div>
         </div>
       </div>

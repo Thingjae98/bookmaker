@@ -5,6 +5,95 @@
 
 ---
 
+## 📅 2026-04-03 — 다중 업로드 갤러리, 표지 직접 지정 모달, Canvas API 기반 양면(Spread) 분할 기능 구현
+
+### 구현 내용 요약
+
+기획 피벗(AI 자동화 제거) 방향에 따라 **사용자가 100% 제어하는 포토북 에디터 UX** 핵심 3가지를 구현했다.
+
+---
+
+### 1. 다중 업로드 & 갤러리 UI
+
+**구현 방식:**
+- `editor/page.jsx` 하단에 독립적인 "사진 갤러리" 섹션 추가
+- Drag & Drop 업로드 존: `onDragOver` / `onDrop` 이벤트로 파일 수신 → `handleGalleryUpload(files)` 호출
+- `handleGalleryUpload`: `Array.from(files)`로 다중 파일 처리 → 각 파일에 `detectLandscape` 비동기 실행 → `Promise.all`로 병렬 처리 후 `gallery` state에 일괄 추가
+- 갤러리 아이템 shape: `{ id, file, previewUrl, role, text, isLandscape, useSpread }`
+- 드래그 리오더: `draggable` attribute + `onDragStart` / `onDragOver` / `onDragEnd` 핸들러 → splice 방식으로 배열 재정렬
+- `handleBulkUpload`를 `handleGalleryUpload`로 위임 — 이전 자동 표지 지정·날짜 정렬 로직 완전 제거
+
+**기술적 선택:**
+- `URL.createObjectURL(file)` 로 썸네일 즉시 미리보기, 삭제 시 `URL.revokeObjectURL`로 메모리 해제
+- 가로형 감지(`detectLandscape`)는 `new Image()` 로드 후 `naturalWidth > naturalHeight * 1.6` 조건 판단
+
+---
+
+### 2. 모달 기반 표지 직접 지정 + 텍스트 입력 + 템플릿 동적 분기
+
+**구현 방식:**
+- 갤러리 썸네일 클릭 → `galleryModal: { open: true, idx }` 상태 변경 → 모달 렌더
+- 역할 버튼 3종: 앞표지 / 뒤표지 / 내지
+- `assignGalleryRole(idx, role)`: 새 역할 지정 시 기존에 같은 역할로 지정된 다른 아이템의 role을 `null`로 초기화 → 앞표지/뒤표지 중복 방지 (Validation)
+- 내지로 지정 시 텍스트 입력란 노출 → 실시간으로 `cnH0Ud1nl1f9` / `6dJ0Qy6ZmXej` 어떤 템플릿이 적용될지 피드백 표시
+
+**템플릿 동적 분기 (책 생성 시):**
+```
+hasText = !!(page.text || page.teacherComment || '').trim()
+templateUid = hasText ? 'cnH0Ud1nl1f9' : '6dJ0Qy6ZmXej'
+```
+편집 패널 페이지 + 갤러리 내지 모두 동일 로직 적용.
+
+**갤러리 vs 좌측 패널 표지 우선순위:**
+좌측 패널 업로드 → 갤러리 지정 순으로 덮어씀. 갤러리 지정이 최종 우선.
+
+---
+
+### 3. Canvas API 양면(Spread) 분할 로직
+
+**구현 배경:**
+가로형 사진(예: 16:9 파노라마, DSLR 가로 촬영)을 포토북에 그대로 넣으면 한 페이지 안에서 좌우 여백이 크거나 이미지가 축소되어 보인다. 펼침면(Spread) 처리를 하면 책을 펼쳤을 때 왼쪽/오른쪽 페이지에 걸쳐 이미지가 꽉 차보이는 효과를 낼 수 있다.
+
+**구현 방식 (`splitImageHalves`):**
+```
+1. new Image() → img.onload 콜백에서 처리
+2. halfW = Math.floor(img.naturalWidth / 2)
+3. leftCanvas: drawImage(img, 0, 0, halfW, h, 0, 0, halfW, h)
+4. rightCanvas: drawImage(img, halfW, 0, rightW, h, 0, 0, rightW, h)
+5. leftCanvas.toBlob(..., 'image/jpeg', 1.0)  ← 최고 화질 (quality=1.0)
+6. rightCanvas.toBlob(..., 'image/jpeg', 1.0)
+7. Promise.all([leftBlob, rightBlob])
+```
+
+**화질 보존 전략:**
+- `toBlob`의 quality 파라미터를 `1.0`(최고)으로 지정 → JPEG 최고 품질 유지
+- Canvas 크기를 원본 해상도 그대로 사용 — 다운스케일 없음
+- `drawImage`는 `imageSmoothingQuality` 기본값('low')이 아닌 기본 브라우저 앤티앨리어싱 적용 → 실질적 화질 손실 없음
+
+**책 생성 시 연속 2페이지 전송:**
+```
+splitImageHalves(file) → [leftBlob, rightBlob]
+→ 각각 new File([blob], 'spread-left.jpg') 로 변환
+→ Photos API 두 번 호출 → leftUrl, rightUrl
+→ galleryPageData에 두 개의 페이지 entry 순서대로 push
+→ 내지 추가 루프에서 연속된 2페이지로 전송
+```
+분할 실패 시 원본 파일 단일 업로드로 graceful fallback 처리.
+
+---
+
+### 4. 기술적 트러블슈팅
+
+**`Cannot find module './276.js'` 오류:**
+- 원인: 이전 세션에서 `.next` 빌드 캐시가 손상된 채 남아있었음 (git worktree 작업 잔재)
+- 해결: `rm -rf .next` → `npm run build` 재실행
+
+**`useEffect` 중 `detectLandscape` async 처리:**
+- `Array.from(files).map(async ...)` + `Promise.all(...)` 패턴으로 모든 파일의 landscape 감지를 병렬 처리
+- `useEffect` 내부가 아닌 이벤트 핸들러에서 호출하므로 React의 async useEffect 문제 회피
+
+---
+
 ## 📅 2026-04-03 — [기획 피벗] AI 자동화 제거 → 사용자 자유도 중심 포토북 에디터 UX로 전환
 
 ### 배경 및 취소 결정

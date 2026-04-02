@@ -271,10 +271,10 @@ try {
 - [x] 실제 Sandbox API Key 연동 (.env 설정)
 - [x] Toast 알림 컴포넌트 — 이벤트 버스 기반, success/error/info/warn, 3.5초 자동 소멸
 - [x] 에러 발생 시 재시도 로직 — fetchWithRetry, 5xx 3회 재시도, 지수 백오프
-- [ ] 다중 이미지 Drag & Drop 업로드 + 갤러리 UI (업로드된 사진을 썸네일 그리드로 표시)
-- [ ] 앞표지/뒤표지 직접 지정 UI (갤러리에서 썸네일 클릭 → 표지로 지정, 자동 지정 없음)
-- [ ] 텍스트 유무에 따른 템플릿 동적 분기 (텍스트 있음 → cnH0Ud1nl1f9, 없음 → 6dJ0Qy6ZmXej)
-- [ ] 가로형 사진 Canvas API 양면(Spread) 분할 — 프론트엔드에서 좌/우 2장으로 분할 후 전송
+- [x] 다중 이미지 Drag & Drop 업로드 + 갤러리 UI (업로드된 사진을 썸네일 그리드로 표시, 드래그 리오더)
+- [x] 앞표지/뒤표지 직접 지정 UI (갤러리 썸네일 클릭 → 모달 → 역할 지정, 중복 방지 Validation)
+- [x] 텍스트 유무에 따른 템플릿 동적 분기 (텍스트 있음 → cnH0Ud1nl1f9, 없음 → 6dJ0Qy6ZmXej)
+- [x] 가로형 사진 Canvas API 양면(Spread) 분할 — splitImageHalves()로 좌/우 2장 분할 후 연속 2페이지 전송 (quality=1.0)
 
 ### P1 — 면접 전 개선
 - [x] 이미지 파일 직접 업로드 (Drag & Drop + Photos API) — 에디터 내 구현 완료
