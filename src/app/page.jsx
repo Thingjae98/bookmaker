@@ -28,7 +28,7 @@ export default function HomePage() {
       </section>
 
       {/* 서비스 선택 그리드 */}
-      <section className="max-w-6xl mx-auto px-6 pb-24 -mt-4">
+      <section className="max-w-6xl mx-auto px-6 pb-24 mt-8">
         <h2 className="font-display font-bold text-2xl text-ink-900 text-center mb-2">
           어떤 책을 만들까요?
         </h2>

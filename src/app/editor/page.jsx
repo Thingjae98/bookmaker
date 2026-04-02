@@ -109,44 +109,63 @@ export default function EditorPage() {
       setBookUid(uid);
       addLog(`✅ 책 생성 완료: ${uid}`);
 
-      // 2. 표지 추가
+      // 2. 표지 추가 — 템플릿 79yjMH3qRPly (일기장A): coverPhoto + title + dateRange 필수
       addLog('🎨 표지 추가 중...');
+      const firstImage = pages.find(p => p.image && p.image.startsWith('http'))?.image;
+      const coverPhoto = firstImage || `https://picsum.photos/seed/${session.serviceType}-cover/600/600`;
+      const dateRange = session.formData.period || session.formData.semester
+        ? `${session.formData.year || '2025'}년 ${session.formData.semester || session.formData.period || ''}`
+        : pages[0]?.date
+          ? `${pages[0].date} ~ ${pages[pages.length - 1]?.date || ''}`
+          : '2025';
       const coverRes = await fetch(`/api/books/${uid}/cover`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          templateUid: 'tpl_F8d15af9fd',
+          templateUid: '79yjMH3qRPly',
           parameters: {
-            title: title,
-            author: session.formData.authorName || session.formData.babyName || session.formData.childName || '북메이커',
+            coverPhoto,
+            title,
+            dateRange,
           },
         }),
       });
       const coverData = await coverRes.json();
       addLog(coverData.success ? '✅ 표지 추가 완료' : `⚠️ 표지: ${coverData.message}`);
 
-      // 3. 콘텐츠 페이지 추가
-      for (let i = 0; i < pages.length; i++) {
-        const page = pages[i];
-        addLog(`📄 페이지 ${i + 1}/${pages.length} 추가 중...`);
+      // 3. 콘텐츠 페이지 추가 — 템플릿 vHA59XPPKqak (일기장B): date + title + diaryText 필수
+      // API 최소 24p 요건 충족을 위해 페이지가 부족하면 반복 추가
+      const MIN_PAGES = 24;
+      const pagesForApi = [...pages];
+      let repeatIdx = 0;
+      while (pagesForApi.length < MIN_PAGES) {
+        pagesForApi.push({ ...pages[repeatIdx % pages.length], title: `${pages[repeatIdx % pages.length].title} (${Math.floor(repeatIdx / pages.length) + 2}회차)` });
+        repeatIdx++;
+      }
+      if (pagesForApi.length > pages.length) {
+        addLog(`📋 API 최소 페이지(24p) 충족을 위해 ${pagesForApi.length - pages.length}개 페이지 반복 추가`);
+      }
 
-        const params = {};
-        if (page.date) params.date = page.date;
-        if (page.title) params.title = page.title;
-        if (page.text) params.contents = page.text;
-        if (page.dayOfWeek) params.dayOfWeek = page.dayOfWeek;
-        if (page.teacherComment) params.teacherComment = page.teacherComment;
+      for (let i = 0; i < pagesForApi.length; i++) {
+        const page = pagesForApi[i];
+        addLog(`📄 페이지 ${i + 1}/${pagesForApi.length} 추가 중...`);
 
-        // 이미지가 URL인 경우 parameters에 포함
+        const params = {
+          date: page.date || new Date().toISOString().slice(0, 10),
+          title: page.title || `페이지 ${i + 1}`,
+          diaryText: page.text || page.teacherComment || '내용이 없습니다.',
+        };
+
+        // 이미지가 URL인 경우 optional 파라미터로 포함
         if (page.image && page.image.startsWith('http')) {
-          params.imageMain = page.image;
+          params.diaryPhoto = page.image;
         }
 
         const contentRes = await fetch(`/api/books/${uid}/contents`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            templateUid: 'cnH0Ud1nl1f9',
+            templateUid: 'vHA59XPPKqak',
             parameters: params,
             breakBefore: 'page',
           }),
@@ -157,7 +176,7 @@ export default function EditorPage() {
           addLog(`⚠️ 페이지 ${i + 1}: ${contentData.message}`);
         }
       }
-      addLog(`✅ 전체 ${pages.length}개 페이지 추가 완료`);
+      addLog(`✅ 전체 ${pagesForApi.length}개 페이지 추가 완료`);
 
       // 4. 최종화
       addLog('🔒 책 최종화 중...');
