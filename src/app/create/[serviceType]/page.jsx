@@ -18,7 +18,6 @@ export default function CreatePage() {
   const [useDummy, setUseDummy] = useState(false);
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiError, setAiError] = useState(null);
-  const [aiDummyGenerating, setAiDummyGenerating] = useState(false);
 
   useEffect(() => {
     if (service) {
@@ -46,41 +45,6 @@ export default function CreatePage() {
     if (dummy) {
       setFormData(dummy.meta);
       setUseDummy(true);
-    }
-  };
-
-  // AI로 더미 데이터(텍스트) 생성 — Gemini 호출 후 에디터에서 AI 페이지 사용
-  const handleAiDummy = async () => {
-    const dummy = DUMMY_DATA[serviceType];
-    // 폼에 기본 메타데이터 먼저 채우기
-    const meta = dummy?.meta || {};
-    setFormData(meta);
-
-    setAiDummyGenerating(true);
-    try {
-      const res = await fetch('/api/generate-story', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ serviceType, ...meta }),
-      });
-      const data = await res.json();
-      if (!data.success) throw new Error(data.message);
-
-      sessionStorage.setItem('bookmaker_ai_pages', JSON.stringify(data.data.pages));
-      const sessionData = {
-        serviceType,
-        formData: { ...meta, bookTitle: data.data.title },
-        bookSpecUid: selectedSpec,
-        useDummy: false,
-        aiGenerated: true,
-        aiTitle: data.data.title,
-      };
-      sessionStorage.setItem('bookmaker_session', JSON.stringify(sessionData));
-      router.push('/editor');
-    } catch (err) {
-      alert(`AI 더미 생성 실패: ${err.message}`);
-    } finally {
-      setAiDummyGenerating(false);
     }
   };
 
@@ -173,27 +137,13 @@ export default function CreatePage() {
 
         {/* 더미 데이터 버튼 */}
         <div className="mb-8 p-4 bg-warm-50 rounded-xl border border-warm-200/50 opacity-0 animate-fade-up delay-100">
-          <p className="text-sm font-medium text-ink-800 mb-1">🧪 테스트 데이터로 빠르게 체험</p>
-          <p className="text-xs text-ink-400 mb-3">기본 더미 데이터로 채우거나, Gemini AI가 생성한 콘텐츠로 바로 에디터로 이동합니다</p>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={fillDummy}
-              className="flex-1 px-3 py-2 bg-warm-600 text-white text-sm rounded-lg hover:bg-warm-800 transition-colors"
-            >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-ink-800">🧪 테스트 데이터로 빠르게 체험</p>
+              <p className="text-xs text-ink-400 mt-0.5">더미 데이터를 자동으로 채워줍니다</p>
+            </div>
+            <button onClick={fillDummy} className="px-4 py-2 bg-warm-600 text-white text-sm rounded-lg hover:bg-warm-800 transition-colors">
               더미 데이터 채우기
-            </button>
-            <button
-              type="button"
-              onClick={handleAiDummy}
-              disabled={aiDummyGenerating}
-              className="flex-1 px-3 py-2 text-sm rounded-lg font-medium border-2 border-violet-300 bg-violet-50 text-violet-700 hover:bg-violet-100 transition-colors disabled:opacity-60 flex items-center justify-center gap-1.5"
-            >
-              {aiDummyGenerating ? (
-                <><span className="spinner" /> AI 생성 중...</>
-              ) : (
-                <><span>🤖</span> AI 더미 생성</>
-              )}
             </button>
           </div>
         </div>
