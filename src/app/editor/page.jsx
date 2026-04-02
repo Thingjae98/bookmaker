@@ -20,11 +20,15 @@ export default function EditorPage() {
   const [stagedFiles, setStagedFiles] = useState({}); // { pageId: File } — 업로드 대기 파일
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
-  // AI 초안 생성 모달
+  // AI 초안 생성 모달 (입력 폼)
   const [showAiPanel, setShowAiPanel] = useState(false);
   const [aiFormData, setAiFormData] = useState({});
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiError, setAiError] = useState(null);
+
+  // AI 초안 미리보기 모달
+  const [draftData, setDraftData] = useState(null);       // 생성된 초안 임시 저장
+  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
 
   // 세션 복원
   useEffect(() => {
@@ -149,26 +153,35 @@ export default function EditorPage() {
       const data = await res.json();
       if (!data.success) throw new Error(data.message);
 
-      const newPages = data.data.pages;
-
-      if (pages.length > 0) {
-        // 기존 페이지가 있으면 교체 또는 추가 선택
-        const choice = window.confirm(
-          `현재 ${pages.length}개 페이지가 있습니다.\n\n확인: AI 생성 페이지로 교체\n취소: 기존 페이지 뒤에 추가`
-        );
-        setPages(choice ? newPages : (prev) => [...prev, ...newPages]);
-      } else {
-        setPages(newPages);
-      }
-
-      setEditingIdx(0);
+      // 즉시 적용하지 않고 임시 저장 → 미리보기 모달로 이동
+      setDraftData({ ...data.data, source: data.source, notice: data.notice });
       setShowAiPanel(false);
+      setIsPreviewModalOpen(true);
       setAiFormData({});
     } catch (err) {
       setAiError(err.message);
     } finally {
       setAiGenerating(false);
     }
+  };
+
+  // AI 초안 미리보기 모달 액션 핸들러
+  const handleDraftReplace = () => {
+    setPages(draftData.pages);
+    setEditingIdx(0);
+    setDraftData(null);
+    setIsPreviewModalOpen(false);
+  };
+
+  const handleDraftAppend = () => {
+    setPages((prev) => [...prev, ...draftData.pages]);
+    setDraftData(null);
+    setIsPreviewModalOpen(false);
+  };
+
+  const handleDraftCancel = () => {
+    setDraftData(null);
+    setIsPreviewModalOpen(false);
   };
 
   // 페이지 순서 변경
@@ -366,7 +379,84 @@ export default function EditorPage() {
     <div className="min-h-screen pb-20">
       <StepIndicator currentStep="editor" />
 
-      {/* ── AI 초안 생성 모달 ── */}
+      {/* ── AI 초안 미리보기 모달 ── */}
+      {isPreviewModalOpen && draftData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.55)' }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col animate-fade-up">
+            {/* 모달 헤더 */}
+            <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-ink-100 flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">✨</span>
+                <div>
+                  <h2 className="font-display font-bold text-ink-900">AI 초안 미리보기</h2>
+                  <p className="text-xs text-ink-400 mt-0.5">
+                    {draftData.source === 'gemini' ? 'Gemini AI 생성' : '기본 템플릿 생성'} · {draftData.pages.length}페이지
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={handleDraftCancel}
+                className="p-2 text-ink-400 hover:text-ink-700 transition-colors rounded-lg hover:bg-ink-50"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* 폴백 사용 안내 */}
+            {draftData.notice && (
+              <div className="mx-6 mt-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700 flex-shrink-0">
+                ⚠️ {draftData.notice}
+              </div>
+            )}
+
+            {/* 책 제목 */}
+            <div className="px-6 pt-4 pb-2 flex-shrink-0">
+              <p className="text-sm text-ink-500">책 제목</p>
+              <p className="font-display font-bold text-ink-900 text-base">{draftData.title}</p>
+            </div>
+
+            {/* 페이지 목록 스크롤 영역 */}
+            <div className="flex-1 overflow-y-auto px-6 pb-4 space-y-2 min-h-0">
+              {draftData.pages.map((page, idx) => (
+                <div key={idx} className="flex gap-3 p-3 bg-ink-50 rounded-xl">
+                  <span className="text-xs font-bold text-ink-400 w-6 flex-shrink-0 mt-0.5">#{idx + 1}</span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-ink-800 truncate">{page.title}</p>
+                    <p className="text-xs text-ink-500 mt-0.5 line-clamp-2">{page.text}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* 하단 버튼 3종 */}
+            <div className="px-6 pb-6 pt-4 border-t border-ink-100 flex-shrink-0 space-y-2">
+              <div className="flex gap-2">
+                <button
+                  onClick={handleDraftReplace}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white transition-all"
+                  style={{ background: 'linear-gradient(135deg, #7c3aed, #a855f7)' }}
+                >
+                  전체 페이지 교체
+                </button>
+                <button
+                  onClick={handleDraftAppend}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-bold text-violet-700 border-2 border-violet-300 bg-violet-50 hover:bg-violet-100 transition-all"
+                >
+                  페이지 뒤에 추가
+                </button>
+              </div>
+              <button
+                onClick={handleDraftCancel}
+                className="w-full py-2.5 rounded-xl text-sm font-medium text-ink-500 hover:text-ink-700 hover:bg-ink-50 transition-all border border-ink-200"
+              >
+                작업 취소
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── AI 초안 생성 모달 (입력 폼) ── */}
       {showAiPanel && session && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.45)' }}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-fade-up">

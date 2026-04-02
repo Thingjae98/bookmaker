@@ -259,6 +259,61 @@ x the name `seed` is defined multiple times
 
 ---
 
+---
+
+## 📅 2026-04-02 — [고도화] 사용자 선택권 보장을 위한 AI 초안 미리보기 및 조건부 적용(교체/추가) 로직 구현
+
+### 배경 & 목적
+
+기존 AI 초안 생성은 `window.confirm`으로 교체/추가를 선택한 뒤 즉시 페이지에 반영했음.
+이는 생성 결과를 확인하지 않고 적용하게 되어 사용자 선택권이 낮고, 시각적으로도 빈약했음.
+→ **생성 완료 후 내용을 먼저 미리본 다음** 교체/추가/취소 중 하나를 명시적으로 선택하도록 UX 개선.
+
+### Step 1 — Gemini 통신 로직 개선
+
+| 항목 | 변경 전 | 변경 후 |
+|------|---------|---------|
+| 모델명 형식 | `gemini-1.5-flash` (축약형) | `models/gemini-1.5-flash` (정식 명칭) |
+| 모델 시도 간 대기 | 없음 | 시도 사이마다 1,000ms 대기 (`RETRY_DELAY_MS`) |
+| 전체 실패 시 로그 | `console.warn` (간략) | `console.error`로 각 모델의 에러 메시지 전체 출력 |
+
+- `delay()` 헬퍼 함수 추가 — `Promise + setTimeout` 패턴
+- for-loop 인덱스로 첫 번째 시도는 대기 없이, 2번째부터 대기 후 재시도
+
+### Step 2 — `draftData` 임시 상태 및 미리보기 모달
+
+`editor/page.jsx`에 두 가지 상태 추가:
+```js
+const [draftData, setDraftData] = useState(null);        // 생성된 초안 임시 저장
+const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
+```
+
+`handleAiGenerate()` 수정:
+- 기존: API 응답을 바로 `setPages()` 호출
+- 변경: `setDraftData(data.data)` 저장 → `setIsPreviewModalOpen(true)` 모달 오픈
+
+### Step 3 — AI 초안 미리보기 모달 + 3-버튼 액션
+
+**모달 구성**:
+- 헤더: 생성 출처(Gemini AI / 기본 템플릿), 페이지 수
+- 폴백 사용 시 amber 색상 안내 배너
+- 책 제목 표시
+- 스크롤 가능한 페이지 목록 (제목 + 본문 2줄 미리보기)
+
+**버튼 3종**:
+
+| 버튼 | 로직 |
+|------|------|
+| 전체 페이지 교체 | `setPages(draftData.pages)` → 모달 닫기 |
+| 페이지 뒤에 추가 | `setPages(prev => [...prev, ...draftData.pages])` → 모달 닫기 |
+| 작업 취소 | `setDraftData(null)` → 모달 닫기, 기존 pages 무변경 |
+
+### 아키텍처 결정
+
+- 미리보기 모달은 입력 폼 모달(`showAiPanel`)과 별도로 독립 관리 — 두 모달이 동시에 열리지 않도록 생성 완료 시 폼 모달은 닫고 미리보기 모달 오픈
+- `draftData`가 null이면 미리보기 모달 렌더링 자체를 스킵 (조건부 렌더링)
+- 3버튼 중 어떤 것을 눌러도 반드시 `setDraftData(null)` + `setIsPreviewModalOpen(false)` 실행 → 상태 오염 없음
+
 <!-- 새 기록 추가 시 아래 템플릿 복사 -->
 <!--
 ## 📅 YYYY-MM-DD — 제목

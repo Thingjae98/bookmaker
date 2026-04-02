@@ -1,18 +1,22 @@
 // src/app/api/generate-story/route.js
 // AI 페이지 초안 자동 생성 API — Google Gemini 기반
 // 6가지 서비스 타입 모두 지원: baby / kindergarten / fairytale / travel / selfpublish / pet
-// 모델 우선순위: gemini-1.5-flash-8b → gemini-1.5-flash → gemini-pro → 로컬 템플릿 폴백
+// 모델 우선순위: models/gemini-1.5-flash-8b → models/gemini-1.5-flash → models/gemini-2.0-flash → models/gemini-pro → 로컬 템플릿 폴백
 
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// 시도할 모델 목록 (쿼터 소진 시 순차 폴백)
+// 정식 모델명(models/ 접두사) 사용 — 쿼터 소진 시 순차 폴백
 const GEMINI_MODELS = [
-  'gemini-1.5-flash-8b',
-  'gemini-1.5-flash',
-  'gemini-2.0-flash',
-  'gemini-pro',
+  'models/gemini-1.5-flash-8b',
+  'models/gemini-1.5-flash',
+  'models/gemini-2.0-flash',
+  'models/gemini-pro',
 ];
+
+// 모델 시도 간 지연 (동일 API Key 쿼터 과부하 방지)
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const RETRY_DELAY_MS = 1000;
 
 const SEED_PREFIX = {
   baby: 'baby-ai', kindergarten: 'kinder-ai', fairytale: 'fairy-ai',
@@ -148,12 +152,20 @@ function generateFallback(serviceType, params) {
   };
 }
 
-// ── Gemini API 호출 (모델 순차 시도) ─────────────────────────
+// ── Gemini API 호출 (모델 순차 시도, 시도 간 1초 지연) ──────
 async function callGemini(apiKey, prompt) {
   const genAI = new GoogleGenerativeAI(apiKey);
   const errors = [];
 
-  for (const modelName of GEMINI_MODELS) {
+  for (let i = 0; i < GEMINI_MODELS.length; i++) {
+    const modelName = GEMINI_MODELS[i];
+
+    // 첫 번째 시도 이외에는 이전 실패 후 1초 대기
+    if (i > 0) {
+      console.log(`[generate-story] ${RETRY_DELAY_MS}ms 대기 후 다음 모델 시도...`);
+      await delay(RETRY_DELAY_MS);
+    }
+
     try {
       const model = genAI.getGenerativeModel({ model: modelName });
       const result = await model.generateContent(prompt);
@@ -175,6 +187,13 @@ async function callGemini(apiKey, prompt) {
       errors.push(`${modelName}: ${err.message.slice(0, 80)}`);
     }
   }
+
+  // 모든 모델 실패 — 상세 에러 로그 출력 후 폴백
+  console.error(
+    '[generate-story] 모든 Gemini 모델 실패. 로컬 템플릿 폴백으로 전환합니다.\n' +
+    '에러 목록:\n' +
+    errors.map((e, i) => `  [${i + 1}] ${e}`).join('\n')
+  );
 
   return { ok: false, errors };
 }
