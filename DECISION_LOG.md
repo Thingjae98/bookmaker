@@ -5,6 +5,28 @@
 
 ---
 
+## 📅 2026-04-02 — 판형 UI: 실제 API UID 매핑 및 템플릿 UID 노출 제거
+
+### 문제
+`GET /book-specs` API가 반환하는 실제 판형 UID(`bs_6a8OUY`, `bs_3EzPkz`, `bs_518IVG`)가 로컬 상수(`SQUAREBOOK_HC` 등 내부 키)와 달라 UI에서 이름을 찾지 못하고 원시 UID가 그대로 노출되었음. 또한 템플릿 선택 영역에 내부 템플릿 UID가 사용자에게 보이는 문제가 있었음.
+
+### 결정 내용
+1. `constants.js`의 `BOOK_SPECS` / `BOOK_SPEC_LABELS`에 실제 API UID를 1순위 키로 추가
+   - `bs_6a8OUY` → 정방형 하드커버 (243×248mm) — 추천
+   - `bs_3EzPkz` → A4 소프트커버 포토북 (210×297mm)
+   - `bs_518IVG` → A5 소프트커버 포토북 (148×210mm)
+   - 기존 내부 키(SQUAREBOOK_HC 등)는 API 미응답 시 폴백으로 유지
+2. 모든 서비스 `recommendedSpec`을 `bs_6a8OUY`(정방형 하드커버)로 통일
+   - 반려동물 서비스도 기존 `SLIMALBUM_HC`에서 변경 (해당 UID가 API 응답에 없음)
+3. create 페이지 템플릿 영역에서 원시 UID `({templateUid})` 표시 제거
+
+### 근거
+- 판형 선택 UI는 일반 사용자가 보는 화면이므로 `bs_6a8OUY` 같은 내부 식별자 노출은 UX 저하
+- API UID와 로컬 상수 불일치는 판형 이름 미표시 및 "추천" 배지 오작동을 야기
+- A4/A5 소프트커버는 기존 하드커버 3종 외 실제 API에서 추가로 제공되는 판형
+
+---
+
 ## 📅 2026-04-02 — 프로젝트 초기 설계
 
 ### 기술 스택 선택

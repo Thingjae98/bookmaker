@@ -169,10 +169,11 @@ Authorization: Bearer {SWEETBOOK_API_KEY}
 - 텍스트+이미지 내지: cnH0Ud1nl1f9
 - 이미지 전용 내지: 6dJ0Qy6ZmXej
 
-### 판형 (BookSpec)
-- SQUAREBOOK_HC — 243x248mm, 하드커버, 24~130p (범용, 기본 추천)
-- LAYFLAT_HC — 243x248mm, 레이플랫, 16~46p (웨딩/사진집)
-- SLIMALBUM_HC — 243x248mm, 슬림앨범, 20~30p (선물용)
+### 판형 (BookSpec) — 실제 API UID 기준
+- `bs_6a8OUY` (SQUAREBOOK_HC) — 243×248mm, 하드커버, PUR 무선철, 24~130p (범용, **기본 추천**)
+- `bs_3EzPkz` (PHOTOBOOK_A4_SC) — 210×297mm, 소프트커버, 무선철 (A4)
+- `bs_518IVG` (PHOTOBOOK_A5_SC) — 148×210mm, 소프트커버, 무선철 (A5)
+- 폴백 내부 키: SQUAREBOOK_HC, LAYFLAT_HC, SLIMALBUM_HC (API 미응답 시만 사용)
 
 ### 페이지 규칙
 - 최소 20페이지 이상이어야 최종화 가능

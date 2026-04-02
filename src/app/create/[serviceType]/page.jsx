@@ -329,14 +329,12 @@ export default function CreatePage() {
                     <span className="text-ink-500">앞표지 템플릿</span>
                     <span className="font-medium text-ink-700">
                       {coverTemplateUid === '79yjMH3qRPly' ? '일기장 표지형 (기본)' : '커스텀 표지'}
-                      <span className="ml-1 text-ink-400 font-normal">({coverTemplateUid})</span>
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-ink-500">내지 템플릿</span>
                     <span className="font-medium text-ink-700">
                       {contentTemplateUid === 'vHA59XPPKqak' ? '사진+텍스트 일기형 (기본)' : '커스텀 내지'}
-                      <span className="ml-1 text-ink-400 font-normal">({contentTemplateUid})</span>
                     </span>
                   </div>
                 </div>
