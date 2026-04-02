@@ -16,6 +16,8 @@ export default function CreatePage() {
   const [formData, setFormData] = useState({});
   const [selectedSpec, setSelectedSpec] = useState('');
   const [useDummy, setUseDummy] = useState(false);
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiError, setAiError] = useState(null);
 
   useEffect(() => {
     if (service) {
@@ -43,6 +45,53 @@ export default function CreatePage() {
     if (dummy) {
       setFormData(dummy.meta);
       setUseDummy(true);
+    }
+  };
+
+  // AI 동화 생성 (fairytale 서비스 전용)
+  const handleGenerateStory = async () => {
+    const missing = ['heroName', 'theme'].filter((k) => !formData[k]);
+    if (missing.length > 0) {
+      alert('주인공 이름과 동화 주제를 먼저 입력해주세요.');
+      return;
+    }
+
+    setAiGenerating(true);
+    setAiError(null);
+
+    try {
+      const res = await fetch('/api/generate-story', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          heroName: formData.heroName,
+          heroAge: formData.heroAge,
+          theme: formData.theme === '직접 입력' ? formData.customTheme : formData.theme,
+          moralLesson: formData.moralLesson,
+        }),
+      });
+      const data = await res.json();
+
+      if (!data.success) throw new Error(data.message);
+
+      // 생성된 페이지를 sessionStorage에 임시 저장 (에디터에서 로드)
+      sessionStorage.setItem('bookmaker_ai_pages', JSON.stringify(data.data.pages));
+
+      // 세션 메타데이터 저장 후 에디터로 이동
+      const sessionData = {
+        serviceType,
+        formData: { ...formData, bookTitle: data.data.title },
+        bookSpecUid: selectedSpec,
+        useDummy: false,
+        aiGenerated: true,
+        aiTitle: data.data.title,
+      };
+      sessionStorage.setItem('bookmaker_session', JSON.stringify(sessionData));
+      router.push('/editor');
+    } catch (err) {
+      setAiError(err.message);
+    } finally {
+      setAiGenerating(false);
     }
   };
 
@@ -204,13 +253,66 @@ export default function CreatePage() {
             </div>
           </div>
 
+          {/* AI 동화 생성 패널 (fairytale 전용) */}
+          {serviceType === 'fairytale' && (
+            <div className="rounded-2xl border-2 border-violet-200 bg-gradient-to-br from-violet-50 to-purple-50 p-6">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-xl">✨</span>
+                <h2 className="font-display font-bold text-lg text-violet-900">AI 동화 자동 생성</h2>
+                <span className="text-xs bg-violet-600 text-white px-2 py-0.5 rounded-full">Gemini AI</span>
+              </div>
+              <p className="text-sm text-violet-700 mb-4 leading-relaxed">
+                위에 입력한 정보를 바탕으로 AI가 10페이지 분량의 동화를 자동으로 집필합니다.<br />
+                생성된 내용은 에디터에서 자유롭게 수정할 수 있습니다.
+              </p>
+
+              {aiError && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">
+                  <p className="font-medium">생성 실패</p>
+                  <p className="mt-0.5">{aiError}</p>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={handleGenerateStory}
+                disabled={aiGenerating}
+                className="w-full py-3 rounded-xl font-bold text-white transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                style={{ background: aiGenerating ? '#7c3aed80' : 'linear-gradient(135deg, #7c3aed, #a855f7)' }}
+              >
+                {aiGenerating ? (
+                  <span className="flex items-center justify-center gap-3">
+                    <span className="spinner" />
+                    <span>
+                      AI가 <strong>{formData.heroName || '주인공'}</strong>을(를) 위한 동화를 집필 중입니다...
+                    </span>
+                  </span>
+                ) : (
+                  '🪄 AI 동화 생성하기'
+                )}
+              </button>
+
+              {/* 로딩 중 애니메이션 힌트 */}
+              {aiGenerating && (
+                <div className="mt-4 space-y-2">
+                  {['이야기 구조 설계 중...', '캐릭터와 배경 구성 중...', '각 장면 집필 중...'].map((hint, i) => (
+                    <div key={i} className="flex items-center gap-2 text-xs text-violet-500 opacity-0 animate-fade-in" style={{ animationDelay: `${i * 0.8}s`, animationFillMode: 'forwards' }}>
+                      <span className="w-1.5 h-1.5 rounded-full bg-violet-400 inline-block" />
+                      {hint}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* 하단 버튼 */}
           <div className="flex gap-3 pt-4">
             <Link href="/" className="btn-secondary flex-1 text-center">
               뒤로
             </Link>
             <button type="submit" className="btn-primary flex-1">
-              다음: 콘텐츠 편집 →
+              {serviceType === 'fairytale' ? '직접 편집하기 →' : '다음: 콘텐츠 편집 →'}
             </button>
           </div>
         </form>

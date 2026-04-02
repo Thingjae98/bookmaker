@@ -27,8 +27,12 @@ export default function EditorPage() {
     const data = JSON.parse(raw);
     setSession(data);
 
-    // 더미 데이터 사용 시 페이지 자동 채우기
-    if (data.useDummy) {
+    // 페이지 초기화 우선순위: AI 생성 > 더미 데이터
+    const aiPages = sessionStorage.getItem('bookmaker_ai_pages');
+    if (aiPages) {
+      setPages(JSON.parse(aiPages));
+      sessionStorage.removeItem('bookmaker_ai_pages'); // 1회 사용 후 삭제
+    } else if (data.useDummy) {
       const dummy = DUMMY_DATA[data.serviceType];
       if (dummy) {
         setPages(dummy.pages.map((p, i) => ({ ...p, id: `page-${i}` })));
@@ -281,9 +285,14 @@ export default function EditorPage() {
             <h1 className="font-display font-bold text-2xl text-ink-900 flex items-center gap-2">
               <span>{service.icon}</span>
               콘텐츠 편집
+              {session.aiGenerated && (
+                <span className="text-xs bg-violet-100 text-violet-700 border border-violet-200 px-2 py-0.5 rounded-full font-normal">✨ AI 생성</span>
+              )}
             </h1>
             <p className="text-ink-400 text-sm mt-1">
-              페이지를 추가하고 내용을 편집하세요 · 판형: {BOOK_SPEC_LABELS[session.bookSpecUid] || session.bookSpecUid}
+              {session.aiGenerated
+                ? `AI가 생성한 "${session.aiTitle}" · 자유롭게 수정하세요`
+                : `페이지를 추가하고 내용을 편집하세요 · 판형: ${BOOK_SPEC_LABELS[session.bookSpecUid] || session.bookSpecUid}`}
             </p>
           </div>
           <div className="flex gap-2">

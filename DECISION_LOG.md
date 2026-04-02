@@ -124,6 +124,65 @@ CSS Filter (blur) 속성과 인덱스 기반 조건부 렌더링을 활용하여
 
 ---
 
+## 📅 2026-04-02 — [기능 확장] 외부 LLM 연동을 통한 동화책 자동 생성 로직 구현
+
+### 배경
+
+'AI 동화책' 서비스가 기존에는 더미 데이터(picsum 이미지 + 하드코딩 텍스트)를 단순 재사용하는 방식이었음. 과제에서 요구하는 "바이브코딩 역량" 어필과 실질적인 AI 기능 시연을 위해, 생성형 AI를 실제 콘텐츠 파이프라인에 연결하는 작업이 필요했음.
+
+### AI 모델 선택: Google Gemini 1.5 Flash
+
+| 항목 | Claude API | Gemini 1.5 Flash |
+|------|-----------|-----------------|
+| 무료 티어 | 제한적 | **분당 15회 / 월 150만 토큰** (2026년 기준) |
+| 한국어 품질 | 최상 | 상 (동화 생성에 충분) |
+| 레이턴시 | 중간 | **빠름** (Flash 모델) |
+| SDK | @anthropic-ai/sdk | **@google/generative-ai** |
+
+→ 무료 티어와 속도를 고려해 **Gemini 1.5 Flash** 채택. 동화 생성이라는 단순 텍스트 태스크에서 Claude와 품질 차이 없음.
+
+### 구현 아키텍처
+
+```
+[create/fairytale 폼]
+  → "AI 동화 생성하기" 버튼 클릭
+  → POST /api/generate-story { heroName, heroAge, theme, moralLesson }
+  → Gemini API 호출 (JSON 구조화 출력 프롬프트)
+  → 10페이지 pages[] 배열 반환
+  → sessionStorage('bookmaker_ai_pages') 임시 저장
+  → /editor 이동
+  → editor useEffect: AI 페이지 우선 로드 & sessionStorage 즉시 삭제
+  → 사용자 편집 후 → 기존 책 생성 플로우 그대로 진행
+```
+
+### 프롬프트 설계
+
+- **출력 형식 강제**: "순수한 JSON만 반환하세요" + 마크다운 코드 블록 제거 처리
+- **페이지 수 고정**: 정확히 10개 요구 → API 최소 24p 조건 충족을 위해 에디터에서 반복 패딩
+- **서사 구조 지정**: 시작(1~2) → 갈등/모험(3~7) → 해결(8~9) → 결말과 교훈(10)
+- **안전 처리**: JSON 파싱 실패 시 별도 에러 메시지 반환, 빈 pages 배열 방어 코드
+
+### 구현된 파일
+
+| 파일 | 변경 내용 |
+|------|---------|
+| `src/app/api/generate-story/route.js` | 신규 — Gemini 연동 API 라우트 |
+| `src/app/create/[serviceType]/page.jsx` | AI 생성 패널(버튼 + 로딩 UI + 에러) 추가 |
+| `src/app/editor/page.jsx` | AI 페이지 우선 로드 로직 + AI 생성 배지 표시 |
+| `.env.example` | `GEMINI_API_KEY` 항목 추가 |
+| `package.json` | `@google/generative-ai` 의존성 추가 |
+
+### UX 설계: 로딩 화면
+
+시연 영상 임팩트를 위해 로딩 중 3단계 힌트 메시지를 순차적으로 페이드인:
+1. "이야기 구조 설계 중..."
+2. "캐릭터와 배경 구성 중..."
+3. "각 장면 집필 중..."
+
+버튼 텍스트도 `"AI가 {heroName}을(를) 위한 동화를 집필 중입니다..."` 로 동적 변경.
+
+---
+
 <!-- 새 기록 추가 시 아래 템플릿 복사 -->
 <!--
 ## 📅 YYYY-MM-DD — 제목
