@@ -17,6 +17,8 @@ export default function EditorPage() {
   const [bookUid, setBookUid] = useState(null);
   const [apiLog, setApiLog] = useState([]);
   const [showLog, setShowLog] = useState(false);
+  const [stagedFiles, setStagedFiles] = useState({}); // { pageId: File } — 업로드 대기 파일
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   // 세션 복원
   useEffect(() => {
@@ -61,6 +63,22 @@ export default function EditorPage() {
     setPages((prev) => prev.filter((_, i) => i !== idx));
     if (editingIdx === idx) setEditingIdx(null);
     else if (editingIdx > idx) setEditingIdx(editingIdx - 1);
+  };
+
+  // 파일 선택 → blob URL 즉시 미리보기, 파일은 staged 보관
+  const handleFileSelect = (file, pageId) => {
+    if (!file || !file.type.startsWith('image/')) return;
+    const blobUrl = URL.createObjectURL(file);
+    const idx = pages.findIndex((p) => p.id === pageId);
+    if (idx >= 0) updatePage(idx, 'image', blobUrl);
+    setStagedFiles((prev) => ({ ...prev, [pageId]: file }));
+  };
+
+  // 드래그 앤 드롭 핸들러
+  const handleDrop = (e, pageId) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    handleFileSelect(file, pageId);
   };
 
   // 페이지 순서 변경
@@ -109,6 +127,41 @@ export default function EditorPage() {
       setBookUid(uid);
       addLog(`✅ 책 생성 완료: ${uid}`);
 
+      // 1-b. staged 파일을 Photos API로 업로드 → blob URL을 실제 URL로 교체
+      const uploadedUrlMap = {}; // pageId → 업로드된 실제 URL
+      const stagedEntries = Object.entries(stagedFiles);
+      if (stagedEntries.length > 0) {
+        setUploadingPhoto(true);
+        addLog(`📸 사진 ${stagedEntries.length}장 업로드 시작...`);
+        for (const [pageId, file] of stagedEntries) {
+          try {
+            const fd = new FormData();
+            fd.append('file', file);
+            addLog(`📤 업로드 중: ${file.name}`);
+            const photoRes = await fetch(`/api/books/${uid}/photos`, {
+              method: 'POST',
+              body: fd,
+            });
+            const photoData = await photoRes.json();
+            if (photoData.success) {
+              const uploadedUrl = photoData.data?.url || photoData.data?.photoUrl || photoData.data?.fileUrl;
+              if (uploadedUrl) {
+                uploadedUrlMap[pageId] = uploadedUrl;
+                addLog(`✅ 업로드 완료: ${uploadedUrl}`);
+              } else {
+                addLog(`⚠️ 업로드 성공 but URL 없음 (API 응답 확인 필요)`);
+              }
+            } else {
+              addLog(`⚠️ 사진 업로드 실패: ${photoData.message}`);
+            }
+          } catch (uploadErr) {
+            addLog(`⚠️ 업로드 오류 (${file.name}): ${uploadErr.message}`);
+          }
+        }
+        setUploadingPhoto(false);
+        addLog(`✅ 사진 업로드 완료 (${Object.keys(uploadedUrlMap).length}/${stagedEntries.length}장 성공)`);
+      }
+
       // 2. 표지 추가 — 템플릿 79yjMH3qRPly (일기장A): coverPhoto + title + dateRange 필수
       addLog('🎨 표지 추가 중...');
       const firstImage = pages.find(p => p.image && p.image.startsWith('http'))?.image;
@@ -156,9 +209,10 @@ export default function EditorPage() {
           diaryText: page.text || page.teacherComment || '내용이 없습니다.',
         };
 
-        // 이미지가 URL인 경우 optional 파라미터로 포함
-        if (page.image && page.image.startsWith('http')) {
-          params.diaryPhoto = page.image;
+        // 이미지가 있을 경우 — 업로드된 실제 URL 우선, blob URL은 스킵
+        const resolvedImage = uploadedUrlMap[page.id] || (page.image?.startsWith('http') ? page.image : null);
+        if (resolvedImage) {
+          params.diaryPhoto = resolvedImage;
         }
 
         const contentRes = await fetch(`/api/books/${uid}/contents`, {
@@ -362,29 +416,94 @@ export default function EditorPage() {
                     />
                   </div>
 
-                  {/* 이미지 URL */}
+                  {/* 이미지 — 파일 업로드 또는 URL 입력 */}
                   <div>
-                    <label className="block text-sm font-medium text-ink-800 mb-1">
-                      이미지 URL
-                      <span className="text-xs text-ink-400 ml-2">(테스트용 placeholder URL 사용 가능)</span>
-                    </label>
-                    <input
-                      type="text"
-                      className="input-field"
-                      placeholder="https://example.com/image.jpg"
-                      value={pages[editingIdx].image || ''}
-                      onChange={(e) => updatePage(editingIdx, 'image', e.target.value)}
-                    />
-                    {pages[editingIdx].image && (
-                      <div className="mt-3 p-3 bg-ink-50 rounded-xl">
-                        <img
-                          src={pages[editingIdx].image}
-                          alt="미리보기"
-                          className="w-full max-w-[200px] h-auto rounded-lg"
-                          onError={(e) => { e.target.style.display = 'none'; }}
-                        />
-                      </div>
-                    )}
+                    <label className="block text-sm font-medium text-ink-800 mb-2">사진</label>
+
+                    {/* 드래그 앤 드롭 업로드 존 */}
+                    <div
+                      className="relative border-2 border-dashed border-ink-200 rounded-xl p-5 text-center hover:border-warm-400 transition-colors cursor-pointer group"
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => handleDrop(e, pages[editingIdx].id)}
+                      onClick={() => document.getElementById(`file-input-${editingIdx}`).click()}
+                    >
+                      <input
+                        id={`file-input-${editingIdx}`}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => handleFileSelect(e.target.files[0], pages[editingIdx].id)}
+                      />
+
+                      {pages[editingIdx].image ? (
+                        <div className="flex items-center gap-4">
+                          <img
+                            src={pages[editingIdx].image}
+                            alt="미리보기"
+                            className="w-20 h-20 object-cover rounded-lg flex-shrink-0"
+                            onError={(e) => { e.target.style.display = 'none'; }}
+                          />
+                          <div className="text-left flex-1 min-w-0">
+                            {stagedFiles[pages[editingIdx].id] ? (
+                              <>
+                                <p className="text-sm font-medium text-ink-800 truncate">
+                                  {stagedFiles[pages[editingIdx].id].name}
+                                </p>
+                                <p className="text-xs text-ink-400 mt-0.5">
+                                  {(stagedFiles[pages[editingIdx].id].size / 1024).toFixed(0)} KB · 책 생성 시 자동 업로드
+                                </p>
+                              </>
+                            ) : (
+                              <p className="text-xs text-ink-400 truncate">{pages[editingIdx].image}</p>
+                            )}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                updatePage(editingIdx, 'image', '');
+                                setStagedFiles((prev) => {
+                                  const next = { ...prev };
+                                  delete next[pages[editingIdx].id];
+                                  return next;
+                                });
+                              }}
+                              className="mt-1 text-xs text-red-400 hover:text-red-600"
+                            >
+                              삭제
+                            </button>
+                          </div>
+                          <span className="text-xs text-ink-300 group-hover:text-warm-500 transition-colors">클릭하여 변경</span>
+                        </div>
+                      ) : (
+                        <div className="py-2">
+                          <p className="text-2xl mb-2">🖼️</p>
+                          <p className="text-sm font-medium text-ink-600 group-hover:text-warm-600 transition-colors">
+                            클릭하거나 파일을 드래그하세요
+                          </p>
+                          <p className="text-xs text-ink-400 mt-1">JPG, PNG, WEBP · 최대 10MB</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* URL 직접 입력 (더미 데이터 / 외부 URL용 fallback) */}
+                    <div className="mt-2">
+                      <p className="text-xs text-ink-400 mb-1">또는 이미지 URL 직접 입력</p>
+                      <input
+                        type="text"
+                        className="input-field text-xs"
+                        placeholder="https://example.com/image.jpg"
+                        value={pages[editingIdx].image?.startsWith('blob:') ? '' : (pages[editingIdx].image || '')}
+                        onChange={(e) => {
+                          updatePage(editingIdx, 'image', e.target.value);
+                          // URL 입력 시 staged 파일 제거
+                          setStagedFiles((prev) => {
+                            const next = { ...prev };
+                            delete next[pages[editingIdx].id];
+                            return next;
+                          });
+                        }}
+                      />
+                    </div>
                   </div>
 
                   {/* 서비스별 추가 필드 (유치원 알림장) */}
@@ -461,10 +580,17 @@ export default function EditorPage() {
                     {loading ? (
                       <>
                         <span className="spinner" />
-                        API 호출 중...
+                        {uploadingPhoto ? '사진 업로드 중...' : 'API 호출 중...'}
                       </>
                     ) : (
-                      '📗 책 생성 & 최종화'
+                      <>
+                        📗 책 생성 & 최종화
+                        {Object.keys(stagedFiles).length > 0 && (
+                          <span className="ml-1.5 text-xs bg-warm-200 text-warm-800 px-1.5 py-0.5 rounded-full">
+                            사진 {Object.keys(stagedFiles).length}장
+                          </span>
+                        )}
+                      </>
                     )}
                   </button>
                 ) : (
