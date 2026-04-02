@@ -12,10 +12,10 @@ export async function GET(request) {
     const result = await listOrders({ limit, offset, status: status ? parseInt(status) : undefined });
     return NextResponse.json(result);
   } catch (err) {
-    console.error('GET /api/orders error:', err.response?.data || err.message);
+    console.error('GET /api/orders error:', err.message);
     return NextResponse.json(
-      { success: false, message: err.response?.data?.message || err.message },
-      { status: err.response?.status || 500 }
+      { success: false, message: err.message },
+      { status: err.statusCode || 500 }
     );
   }
 }
@@ -37,10 +37,10 @@ export async function POST(request) {
     const result = await createOrder({ items, shipping, externalRef });
     return NextResponse.json(result, { status: 201 });
   } catch (err) {
-    console.error('POST /api/orders error:', err.response?.data || err.message);
+    console.error('POST /api/orders error:', err.message);
     return NextResponse.json(
-      { success: false, message: err.response?.data?.message || err.message },
-      { status: err.response?.status || 500 }
+      { success: false, message: err.message },
+      { status: err.statusCode || 500 }
     );
   }
 }

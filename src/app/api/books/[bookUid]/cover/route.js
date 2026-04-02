@@ -15,10 +15,10 @@ export async function POST(request, { params }) {
     const result = await addCover(bookUid, { templateUid, parameters });
     return NextResponse.json(result, { status: 201 });
   } catch (err) {
-    console.error('POST cover error:', err.response?.data || err.message);
+    console.error('POST cover error:', err.message);
     return NextResponse.json(
-      { success: false, message: err.response?.data?.message || err.message },
-      { status: err.response?.status || 500 }
+      { success: false, message: err.message },
+      { status: err.statusCode || 500 }
     );
   }
 }

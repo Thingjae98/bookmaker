@@ -11,10 +11,10 @@ export async function GET(request) {
     const result = await listBooks({ limit, offset });
     return NextResponse.json(result);
   } catch (err) {
-    console.error('GET /api/books error:', err.response?.data || err.message);
+    console.error('GET /api/books error:', err.message);
     return NextResponse.json(
-      { success: false, message: err.response?.data?.message || err.message },
-      { status: err.response?.status || 500 }
+      { success: false, message: err.message },
+      { status: err.statusCode || 500 }
     );
   }
 }
@@ -35,10 +35,10 @@ export async function POST(request) {
     const result = await createBook({ title, bookSpecUid, creationType, externalRef });
     return NextResponse.json(result, { status: 201 });
   } catch (err) {
-    console.error('POST /api/books error:', err.response?.data || err.message);
+    console.error('POST /api/books error:', err.message);
     return NextResponse.json(
-      { success: false, message: err.response?.data?.message || err.message },
-      { status: err.response?.status || 500 }
+      { success: false, message: err.message },
+      { status: err.statusCode || 500 }
     );
   }
 }
