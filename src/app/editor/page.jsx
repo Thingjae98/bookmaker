@@ -210,7 +210,7 @@ export default function EditorPage() {
     const filtered = all.filter((t) => {
       if (specUid && t.bookSpecUid && t.bookSpecUid !== specUid) return false;
       const kind = (t.templateKind || t.category || '').toLowerCase();
-      return role === 'front'
+      return (role === 'front' || role === 'back')
         ? kind.includes('cover')
         : kind.includes('content') || kind.includes('page');
     });
@@ -299,15 +299,15 @@ export default function EditorPage() {
 
   // 4) 공통 템플릿 선택 카드 그리드 렌더 함수
   const renderTemplateSelector = (role) => {
-    const isFront = role === 'front';
-    const allTpls = getTemplatesForRole(role);
+    const isCover  = role === 'front' || role === 'back'; // 표지 템플릿 여부
+    const allTpls  = getTemplatesForRole(role);
 
     // 내지 역할: 텍스트 입력 유무에 따라 레이아웃 실시간 필터링
     // · 텍스트 있음 → 텍스트 구역을 가진 레이아웃(photo_text, text_only, calendar)만 노출
     // · 텍스트 없음 → 사진 전용 레이아웃(photo_only, blank, photo_text 기본)만 노출
     const TEXT_WIRE_TYPES = new Set(['photo_text', 'text_only', 'calendar']);
-    const hasText = !isFront && (modalItem?.text || '').trim().length > 0;
-    const visibleTpls = isFront
+    const hasText = !isCover && (modalItem?.text || '').trim().length > 0;
+    const visibleTpls = isCover
       ? allTpls
       : allTpls.filter((t) => {
           const wt = (t.thumbnails?.layout || t.thumbnails?.baseLayerOdd || t.thumbnails?.baseLayerEven || t.thumbnailUrl || t.previewUrl || t.imageUrl || t.thumbUrl)
@@ -316,14 +316,14 @@ export default function EditorPage() {
           return hasText ? TEXT_WIRE_TYPES.has(wt) : !TEXT_WIRE_TYPES.has(wt);
         });
 
-    const autoLabel = isFront ? '기본 표지형' : '자동 선택';
-    const autoDesc  = isFront
+    const autoLabel    = isCover ? '기본 표지형' : '자동 선택';
+    const autoDesc     = isCover
       ? '검증된 기본 표지 템플릿 적용'
       : '텍스트 입력 여부에 따라 최적 템플릿 자동 분기';
-    const sectionTitle = isFront ? '표지 템플릿' : '내지 템플릿';
+    const sectionTitle = isCover ? '표지 템플릿' : '내지 템플릿';
 
     // 필터 안내 문구 (내지 전용)
-    const filterHint = !isFront && allTpls.length > 0
+    const filterHint = !isCover && allTpls.length > 0
       ? hasText
         ? '✍ 텍스트 포함 레이아웃만 표시 중'
         : '🖼 이미지 전용 레이아웃만 표시 중'
@@ -388,16 +388,25 @@ export default function EditorPage() {
               >
                 {previewImg ? (
                   <>
-                    <img
-                      src={previewImg}
-                      alt={displayName}
-                      className="w-full h-[72px] object-cover rounded-lg mb-1.5"
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none';
-                        const fb = e.currentTarget.nextElementSibling;
-                        if (fb) fb.style.display = 'block';
-                      }}
-                    />
+                    {/* 표지 썸네일: 앞표지→우측 절반, 뒤표지→좌측 절반 CSS 크롭 */}
+                    <div className="w-full h-[72px] overflow-hidden rounded-lg mb-1.5 relative">
+                      <img
+                        src={previewImg}
+                        alt={displayName}
+                        className={`absolute h-full top-0 ${
+                          isCover
+                            ? role === 'front'
+                              ? 'right-0 w-[200%]'   // 오른쪽 절반 = 앞표지
+                              : 'left-0 w-[200%]'    // 왼쪽 절반 = 뒤표지
+                            : 'left-0 w-full object-cover'  // 내지: 전체 표시
+                        }`}
+                        onError={(e) => {
+                          e.currentTarget.parentElement.style.display = 'none';
+                          const fb = e.currentTarget.parentElement.nextElementSibling;
+                          if (fb) fb.style.display = 'block';
+                        }}
+                      />
+                    </div>
                     <div style={{ display: 'none' }}>{renderWireframe(wfType)}</div>
                   </>
                 ) : (
@@ -1032,8 +1041,9 @@ export default function EditorPage() {
                       </div>
                     </div>
 
-                    {/* 앞표지 전용 — 표지 템플릿 선택 */}
+                    {/* 표지 전용 — 역할별 CSS 크롭 적용한 표지 템플릿 선택 */}
                     {modalItem.role === 'front' && renderTemplateSelector('front')}
+                    {modalItem.role === 'back'  && renderTemplateSelector('back')}
                   </div>
 
                   {/* 우: 내지 전용 편집 컨트롤 */}

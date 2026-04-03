@@ -185,6 +185,14 @@ Authorization: Bearer {SWEETBOOK_API_KEY}
 > ⚠️ **주의**: `tpl_F8d15af9fd`, `cnH0Ud1nl1f9`, `6dJ0Qy6ZmXej`는 동작하지 않는 잘못된 UID였음. 사용 금지.
 > 파라미터명도 템플릿마다 다름 — 위 표 기준 엄수. (`diaryPhoto` X → `photo1` O)
 
+### 템플릿 썸네일 UI 렌더링 규칙
+- API 응답의 썸네일 URL 탐색 순서: `thumbnails.layout` → `thumbnails.baseLayerOdd` → `thumbnails.baseLayerEven` → flat field 폴백
+- **표지 썸네일은 선택 역할에 따라 CSS로 좌/우 분할 노출**:
+  - 앞표지(`front`): `right-0 w-[200%]` — 이미지 우측 절반만 표시
+  - 뒤표지(`back`): `left-0 w-[200%]` — 이미지 좌측 절반만 표시
+  - 내지(`content`): `w-full object-cover` — 전체 표시 (크롭 없음)
+- 이미지 로드 실패 시 `onError`로 CSS 와이어프레임(`renderWireframe(wfType)`) 자동 대체
+
 ### ✅ 해결된 버그 (2026-04-03)
 
 #### 버그 A — `sweetFetch` ok() 래핑 누락 → **해결**
@@ -318,6 +326,7 @@ try {
 - [x] 모달 → 인라인 속성 패널(Inline Property Panel) 전환 — galleryModal state 제거, selectedIdx로 단순화, 액션 패널과 편집 패널 토글
 - [x] 내지 카운트 동적 연동 — MIN_CONTENT 하드코딩 제거, specPageMin(판형 API 기준) 3색 배지 표시
 - [x] 템플릿 썸네일 경로 수정 — SweetBook API `thumbnails` 객체(layout→baseLayerOdd→baseLayerEven) 우선 탐색, `onError` 2단 폴백 구조 적용
+- [x] 표지 썸네일 역할별 CSS 크롭 — SweetBook 표지 템플릿은 양면(Spread) 이미지 1장으로 제공됨. 앞표지 선택 시 `right-0 w-[200%]`(우측 절반), 뒤표지 선택 시 `left-0 w-[200%]`(좌측 절반), 내지는 크롭 없이 전체 표시
 
 ### P1 — 면접 전 개선
 - [x] 이미지 파일 직접 업로드 (Drag & Drop + Photos API) — 에디터 내 구현 완료
