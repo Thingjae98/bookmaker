@@ -172,41 +172,49 @@ Authorization: Bearer {SWEETBOOK_API_KEY}
 - 환경변수: `GEMINI_API_KEY` (Google AI Studio에서 무료 발급)
 - Gemini는 텍스트만 생성. 이미지는 사용자 직접 업로드 또는 picsum 자동 배정
 
-### 사용 가능한 테스트 템플릿 UID
-- 표지: tpl_F8d15af9fd
-- 텍스트+이미지 내지: cnH0Ud1nl1f9
-- 이미지 전용 내지: 6dJ0Qy6ZmXej
+### 사용 가능한 템플릿 UID (SQUAREBOOK_HC 기준, 실제 API 검증 완료)
 
-> ✅ **[2026-04-03 수정 완료]** `handleCreateBook` 초반에 `GET /api/templates?bookSpecUid=...`를 동적 호출하여
-> 실제 UID를 가져와 사용한다. 하드코딩 상수는 조회 실패 시 fallback으로만 잔존.
+| 용도 | UID | 필수 파라미터 |
+|------|-----|-------------|
+| 표지 | `79yjMH3qRPly` | `coverPhoto`, `title`, `dateRange` |
+| 내지 (사진+텍스트) | `3FhSEhJ94c0T` | `photo1`, `date`, `title`, `diaryText` |
+| 내지 (텍스트 전용) | `vHA59XPPKqak` | `date`, `title`, `diaryText` |
+
+> ⚠️ **주의**: `tpl_F8d15af9fd`, `cnH0Ud1nl1f9`, `6dJ0Qy6ZmXej`는 동작하지 않는 잘못된 UID였음. 사용 금지.
+> 파라미터명도 템플릿마다 다름 — 위 표 기준 엄수. (`diaryPhoto` X → `photo1` O)
 
 ### ✅ 해결된 버그 (2026-04-03)
 
 #### 버그 A — `sweetFetch` ok() 래핑 누락 → **해결**
-- sweetFetch 기반 5개 함수에 `ok(data?.items || data)` 패턴 적용
-- 리스트 응답의 `items` 배열 추출 + `{ success, data }` 래핑으로 프론트 응답 형식 통일
+- `listTemplates`: `data.data.templates` 배열 추출 (실제 API 응답 구조 반영)
+- `listBookSpecs`: `data.data` 배열 + `name && pageMin > 0` 필터로 빈 플레이스홀더 제거
+- `getTemplate` / `getBookSpec`: `data.data` 단일 객체 추출 후 `ok()` 래핑
 
 #### 버그 B — `sweetFetch` 에러 응답 미throw → **해결**
 - `!res.ok` 시 `statusCode` 포함 Error throw로 수정
 - route handler catch 블록으로 에러 올바르게 전파
 
-#### 버그 C — 하드코딩 템플릿 UID vs bookSpecUid 호환성 → **해결**
-- `handleCreateBook` 초반 동적 템플릿 조회 추가
-- `dynamicCoverTpl` · `dynamicImageOnly` · `dynamicTextImage` 변수로 4곳 교체
+#### 버그 C — 잘못된 bookSpecUid + 템플릿 UID + 파라미터명 → **해결**
+- `bs_6a8OUY` 등 `bs_` 접두사 UID는 빈 플레이스홀더 → `POST /Books` 시 400 반환
+- 실제 동작 UID: `SQUAREBOOK_HC`, `PHOTOBOOK_A4_SC`, `PHOTOBOOK_A5_SC`
+- `constants.js` `recommendedSpec` 전부 `SQUAREBOOK_HC`로 교체
+- 템플릿 UID 전면 교체 (위 표 참고), `diaryPhoto` → `photo1` 파라미터명 수정
+- 동적 템플릿 조회 제거 — 파라미터명 불일치 위험으로 검증된 상수 고정 사용
 
 #### 버그 D — `GET /api/templates/[templateUid]` 라우트 없음 → **해결**
 - `src/app/api/templates/[templateUid]/route.js` 신규 생성 완료
 
-### 판형 (BookSpec) — 실제 API UID 기준
-- `bs_6a8OUY` (SQUAREBOOK_HC) — 243×248mm, 하드커버, PUR 무선철, 24~130p (범용, **기본 추천**)
-- `bs_3EzPkz` (PHOTOBOOK_A4_SC) — 210×297mm, 소프트커버, 무선철 (A4)
-- `bs_518IVG` (PHOTOBOOK_A5_SC) — 148×210mm, 소프트커버, 무선철 (A5)
-- 폴백 내부 키: SQUAREBOOK_HC, LAYFLAT_HC, SLIMALBUM_HC (API 미응답 시만 사용)
+### 판형 (BookSpec) — 실제 API 동작 UID
+> `bs_6a8OUY`, `bs_3EzPkz`, `bs_518IVG`는 **빈 플레이스홀더** — `POST /Books` 400 반환. 절대 사용 금지.
+
+- `SQUAREBOOK_HC` — 243×248mm, 하드커버, PUR 무선철, 24~130p (**기본 추천**)
+- `PHOTOBOOK_A4_SC` — 210×297mm, 소프트커버, PUR 무선철, 24~130p
+- `PHOTOBOOK_A5_SC` — 148×210mm, 소프트커버, PUR 무선철, 50~200p
 
 ### 페이지 규칙
-- 최소 20페이지 이상이어야 최종화 가능
+- SQUAREBOOK_HC 최소 **24페이지** 이상이어야 최종화 가능 (코드 내 API_MIN=25로 여유분 포함)
 - 2페이지 단위 증가 (24, 26, 28, ...)
-- 콘텐츠 15~20번 이상 추가 필요
+- 내지 콘텐츠 25개 이상 권장 (자동 패딩 로직 포함)
 
 ### API 문서 링크
 - 전체 문서: https://api.sweetbook.com/docs
