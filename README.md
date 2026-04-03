@@ -144,6 +144,26 @@ Book Print API의 핵심 가치는 **"콘텐츠를 책으로 만드는 것"**입
 - **사용자 인증**: NextAuth 등으로 사용자별 책/주문 관리
 - **결제 연동**: Sandbox → Live 전환 시 실제 PG 결제 플로우
 
+### ⚠️ 알려진 미해결 이슈 (다음 버전에서 수정 예정)
+
+책 생성 흐름에서 `POST /books/{uid}/contents` 400 에러가 발생하는 구조적 원인이 있으며, 현재 분석 완료 상태다.
+
+**근본 원인 3가지:**
+
+1. **`sweetFetch` 응답 형식 불일치** (`src/lib/sweetbook.js`)
+   - SDK 기반 함수는 `{ success: true, data }` 형식으로 래핑하지만, `sweetFetch` 기반 함수(`listBookSpecs`, `listTemplates`)는 raw JSON을 그대로 반환
+   - 프론트엔드가 `data.success`를 확인하므로 항상 fallback으로 진입 → 올바른 템플릿 UID를 못 받아옴
+
+2. **`sweetFetch` 에러 미전파** (`src/lib/sweetbook.js`)
+   - SweetBook API가 400을 반환해도 throw 없이 에러 JSON을 그대로 반환
+   - route handler가 에러를 HTTP 200으로 클라이언트에 전달 → 에러가 조용히 무시됨
+
+3. **하드코딩된 템플릿 UID** (`src/app/editor/page.jsx`)
+   - `cnH0Ud1nl1f9`, `6dJ0Qy6ZmXej` 등의 UID가 특정 bookSpec에서만 유효
+   - `GET /api/templates?bookSpecUid=...`로 실제 UID를 동적으로 받아 사용해야 함
+
+상세 분석 및 수정 방법은 `DECISION_LOG.md`의 `[미해결 버그]` 항목 참고.
+
 ---
 
 ## 6. 기술 스택

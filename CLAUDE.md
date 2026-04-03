@@ -177,6 +177,33 @@ Authorization: Bearer {SWEETBOOK_API_KEY}
 - 텍스트+이미지 내지: cnH0Ud1nl1f9
 - 이미지 전용 내지: 6dJ0Qy6ZmXej
 
+> ⚠️ **[다음 세션 필수 수정]** 위 UID는 특정 bookSpecUid에서만 유효하다.
+> `POST /books/{uid}/contents` 400 에러의 주원인.
+> `handleCreateBook` 내에서 `GET /api/templates?bookSpecUid=...`를 먼저 호출해
+> 실제 사용 가능한 UID를 동적으로 받아 사용해야 한다. (DECISION_LOG 버그 3 참고)
+
+### ⚠️ 알려진 미해결 버그 (다음 세션 수정 필요)
+
+#### 버그 A — `sweetFetch` ok() 래핑 누락 (`src/lib/sweetbook.js`)
+- `listBookSpecs()`, `listTemplates()` 등 sweetFetch 기반 함수는 raw JSON 반환
+- 프론트엔드가 기대하는 `{ success: true, data }` 형식이 아님
+- → `GET /book-specs`·`GET /templates` 응답이 항상 fallback 처리됨
+- **수정**: sweetFetch 기반 export 함수에 `ok()` 래핑 추가 또는 route에서 변환
+
+#### 버그 B — `sweetFetch` 에러 응답 미throw (`src/lib/sweetbook.js`)
+- API 400/404 응답을 throw하지 않고 그대로 반환
+- route handler가 에러를 HTTP 200으로 클라이언트에 전달 → 디버깅 불가
+- **수정**: `if (!res.ok)` 시 `throw` 추가
+
+#### 버그 C — 하드코딩 템플릿 UID vs bookSpecUid 호환성 (`src/app/editor/page.jsx`)
+- `TPL_TEXT_IMAGE`, `TPL_IMAGE_ONLY`, `COVER_TEMPLATE` 상수가 bookSpec과 무관하게 고정
+- bookSpec 변경 시 `POST /contents` 400 발생
+- **수정**: `handleCreateBook` 내 동적 템플릿 조회 추가
+
+#### 버그 D — `GET /api/templates/[templateUid]` 라우트 없음
+- `src/app/api/templates/[templateUid]/route.js` 파일 미존재
+- **수정**: 해당 route.js 파일 신규 생성
+
 ### 판형 (BookSpec) — 실제 API UID 기준
 - `bs_6a8OUY` (SQUAREBOOK_HC) — 243×248mm, 하드커버, PUR 무선철, 24~130p (범용, **기본 추천**)
 - `bs_3EzPkz` (PHOTOBOOK_A4_SC) — 210×297mm, 소프트커버, 무선철 (A4)

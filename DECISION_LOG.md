@@ -5,6 +5,170 @@
 
 ---
 
+## 🚨 2026-04-03 — [미해결 버그] GET /book-specs · GET /templates · POST /contents 400 에러 원인 분석 및 다음 세션 수정 가이드
+
+> ⚠️ **이 항목은 코드 수정 전 분석 기록이다. 다음 세션에서 반드시 수정할 것.**
+
+### 증상
+- `GET /api/book-specs` → 응답은 200이지만 프론트엔드가 항상 fallback 처리
+- `GET /api/templates?bookSpecUid=...` → 동일하게 항상 fallback
+- `POST /api/books/{bookUid}/contents` → SweetBook API 400 반환
+- 결과: 잘못된 (또는 미검증) 템플릿 UID가 contents API에 전달되어 연쇄 실패
+
+---
+
+### 🐛 버그 1 — `sweetFetch` 응답을 `ok()` 래핑 없이 raw JSON 그대로 반환
+
+**파일:** `src/lib/sweetbook.js`
+
+**문제:**
+SDK 기반 함수(`createBook`, `addContents` 등)는 `ok()` 헬퍼로 응답을 `{ success: true, data }` 형식으로 래핑한다.
+그러나 `sweetFetch` 기반 함수(`listBookSpecs`, `listTemplates`, `getTemplate`, `getBookSpec`)는 SweetBook API의 raw JSON을 그대로 반환한다.
+
+```js
+// SDK 기반 — ok() 래핑 있음 ✅
+export async function createBook(...) {
+  const data = await getClient().books.create(...);
+  return ok(data);  // { success: true, data }
+}
+
+// sweetFetch 기반 — ok() 래핑 없음 ❌
+export async function listBookSpecs() {
+  return sweetFetch('/book-specs');  // raw JSON ({ items: [...] } 등)
+}
+```
+
+**결과:**
+프론트엔드(`create/[serviceType]/page.jsx`)는 항상 `data.success && data.data` 형식을 기대하지만,
+`/api/book-specs`와 `/api/templates` 응답에는 `success` 필드가 없어 항상 `false`로 판정된다.
+→ 항상 fallback 경로로 진입 → `service.recommendedSpec` 또는 하드코딩된 템플릿 UID 사용
+
+**수정 방법:**
+`sweetFetch` 기반 export 함수들에 `ok()` 래핑 또는 `{ success: true, data }` 변환 로직 추가.
+또는 route handler(`book-specs/route.js`, `templates/route.js`)에서 응답을 변환하여 `{ success: true, data: result }` 형식으로 반환.
+
+```js
+// route.js 수정 예시
+const result = await listBookSpecs();
+// result가 raw JSON이면 변환
+return NextResponse.json({ success: true, data: result?.items || result?.data || result });
+```
+
+---
+
+### 🐛 버그 2 — `sweetFetch` 가 API 400/404 에러를 throw하지 않고 조용히 반환
+
+**파일:** `src/lib/sweetbook.js` — `sweetFetch` 함수 (109번째 줄)
+
+**문제:**
+```js
+async function sweetFetch(path, params = {}) {
+  // ...
+  const json = await res.json();
+  if (!res.ok) {
+    console.error(`스위트북 API 상세 에러 [${res.status}] ${path}:`, json);
+    // ← throw 없음! 에러 JSON을 그냥 return한다
+  }
+  return json;  // 400/404 에러 응답도 그냥 반환
+}
+```
+
+SweetBook API가 `400 Bad Request`(잘못된 파라미터 등)를 반환해도 `sweetFetch`는 에러를 throw하지 않고
+에러 응답 JSON을 그대로 반환한다. route handler는 이 에러를 성공으로 착각하고 HTTP 200 OK로 프론트에 전달한다.
+터미널에는 에러가 찍히지만 클라이언트는 200 응답을 받아 디버깅이 매우 어렵다.
+
+**결과:**
+- `GET /book-specs`가 SweetBook에서 400을 받아도 클라이언트에는 200으로 전달됨
+- 에러 JSON이 `data.data`로 인식되어 이후 로직이 오작동
+
+**수정 방법:**
+```js
+// sweetFetch 수정 예시
+if (!res.ok) {
+  const msg = json?.message || json?.error || `SweetBook API ${res.status}`;
+  console.error(`스위트북 API 상세 에러 [${res.status}] ${path}:`, json);
+  const err = new Error(msg);
+  err.statusCode = res.status;
+  throw err;  // ← 반드시 throw해야 route handler catch 블록으로 이동
+}
+return json;
+```
+
+---
+
+### 🐛 버그 3 — 하드코딩된 템플릿 UID가 선택된 bookSpecUid와 호환되지 않아 contents 400 발생
+
+**파일:** `src/app/editor/page.jsx` — 상수 선언부
+
+**문제:**
+```js
+const COVER_TEMPLATE = 'tpl_F8d15af9fd';
+const TPL_TEXT_IMAGE = 'cnH0Ud1nl1f9';
+const TPL_IMAGE_ONLY = '6dJ0Qy6ZmXej';
+```
+
+SweetBook API의 `POST /books/{bookUid}/contents`는 **책 생성 시 사용한 `bookSpecUid`와 호환되는 템플릿 UID**만 허용한다.
+위 UID들은 특정 bookSpec에서만 유효하며, 다른 bookSpec(예: `bs_3EzPkz`, `bs_518IVG`)으로 책을 만들면 400 에러가 난다.
+또한 Sandbox 환경에서 템플릿이 deprecated되거나 변경되면 `bs_6a8OUY`에서도 400이 발생할 수 있다.
+
+**연쇄 작용:**
+버그 1 때문에 `session.allTemplates`가 항상 빈 배열 `[]` → 에디터 모달의 템플릿 드롭다운이 비어 있음
+→ `page.templateUid`는 항상 `null` → 폴백으로 하드코딩된 UID 사용 → bookSpec 불일치 시 400
+
+**수정 방법:**
+`handleCreateBook` 실행 시 `/api/templates?bookSpecUid=${bookSpecUid}&limit=50`를 먼저 호출하여
+실제 사용 가능한 커버/내지 템플릿 UID를 동적으로 가져온 뒤 해당 UID를 사용해야 한다.
+
+```js
+// handleCreateBook 초반에 추가
+const tplRes = await fetch(`/api/templates?bookSpecUid=${bookSpecUid}&limit=50`);
+const tplData = await tplRes.json();
+const availTpls = tplData?.data || tplData?.items || [];
+const realCoverTpl   = availTpls.find(t => (t.templateKind||'').includes('cover'))?.templateUid || COVER_TEMPLATE;
+const realContentTpl = availTpls.find(t => (t.templateKind||'').includes('content'))?.templateUid || TPL_IMAGE_ONLY;
+const realTextTpl    = availTpls.find(t => (t.templateKind||'').includes('content') && t.name?.includes('text'))?.templateUid || realContentTpl;
+```
+
+---
+
+### 🐛 버그 4 (부가) — `GET /api/templates/[templateUid]` Next.js 라우트 파일 없음
+
+**문제:**
+`src/lib/sweetbook.js`에 `getTemplate(templateUid)` 함수가 존재하지만,
+`src/app/api/templates/[templateUid]/route.js` 파일이 없다.
+직접 개별 템플릿을 조회하는 엔드포인트가 없어 Next.js가 404를 반환한다.
+(현재 에디터에서는 직접 호출하지 않지만, 향후 템플릿 선택 UI 구현 시 필요)
+
+**수정 방법:**
+`src/app/api/templates/[templateUid]/route.js` 파일 생성:
+```js
+import { NextResponse } from 'next/server';
+import { getTemplate } from '@/lib/sweetbook';
+
+export async function GET(request, { params }) {
+  try {
+    const { templateUid } = await params;
+    const result = await getTemplate(templateUid);
+    return NextResponse.json({ success: true, data: result });
+  } catch (err) {
+    return NextResponse.json({ success: false, message: err.message }, { status: err.statusCode || 500 });
+  }
+}
+```
+
+---
+
+### 수정 우선순위 (다음 세션)
+
+| 순서 | 파일 | 수정 내용 | 영향 |
+|------|------|----------|------|
+| 1순위 | `src/lib/sweetbook.js` | `sweetFetch`에 `!res.ok` 시 throw 추가 | 버그 2 해결, 모든 API 에러 가시화 |
+| 2순위 | `src/lib/sweetbook.js` | `listBookSpecs`, `listTemplates` 등에 `ok()` 래핑 추가 | 버그 1 해결, 프론트 응답 형식 통일 |
+| 3순위 | `src/app/editor/page.jsx` | `handleCreateBook` 내 동적 템플릿 UID 조회 로직 추가 | 버그 3 해결, contents 400 방지 |
+| 4순위 | `src/app/api/templates/[templateUid]/route.js` | 신규 파일 생성 | 버그 4 해결 |
+
+---
+
 ## 📅 2026-04-03 — 데이터 중심의 선 구성(Pre-composition) 에디터 아키텍처로 전면 개편
 
 ### 배경 및 목적
