@@ -317,6 +317,7 @@ try {
 - [x] 미니 와이어프레임 UI — API 미리보기 없을 때 cover/photo_text/text_only/blank/calendar/photo_only 6종 Tailwind CSS 와이어프레임 렌더링
 - [x] 모달 → 인라인 속성 패널(Inline Property Panel) 전환 — galleryModal state 제거, selectedIdx로 단순화, 액션 패널과 편집 패널 토글
 - [x] 내지 카운트 동적 연동 — MIN_CONTENT 하드코딩 제거, specPageMin(판형 API 기준) 3색 배지 표시
+- [x] 템플릿 썸네일 경로 수정 — SweetBook API `thumbnails` 객체(layout→baseLayerOdd→baseLayerEven) 우선 탐색, `onError` 2단 폴백 구조 적용
 
 ### P1 — 면접 전 개선
 - [x] 이미지 파일 직접 업로드 (Drag & Drop + Photos API) — 에디터 내 구현 완료

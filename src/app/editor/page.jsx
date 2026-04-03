@@ -310,7 +310,7 @@ export default function EditorPage() {
     const visibleTpls = isFront
       ? allTpls
       : allTpls.filter((t) => {
-          const wt = t.thumbnailUrl || t.previewUrl || t.imageUrl || t.thumbUrl
+          const wt = (t.thumbnails?.layout || t.thumbnails?.baseLayerOdd || t.thumbnails?.baseLayerEven || t.thumbnailUrl || t.previewUrl || t.imageUrl || t.thumbUrl)
             ? 'photo_text'   // 이미지 있으면 항상 표시
             : inferWireframeType(t);
           return hasText ? TEXT_WIRE_TYPES.has(wt) : !TEXT_WIRE_TYPES.has(wt);
@@ -371,8 +371,8 @@ export default function EditorPage() {
 
           {/* API 템플릿 카드 — 필터링된 목록 */}
           {visibleTpls.map((t) => {
-            const previewImg  = t.thumbnailUrl || t.previewUrl || t.imageUrl || t.thumbUrl;
-            const wfType      = previewImg ? null : inferWireframeType(t);
+            const previewImg  = t.thumbnails?.layout || t.thumbnails?.baseLayerOdd || t.thumbnails?.baseLayerEven || t.thumbnailUrl || t.previewUrl || t.imageUrl || t.thumbUrl;
+            const wfType      = inferWireframeType(t); // onError 폴백용으로 항상 계산
             const displayName = t.name || t.templateName || t.templateUid;
             const isSelected  = modalItem.templateUid === t.templateUid;
             return (
@@ -387,11 +387,19 @@ export default function EditorPage() {
                 }`}
               >
                 {previewImg ? (
-                  <img
-                    src={previewImg}
-                    alt={displayName}
-                    className="w-full h-[72px] object-cover rounded-lg mb-1.5"
-                  />
+                  <>
+                    <img
+                      src={previewImg}
+                      alt={displayName}
+                      className="w-full h-[72px] object-cover rounded-lg mb-1.5"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                        const fb = e.currentTarget.nextElementSibling;
+                        if (fb) fb.style.display = 'block';
+                      }}
+                    />
+                    <div style={{ display: 'none' }}>{renderWireframe(wfType)}</div>
+                  </>
                 ) : (
                   renderWireframe(wfType)
                 )}

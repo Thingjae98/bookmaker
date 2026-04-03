@@ -1160,6 +1160,44 @@ const targetContentCount = targetTotal - 2;
 - 에디터 갤러리 썸네일 클릭 모달에서 역할(앞표지/뒤표지/내지) + 레이아웃(템플릿) 동시 선택 가능
 - 향후 실제 템플릿 파라미터 목록을 API에서 가져와 모달에 동적으로 표시 가능
 
+---
+
+## 🖼️ 2026-04-04 — [버그 수정] 템플릿 썸네일 경로 오매핑 → 전부 와이어프레임 폴백
+
+### 문제
+에디터 인라인 편집 패널의 템플릿 선택 카드에서 실제 API 썸네일 이미지가 전혀 렌더링되지 않고 모두 Tailwind CSS 와이어프레임 폴백으로만 표시됨.
+
+### 원인
+코드에서 `t.thumbnailUrl || t.previewUrl || t.imageUrl || t.thumbUrl` 순서로 URL을 탐색했으나, SweetBook API의 실제 응답 스키마는 모든 썸네일을 `thumbnails` 중첩 객체 안에 담아 반환함.
+
+```json
+// API 실제 응답 구조
+{
+  "thumbnails": {
+    "layout": "https://cdn.sweetbook.com/...",
+    "baseLayerOdd": "https://...",
+    "baseLayerEven": "https://..."
+  }
+}
+```
+
+기존 flat field 경로는 모두 `undefined`를 반환 → `previewImg = falsy` → 와이어프레임 폴백 100% 발생.
+
+### 해결
+`renderTemplateSelector` 내 두 곳에서 URL 추출 우선순위를 아래 순서로 변경:
+
+1. `t.thumbnails?.layout`
+2. `t.thumbnails?.baseLayerOdd`
+3. `t.thumbnails?.baseLayerEven`
+4. `t.thumbnailUrl` / `t.previewUrl` / `t.imageUrl` / `t.thumbUrl` (기존 flat field 폴백)
+
+또한 `<img>` 태그에 `onError` 핸들러를 추가하여 URL이 있더라도 이미지 로드 실패 시 숨겨진 `<div>` 안의 와이어프레임을 `display: block`으로 전환하는 2단 폴백 구조를 구현.
+
+### 결과
+- 실제 API 썸네일 이미지가 템플릿 선택 카드에 정상 렌더링
+- 이미지 로드 실패 시 와이어프레임 자동 노출 (UX 회귀 없음)
+- `inferWireframeType(t)`는 `previewImg` 유무에 관계없이 항상 계산 (onError 폴백용)
+
 <!-- 새 기록 추가 시 아래 템플릿 복사 -->
 <!--
 ## 📅 YYYY-MM-DD — 제목
