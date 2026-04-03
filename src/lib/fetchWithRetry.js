@@ -18,15 +18,16 @@ export async function fetchWithRetry(url, options = {}, maxRetries = 3) {
     try {
       const res = await fetch(url, options);
 
-      // 5xx 서버 에러이고 아직 재시도 여유가 있으면 대기 후 재시도
-      if (res.status >= 500 && attempt < maxRetries - 1) {
+      // 5xx 서버 에러 또는 429(Too Many Requests)일 때만 재시도
+      // 400·401·403·404 등 4xx 클라이언트 에러는 재시도해도 동일하게 실패하므로 즉시 반환
+      if ((res.status >= 500 || res.status === 429) && attempt < maxRetries - 1) {
         const wait = 250 * Math.pow(2, attempt); // 250ms → 500ms → 1000ms
         console.warn(`[fetchWithRetry] ${res.status} 오류 (${url}) — ${wait}ms 후 재시도 (${attempt + 1}/${maxRetries})`);
         await sleep(wait);
         continue;
       }
 
-      // 2xx / 4xx: 그대로 반환 (4xx는 재시도 불필요)
+      // 2xx / 4xx(429 제외): 그대로 반환
       return res;
     } catch (err) {
       lastError = err;

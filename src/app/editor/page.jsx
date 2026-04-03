@@ -222,12 +222,22 @@ export default function EditorPage() {
       const name = fd.babyName || fd.childName || fd.heroName || fd.petName || fd.authorName || '';
       const title = name ? `${name}의 ${service.name}` : fd.bookTitle || fd.tripName || service.name;
 
+      // bookSpecUid 유효성 검증 — 실제 API UID는 'bs_' 접두사로 시작
+      // constants.js의 내부 폴백 키(SQUAREBOOK_HC 등)나 빈 값이 넘어오면 기본값으로 보정
+      const rawSpecUid = session?.bookSpecUid;
+      const bookSpecUid = rawSpecUid && rawSpecUid.startsWith('bs_') ? rawSpecUid : 'bs_6a8OUY';
+      if (!rawSpecUid || bookSpecUid !== rawSpecUid) {
+        addLog(`⚠️ bookSpecUid 보정: "${rawSpecUid || '(없음)'}" → "${bookSpecUid}"`);
+      } else {
+        addLog(`📐 판형 UID: ${bookSpecUid}`);
+      }
+
       // 1. 책 생성
       addLog(`📗 책 생성 중... (${title})`);
       const bookRes = await fetchWithRetry('/api/books', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, bookSpecUid: session.bookSpecUid, creationType: 'TEST', externalRef: `bookmaker-${Date.now()}` }),
+        body: JSON.stringify({ title, bookSpecUid, creationType: 'TEST', externalRef: `bookmaker-${Date.now()}` }),
       });
       const bookData = await bookRes.json();
       if (!bookData.success) throw new Error(bookData.message || '책 생성 실패');
