@@ -313,6 +313,8 @@ try {
 - [x] 에디터 갤러리 모달에서 사진별 레이아웃(템플릿) 선택 UI — 앞표지·내지 역할별 카드 그리드 구현, allTemplates 필터링, templateUid 즉시 반영
 - [x] 텍스트 입력 유무 기반 템플릿 동적 필터링 — 텍스트 있음→텍스트 포함 레이아웃만, 없음→이미지 전용 레이아웃만 실시간 노출 (인지 부하 최소화)
 - [x] 미니 와이어프레임 UI — API 미리보기 없을 때 cover/photo_text/text_only/blank/calendar/photo_only 6종 Tailwind CSS 와이어프레임 렌더링
+- [x] 모달 → 인라인 속성 패널(Inline Property Panel) 전환 — galleryModal state 제거, selectedIdx로 단순화, 액션 패널과 편집 패널 토글
+- [x] 내지 카운트 동적 연동 — MIN_CONTENT 하드코딩 제거, specPageMin(판형 API 기준) 3색 배지 표시
 
 ### P1 — 면접 전 개선
 - [x] 이미지 파일 직접 업로드 (Drag & Drop + Photos API) — 에디터 내 구현 완료

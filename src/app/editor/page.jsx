@@ -32,7 +32,7 @@ export default function EditorPage() {
   // ── 갤러리 state ─────────────────────────────────────────────
   // item shape: { id, file, previewUrl, role, title, text, date, templateUid, isLandscape, useSpread }
   const [gallery, setGallery]               = useState([]);
-  const [galleryModal, setGalleryModal]     = useState({ open: false, idx: null });
+  const [selectedIdx, setSelectedIdx]       = useState(null);   // 인라인 편집 패널 대상 인덱스
   const [galleryDragIdx, setGalleryDragIdx] = useState(null);
   const [galleryDropActive, setGalleryDropActive] = useState(false);
 
@@ -158,8 +158,7 @@ export default function EditorPage() {
       if (item?.previewUrl?.startsWith('blob:')) URL.revokeObjectURL(item.previewUrl);
       return prev.filter((_, i) => i !== idx);
     });
-    if (galleryModal.open && galleryModal.idx === idx)
-      setGalleryModal({ open: false, idx: null });
+    if (selectedIdx === idx) setSelectedIdx(null);
   };
 
   // 역할 지정 — 앞/뒤표지 중복 시 기존 항목 자동 해제
@@ -350,7 +349,7 @@ export default function EditorPage() {
           {/* ★ 자동 선택 — 전체 너비, 강조 디자인 */}
           <button
             type="button"
-            onClick={() => updateGalleryItem(galleryModal.idx, { templateUid: null })}
+            onClick={() => updateGalleryItem(selectedIdx, { templateUid: null })}
             className={`col-span-2 p-3 rounded-xl border-2 text-left transition-all flex items-center gap-3 ${
               !modalItem.templateUid
                 ? 'border-warm-600 bg-warm-50'
@@ -380,7 +379,7 @@ export default function EditorPage() {
               <button
                 key={t.templateUid}
                 type="button"
-                onClick={() => updateGalleryItem(galleryModal.idx, { templateUid: t.templateUid })}
+                onClick={() => updateGalleryItem(selectedIdx, { templateUid: t.templateUid })}
                 className={`p-2 rounded-xl border-2 text-left transition-all ${
                   isSelected
                     ? 'border-warm-600 bg-warm-50'
@@ -650,178 +649,18 @@ export default function EditorPage() {
       </div>
     );
 
-  const service     = SERVICE_TYPES[session.serviceType];
-  const modalItem   = galleryModal.open ? gallery[galleryModal.idx] : null;
-  const hasFrontElse = gallery.some((g, i) => g.role === 'front' && i !== galleryModal.idx);
-  const hasBackElse  = gallery.some((g, i) => g.role === 'back'  && i !== galleryModal.idx);
+  const service      = SERVICE_TYPES[session.serviceType];
+  // 인라인 편집 패널 대상 아이템 + 중복 방지용
+  const modalItem    = selectedIdx !== null ? gallery[selectedIdx] : null;
+  const hasFrontElse = gallery.some((g, i) => g.role === 'front' && i !== selectedIdx);
+  const hasBackElse  = gallery.some((g, i) => g.role === 'back'  && i !== selectedIdx);
+  // 선택된 판형의 실제 pageMin (내지 최소 수, 표지 제외)
+  const specPageMin  = BOOK_SPECS[session?.bookSpecUid]?.pageMin || 24;
 
   return (
     <div className="min-h-screen pb-20">
       <StepIndicator currentStep="editor" />
 
-      {/* ── 갤러리 모달 ─────────────────────────────────────────── */}
-      {galleryModal.open && modalItem && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: 'rgba(0,0,0,0.65)' }}
-          onClick={() => setGalleryModal({ open: false, idx: null })}
-        >
-          <div
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-md animate-fade-up overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* 헤더 */}
-            <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-ink-100">
-              <h2 className="font-display font-bold text-ink-900">페이지 구성 설정</h2>
-              <button
-                onClick={() => setGalleryModal({ open: false, idx: null })}
-                className="p-2 text-ink-400 hover:text-ink-700 rounded-lg hover:bg-ink-50"
-              >✕</button>
-            </div>
-
-            <div className="px-6 pt-4 pb-2 space-y-4 max-h-[70vh] overflow-y-auto">
-              {/* 미리보기 */}
-              <img
-                src={modalItem.previewUrl}
-                alt="미리보기"
-                className="w-full h-44 object-cover rounded-xl"
-              />
-
-              {/* 역할 지정 */}
-              <div>
-                <p className="text-sm font-bold text-ink-800 mb-2">이 사진의 역할</p>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { role: 'front',   label: '앞표지', icon: '📗', disabled: hasFrontElse },
-                    { role: 'back',    label: '뒤표지', icon: '📘', disabled: hasBackElse  },
-                    { role: 'content', label: '내지',   icon: '📄', disabled: false        },
-                  ].map(({ role, label, icon, disabled }) => (
-                    <button
-                      key={role}
-                      type="button"
-                      disabled={disabled}
-                      onClick={() =>
-                        assignGalleryRole(
-                          galleryModal.idx,
-                          modalItem.role === role ? null : role
-                        )
-                      }
-                      className={`py-3 rounded-xl border-2 text-sm font-medium transition-all flex flex-col items-center gap-1 ${
-                        modalItem.role === role
-                          ? 'border-warm-600 bg-warm-50 text-warm-800'
-                          : disabled
-                          ? 'border-ink-100 text-ink-300 bg-ink-50 cursor-not-allowed'
-                          : 'border-ink-200 text-ink-600 hover:border-ink-400'
-                      }`}
-                    >
-                      <span className="text-xl">{icon}</span>
-                      <span>{label}</span>
-                      {disabled && <span className="text-[10px] text-ink-300">이미 지정됨</span>}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* 앞표지 전용 — 표지 템플릿 선택 */}
-              {modalItem.role === 'front' && renderTemplateSelector('front')}
-
-              {/* 내지 전용 — 제목·날짜·텍스트 입력 */}
-              {modalItem.role === 'content' && (
-                <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-xs font-medium text-ink-700 mb-1">페이지 제목</label>
-                      <input
-                        type="text"
-                        className="input-field text-sm"
-                        placeholder="예) 첫 미소"
-                        value={modalItem.title}
-                        onChange={(e) =>
-                          updateGalleryItem(galleryModal.idx, { title: e.target.value })
-                        }
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-ink-700 mb-1">날짜</label>
-                      <input
-                        type="date"
-                        className="input-field text-sm"
-                        value={modalItem.date}
-                        onChange={(e) =>
-                          updateGalleryItem(galleryModal.idx, { date: e.target.value })
-                        }
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-ink-700 mb-1">
-                      텍스트
-                      <span className="ml-1 font-normal text-ink-400">(선택 — 입력 시 텍스트+사진 템플릿 적용)</span>
-                    </label>
-                    <textarea
-                      className="input-field min-h-[72px] text-sm"
-                      placeholder="이 페이지에 들어갈 텍스트를 입력하세요"
-                      value={modalItem.text}
-                      onChange={(e) =>
-                        updateGalleryItem(galleryModal.idx, { text: e.target.value })
-                      }
-                    />
-                    <p className={`text-xs mt-1 ${modalItem.text.trim() ? 'text-green-600' : 'text-ink-400'}`}>
-                      {modalItem.text.trim()
-                        ? `✓ 사진+텍스트 템플릿 적용 예정`
-                        : '이미지 전용 템플릿 적용 예정'}
-                    </p>
-                  </div>
-
-                  {/* 내지 템플릿 선택 — session.allTemplates 카드 그리드 */}
-                  {renderTemplateSelector('content')}
-
-                  {/* 양면(Spread) 분할 옵션 */}
-                  {modalItem.isLandscape && (
-                    <div className="p-3 bg-sky-50 border border-sky-200 rounded-xl">
-                      <label className="flex items-start gap-3 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={modalItem.useSpread}
-                          onChange={(e) =>
-                            updateGalleryItem(galleryModal.idx, { useSpread: e.target.checked })
-                          }
-                          className="mt-0.5 accent-sky-600"
-                        />
-                        <div>
-                          <p className="text-sm font-medium text-sky-900">↔ 양면(2p) 꽉 차게 배치</p>
-                          <p className="text-xs text-sky-600 mt-0.5">
-                            Canvas API로 좌/우 정밀 분할 → 연속된 2페이지에 펼침(Spread)으로 배치
-                          </p>
-                        </div>
-                      </label>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* 하단 버튼 */}
-            <div className="px-6 py-4 flex gap-2 border-t border-ink-100">
-              <button
-                type="button"
-                onClick={() => removeGalleryItem(galleryModal.idx)}
-                className="px-4 py-2 rounded-xl text-sm text-red-500 hover:text-red-700 hover:bg-red-50 border border-red-200 transition-all"
-              >
-                삭제
-              </button>
-              <button
-                type="button"
-                onClick={() => setGalleryModal({ open: false, idx: null })}
-                className="flex-1 py-2 rounded-xl text-sm font-bold text-white bg-warm-600 hover:bg-warm-800 transition-all"
-              >
-                확인
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       <div className="max-w-5xl mx-auto px-6">
         {/* 헤더 */}
@@ -866,9 +705,7 @@ export default function EditorPage() {
                 {frontItems[0] ? (
                   <div
                     className="relative h-20 rounded-xl overflow-hidden border-2 border-green-400 cursor-pointer"
-                    onClick={() =>
-                      setGalleryModal({ open: true, idx: gallery.indexOf(frontItems[0]) })
-                    }
+                    onClick={() => setSelectedIdx(gallery.indexOf(frontItems[0]))}
                   >
                     <img src={frontItems[0].previewUrl} alt="앞표지" className="w-full h-full object-cover" />
                     <div className="absolute top-1 left-1 bg-green-600 text-white text-[10px] px-1.5 py-0.5 rounded-md">앞표지</div>
@@ -885,11 +722,13 @@ export default function EditorPage() {
                 <div className="flex items-center justify-between mb-1">
                   <p className="text-xs font-bold text-ink-500">내지</p>
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                    contentItems.length >= MIN_CONTENT
+                    contentItems.length >= specPageMin
                       ? 'bg-green-100 text-green-700'
+                      : contentItems.length >= MIN_CONTENT
+                      ? 'bg-blue-100 text-blue-700'
                       : 'bg-yellow-100 text-yellow-700'
                   }`}>
-                    {contentItems.length}/{MIN_CONTENT}장
+                    현재 {contentItems.length} / 최소 {specPageMin}장
                   </span>
                 </div>
                 <div className="space-y-1 max-h-64 overflow-y-auto pr-1">
@@ -897,9 +736,7 @@ export default function EditorPage() {
                     <div
                       key={item.id}
                       className="flex items-center gap-2 p-2 bg-ink-50 rounded-lg cursor-pointer hover:bg-warm-50 transition-colors group"
-                      onClick={() =>
-                        setGalleryModal({ open: true, idx: gallery.indexOf(item) })
-                      }
+                      onClick={() => setSelectedIdx(gallery.indexOf(item))}
                     >
                       <span className="text-[10px] text-ink-400 w-5 shrink-0">#{i + 1}</span>
                       <img
@@ -938,9 +775,7 @@ export default function EditorPage() {
                 {backItems[0] ? (
                   <div
                     className="relative h-20 rounded-xl overflow-hidden border-2 border-blue-400 cursor-pointer"
-                    onClick={() =>
-                      setGalleryModal({ open: true, idx: gallery.indexOf(backItems[0]) })
-                    }
+                    onClick={() => setSelectedIdx(gallery.indexOf(backItems[0]))}
                   >
                     <img src={backItems[0].previewUrl} alt="뒤표지" className="w-full h-full object-cover" />
                     <div className="absolute top-1 left-1 bg-blue-600 text-white text-[10px] px-1.5 py-0.5 rounded-md">뒤표지</div>
@@ -965,7 +800,7 @@ export default function EditorPage() {
                     {frontItems.length !== 1 && <li>• 앞표지 1장 지정 필요</li>}
                     {backItems.length !== 1  && <li>• 뒤표지 1장 지정 필요</li>}
                     {contentItems.length < MIN_CONTENT && (
-                      <li>• 내지 {MIN_CONTENT - contentItems.length}장 더 필요</li>
+                      <li>• 내지 최소 {MIN_CONTENT}장 필요 (현재 {contentItems.length}장, {MIN_CONTENT - contentItems.length}장 부족)</li>
                     )}
                   </ul>
                 )}
@@ -1039,7 +874,7 @@ export default function EditorPage() {
                       onDragStart={(e) => handleGalleryDragStart(e, idx)}
                       onDragOver={(e) => handleGalleryDragOver(e, idx)}
                       onDragEnd={handleGalleryDragEnd}
-                      onClick={() => setGalleryModal({ open: true, idx })}
+                      onClick={() => setSelectedIdx(idx)}
                       className={`relative aspect-square rounded-xl overflow-hidden cursor-pointer border-2 transition-all group select-none ${
                         galleryDragIdx === idx
                           ? 'opacity-40 scale-95'
@@ -1126,54 +961,229 @@ export default function EditorPage() {
               </div>
             )}
 
-            {/* 책 생성 액션 */}
-            <div className="bg-white rounded-2xl border border-ink-100 p-6">
-              <div className="mb-4">
-                <h3 className="font-display font-bold text-ink-900">
-                  {bookCreated ? '✅ 책이 생성되었습니다!' : '최종 생성 및 주문'}
-                </h3>
-                <p className="text-sm text-ink-400 mt-1">
-                  {bookCreated
-                    ? `BookUID: ${bookUid} — 아래 버튼으로 다음 단계로 이동하세요`
-                    : isReady
-                    ? `앞표지 1장 · 내지 ${contentItems.length}장 · 뒤표지 1장 — 구성 완료`
-                    : `앞표지·뒤표지 각 1장, 내지 ${MIN_CONTENT}장 이상 지정 후 생성 가능`}
-                </p>
-              </div>
-
-              <div className="flex gap-3">
-                <Link
-                  href={`/create/${session?.serviceType}`}
-                  className="btn-secondary flex-1 text-center"
-                >
-                  뒤로
-                </Link>
-
-                {!bookCreated ? (
+            {/* ── 인라인 편집 패널 (사진 선택 시) 또는 책 생성 액션 (미선택 시) ── */}
+            {selectedIdx !== null && modalItem ? (
+              /* 인라인 속성 편집 패널 — 모달 대체 */
+              <div className="bg-white rounded-2xl border-2 border-warm-200 shadow-md animate-fade-up">
+                {/* 패널 헤더 */}
+                <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-ink-100">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">✏️</span>
+                    <h3 className="font-display font-bold text-ink-900">사진 편집</h3>
+                    <span className="text-sm text-ink-400 font-normal">
+                      #{selectedIdx + 1} / {gallery.length}
+                    </span>
+                  </div>
                   <button
-                    onClick={handleCreateBook}
-                    disabled={loading || !isReady}
-                    className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-50"
+                    type="button"
+                    onClick={() => setSelectedIdx(null)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-ink-500 hover:text-ink-800 rounded-lg hover:bg-ink-50 border border-ink-200 transition-all"
                   >
-                    {loading ? (
-                      <>
-                        <span className="spinner" />
-                        {uploadingPhoto ? '사진 업로드 중...' : 'API 호출 중...'}
-                      </>
-                    ) : (
-                      <>📗 최종 생성 및 주문</>
-                    )}
+                    확인 · 닫기 ✕
                   </button>
-                ) : (
+                </div>
+
+                {/* 패널 본문 — 2열 그리드 */}
+                <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                  {/* 좌: 사진 미리보기 + 역할 선택 */}
+                  <div className="space-y-4">
+                    <img
+                      src={modalItem.previewUrl}
+                      alt="미리보기"
+                      className="w-full h-44 object-cover rounded-xl"
+                    />
+
+                    {/* 역할 지정 */}
+                    <div>
+                      <p className="text-xs font-bold text-ink-700 mb-2">이 사진의 역할</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[
+                          { role: 'front',   label: '앞표지', icon: '📗', disabled: hasFrontElse },
+                          { role: 'back',    label: '뒤표지', icon: '📘', disabled: hasBackElse  },
+                          { role: 'content', label: '내지',   icon: '📄', disabled: false        },
+                        ].map(({ role, label, icon, disabled }) => (
+                          <button
+                            key={role}
+                            type="button"
+                            disabled={disabled}
+                            onClick={() => assignGalleryRole(selectedIdx, modalItem.role === role ? null : role)}
+                            className={`py-3 rounded-xl border-2 text-sm font-medium transition-all flex flex-col items-center gap-1 ${
+                              modalItem.role === role
+                                ? 'border-warm-600 bg-warm-50 text-warm-800'
+                                : disabled
+                                ? 'border-ink-100 text-ink-300 bg-ink-50 cursor-not-allowed'
+                                : 'border-ink-200 text-ink-600 hover:border-ink-400'
+                            }`}
+                          >
+                            <span className="text-xl">{icon}</span>
+                            <span>{label}</span>
+                            {disabled && <span className="text-[10px] text-ink-300">이미 지정됨</span>}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* 앞표지 전용 — 표지 템플릿 선택 */}
+                    {modalItem.role === 'front' && renderTemplateSelector('front')}
+                  </div>
+
+                  {/* 우: 내지 전용 편집 컨트롤 */}
+                  {modalItem.role === 'content' ? (
+                    <div className="space-y-4 overflow-y-auto max-h-[480px] pr-1">
+                      {/* 제목 + 날짜 */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-xs font-medium text-ink-700 mb-1">페이지 제목</label>
+                          <input
+                            type="text"
+                            className="input-field text-sm"
+                            placeholder="예) 첫 미소"
+                            value={modalItem.title}
+                            onChange={(e) => updateGalleryItem(selectedIdx, { title: e.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-ink-700 mb-1">날짜</label>
+                          <input
+                            type="date"
+                            className="input-field text-sm"
+                            value={modalItem.date}
+                            onChange={(e) => updateGalleryItem(selectedIdx, { date: e.target.value })}
+                          />
+                        </div>
+                      </div>
+
+                      {/* 텍스트 */}
+                      <div>
+                        <label className="block text-xs font-medium text-ink-700 mb-1">
+                          텍스트
+                          <span className="ml-1 font-normal text-ink-400">(선택 — 입력 시 텍스트+사진 템플릿 적용)</span>
+                        </label>
+                        <textarea
+                          className="input-field min-h-[80px] text-sm"
+                          placeholder="이 페이지에 들어갈 텍스트를 입력하세요"
+                          value={modalItem.text}
+                          onChange={(e) => updateGalleryItem(selectedIdx, { text: e.target.value })}
+                        />
+                        <p className={`text-xs mt-1 ${modalItem.text.trim() ? 'text-green-600' : 'text-ink-400'}`}>
+                          {modalItem.text.trim() ? '✓ 사진+텍스트 템플릿 적용 예정' : '이미지 전용 템플릿 적용 예정'}
+                        </p>
+                      </div>
+
+                      {/* 내지 템플릿 선택 */}
+                      {renderTemplateSelector('content')}
+
+                      {/* 양면(Spread) 분할 옵션 */}
+                      {modalItem.isLandscape && (
+                        <div className="p-3 bg-sky-50 border border-sky-200 rounded-xl">
+                          <label className="flex items-start gap-3 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={modalItem.useSpread}
+                              onChange={(e) => updateGalleryItem(selectedIdx, { useSpread: e.target.checked })}
+                              className="mt-0.5 accent-sky-600"
+                            />
+                            <div>
+                              <p className="text-sm font-medium text-sky-900">↔ 양면(2p) 꽉 차게 배치</p>
+                              <p className="text-xs text-sky-600 mt-0.5">
+                                Canvas API로 좌/우 정밀 분할 → 연속된 2페이지에 펼침(Spread)으로 배치
+                              </p>
+                            </div>
+                          </label>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    /* 내지가 아닐 때 오른쪽 컬럼: 역할 선택 안내 */
+                    <div className="flex flex-col items-center justify-center h-full text-center text-ink-400 py-8">
+                      {!modalItem.role ? (
+                        <>
+                          <p className="text-3xl mb-3">👈</p>
+                          <p className="text-sm font-medium text-ink-600">왼쪽에서 역할을 지정하세요</p>
+                          <p className="text-xs mt-1">앞표지·뒤표지·내지 중 하나를 선택하면<br/>추가 설정 옵션이 나타납니다</p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-3xl mb-3">{modalItem.role === 'front' ? '📗' : '📘'}</p>
+                          <p className="text-sm font-medium text-ink-600">
+                            {modalItem.role === 'front' ? '앞표지' : '뒤표지'}로 지정됨
+                          </p>
+                          <p className="text-xs mt-1">왼쪽 표지 템플릿을 확인하세요</p>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* 패널 하단 — 삭제 + 닫기 */}
+                <div className="px-6 py-4 flex gap-3 border-t border-ink-100">
                   <button
-                    onClick={() => router.push('/preview')}
-                    className="btn-primary flex-1"
+                    type="button"
+                    onClick={() => removeGalleryItem(selectedIdx)}
+                    className="px-4 py-2 rounded-xl text-sm text-red-500 hover:text-red-700 hover:bg-red-50 border border-red-200 transition-all"
                   >
-                    다음: 미리보기 &amp; 주문 →
+                    이 사진 삭제
                   </button>
-                )}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedIdx(null)}
+                    className="flex-1 py-2 rounded-xl text-sm font-bold text-white bg-warm-600 hover:bg-warm-800 transition-all"
+                  >
+                    확인 · 편집 완료
+                  </button>
+                </div>
               </div>
-            </div>
+            ) : (
+              /* 책 생성 액션 패널 */
+              <div className="bg-white rounded-2xl border border-ink-100 p-6">
+                <div className="mb-4">
+                  <h3 className="font-display font-bold text-ink-900">
+                    {bookCreated ? '✅ 책이 생성되었습니다!' : '최종 생성 및 주문'}
+                  </h3>
+                  <p className="text-sm text-ink-400 mt-1">
+                    {bookCreated
+                      ? `BookUID: ${bookUid} — 아래 버튼으로 다음 단계로 이동하세요`
+                      : isReady
+                      ? `앞표지 1장 · 내지 ${contentItems.length}장(최소 ${specPageMin}장 자동 패딩) · 뒤표지 1장 — 구성 완료`
+                      : `앞표지·뒤표지 각 1장, 내지 ${MIN_CONTENT}장 이상 지정 후 생성 가능`}
+                  </p>
+                </div>
+
+                <div className="flex gap-3">
+                  <Link
+                    href={`/create/${session?.serviceType}`}
+                    className="btn-secondary flex-1 text-center"
+                  >
+                    뒤로
+                  </Link>
+
+                  {!bookCreated ? (
+                    <button
+                      onClick={handleCreateBook}
+                      disabled={loading || !isReady}
+                      className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      {loading ? (
+                        <>
+                          <span className="spinner" />
+                          {uploadingPhoto ? '사진 업로드 중...' : 'API 호출 중...'}
+                        </>
+                      ) : (
+                        <>📗 최종 생성 및 주문</>
+                      )}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => router.push('/preview')}
+                      className="btn-primary flex-1"
+                    >
+                      다음: 미리보기 &amp; 주문 →
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
 
           </div>
         </div>
