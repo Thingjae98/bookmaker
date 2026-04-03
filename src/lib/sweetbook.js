@@ -126,28 +126,33 @@ async function sweetFetch(path, params = {}) {
 }
 
 export async function listTemplates({ bookSpecUid, category, templateKind, limit = 50, offset = 0 } = {}) {
-  const data = await sweetFetch('/templates', { bookSpecUid, category, templateKind, limit, offset });
-  // SweetBook API는 { items: [...] } 형태로 반환 — 프론트가 배열을 기대하므로 items 추출
-  return ok(data?.items || data);
+  const json = await sweetFetch('/templates', { bookSpecUid, category, templateKind, limit, offset });
+  // SweetBook API 실제 응답: { success, message, data: { templates: [...] } }
+  const items = json?.data?.templates || (Array.isArray(json?.data) ? json.data : []);
+  return ok(items);
 }
 
 export async function getTemplate(templateUid) {
-  const data = await sweetFetch(`/templates/${templateUid}`);
-  return ok(data);
+  const json = await sweetFetch(`/templates/${templateUid}`);
+  return ok(json?.data || json);
 }
 
 export async function listTemplateCategories() {
-  const data = await sweetFetch('/template-categories');
-  return ok(data?.items || data);
+  const json = await sweetFetch('/template-categories');
+  const items = json?.data?.templates || json?.data?.items || (Array.isArray(json?.data) ? json.data : []);
+  return ok(items);
 }
 
 export async function listBookSpecs() {
-  const data = await sweetFetch('/book-specs');
-  // SweetBook API는 { items: [...] } 형태로 반환 — 프론트가 배열을 기대하므로 items 추출
-  return ok(data?.items || data);
+  const json = await sweetFetch('/book-specs');
+  // SweetBook API 실제 응답: { success, message, data: [...] }
+  // name이 비어있는 플레이스홀더 spec(bs_ 접두사 UID)은 필터링
+  const allSpecs = Array.isArray(json?.data) ? json.data : [];
+  const validSpecs = allSpecs.filter((s) => s.name && s.pageMin > 0);
+  return ok(validSpecs.length > 0 ? validSpecs : allSpecs);
 }
 
 export async function getBookSpec(bookSpecUid) {
-  const data = await sweetFetch(`/book-specs/${bookSpecUid}`);
-  return ok(data);
+  const json = await sweetFetch(`/book-specs/${bookSpecUid}`);
+  return ok(json?.data || json);
 }

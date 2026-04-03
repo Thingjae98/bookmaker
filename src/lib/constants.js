@@ -8,7 +8,7 @@ export const SERVICE_TYPES = {
     icon: '👶',
     color: 'from-rose-100 to-pink-50',
     accentColor: '#E8837C',
-    recommendedSpec: 'bs_6a8OUY',
+    recommendedSpec: 'SQUAREBOOK_HC',
     templateCategory: 'baby',
     fields: [
       { key: 'babyName', label: '아이 이름', type: 'text', placeholder: '예) 하은이', required: true },
@@ -25,7 +25,7 @@ export const SERVICE_TYPES = {
     icon: '🏫',
     color: 'from-yellow-100 to-amber-50',
     accentColor: '#E5A832',
-    recommendedSpec: 'bs_6a8OUY',
+    recommendedSpec: 'SQUAREBOOK_HC',
     templateCategory: 'notice',
     fields: [
       { key: 'childName', label: '원아 이름', type: 'text', placeholder: '예) 김하은', required: true },
@@ -43,7 +43,7 @@ export const SERVICE_TYPES = {
     icon: '🧚',
     color: 'from-violet-100 to-purple-50',
     accentColor: '#8B5CF6',
-    recommendedSpec: 'bs_6a8OUY',
+    recommendedSpec: 'SQUAREBOOK_HC',
     templateCategory: 'etc',
     fields: [
       { key: 'heroName', label: '주인공 이름', type: 'text', placeholder: '예) 하은이', required: true },
@@ -61,7 +61,7 @@ export const SERVICE_TYPES = {
     icon: '✈️',
     color: 'from-sky-100 to-blue-50',
     accentColor: '#3B82F6',
-    recommendedSpec: 'bs_6a8OUY',
+    recommendedSpec: 'SQUAREBOOK_HC',
     templateCategory: 'travel',
     fields: [
       { key: 'tripName', label: '여행 제목', type: 'text', placeholder: '예) 2025 제주도 가족 여행', required: true },
@@ -79,7 +79,7 @@ export const SERVICE_TYPES = {
     icon: '📖',
     color: 'from-emerald-100 to-green-50',
     accentColor: '#059669',
-    recommendedSpec: 'bs_6a8OUY',
+    recommendedSpec: 'SQUAREBOOK_HC',
     templateCategory: 'etc',
     fields: [
       { key: 'bookTitle', label: '책 제목', type: 'text', placeholder: '예) 나의 첫 에세이', required: true },
@@ -96,7 +96,7 @@ export const SERVICE_TYPES = {
     icon: '🐾',
     color: 'from-orange-100 to-amber-50',
     accentColor: '#EA580C',
-    recommendedSpec: 'bs_6a8OUY',
+    recommendedSpec: 'SQUAREBOOK_HC',
     templateCategory: 'album',
     fields: [
       { key: 'petName', label: '반려동물 이름', type: 'text', placeholder: '예) 뽀삐', required: true },
@@ -108,40 +108,9 @@ export const SERVICE_TYPES = {
   },
 };
 
-// 판형 정보 — 실제 SweetBook API UID 기준 (GET /book-specs 응답값)
+// 판형 정보 — 실제 SweetBook API UID 기준 (GET /book-specs 실제 응답값)
+// bs_6a8OUY / bs_3EzPkz / bs_518IVG 는 빈 플레이스홀더로 API가 책 생성을 거부함 (400)
 export const BOOK_SPECS = {
-  // 실제 API UID
-  'bs_6a8OUY': {
-    uid: 'bs_6a8OUY',
-    name: '정방형 하드커버',
-    size: '243×248mm',
-    cover: '하드커버',
-    binding: 'PUR 무선철',
-    pages: '24~130p',
-    pageIncrement: 2,
-    description: '가장 범용적인 판형. 앨범, 일기장, 졸업앨범 등 다양한 용도에 적합합니다.',
-  },
-  'bs_3EzPkz': {
-    uid: 'bs_3EzPkz',
-    name: 'A4 소프트커버 포토북',
-    size: '210×297mm',
-    cover: '소프트커버',
-    binding: '무선철',
-    pages: '-',
-    pageIncrement: 2,
-    description: 'A4 사이즈 소프트커버. 사진과 텍스트를 넉넉하게 담을 수 있는 포토북입니다.',
-  },
-  'bs_518IVG': {
-    uid: 'bs_518IVG',
-    name: 'A5 소프트커버 포토북',
-    size: '148×210mm',
-    cover: '소프트커버',
-    binding: '무선철',
-    pages: '-',
-    pageIncrement: 2,
-    description: 'A5 사이즈 소프트커버. 가볍고 휴대하기 편한 아담한 포토북입니다.',
-  },
-  // API 미응답 시 폴백 (내부 식별자)
   SQUAREBOOK_HC: {
     uid: 'SQUAREBOOK_HC',
     name: '정방형 하드커버',
@@ -152,38 +121,33 @@ export const BOOK_SPECS = {
     pageIncrement: 2,
     description: '가장 범용적인 판형. 앨범, 일기장, 졸업앨범 등 다양한 용도에 적합합니다.',
   },
-  LAYFLAT_HC: {
-    uid: 'LAYFLAT_HC',
-    name: '레이플랫북',
-    size: '243×248mm',
-    cover: '하드커버',
-    binding: '레이플랫',
-    pages: '16~46p',
+  PHOTOBOOK_A4_SC: {
+    uid: 'PHOTOBOOK_A4_SC',
+    name: 'A4 소프트커버 포토북',
+    size: '210×297mm',
+    cover: '소프트커버',
+    binding: 'PUR 무선철',
+    pages: '24~130p',
     pageIncrement: 2,
-    description: '180도 완전 펼침. 웨딩 앨범, 사진집에 적합합니다.',
+    description: 'A4 사이즈 소프트커버. 사진과 텍스트를 넉넉하게 담을 수 있는 포토북입니다.',
   },
-  SLIMALBUM_HC: {
-    uid: 'SLIMALBUM_HC',
-    name: '슬림앨범',
-    size: '243×248mm',
-    cover: '하드커버',
-    binding: '슬림앨범',
-    pages: '20~30p',
+  PHOTOBOOK_A5_SC: {
+    uid: 'PHOTOBOOK_A5_SC',
+    name: 'A5 소프트커버 포토북',
+    size: '148×210mm',
+    cover: '소프트커버',
+    binding: 'PUR 무선철',
+    pages: '50~200p',
     pageIncrement: 2,
-    description: '간결한 분량. 선물용, 소규모 앨범에 적합합니다.',
+    description: 'A5 사이즈 소프트커버. 가볍고 휴대하기 편한 아담한 포토북입니다.',
   },
 };
 
 // 판형 UID → 사용자 친화적 한글 이름 매핑
 export const BOOK_SPEC_LABELS = {
-  // 실제 API UID
-  'bs_6a8OUY': '정방형 하드커버 (243×248mm)',
-  'bs_3EzPkz': 'A4 소프트커버 포토북 (210×297mm)',
-  'bs_518IVG': 'A5 소프트커버 포토북 (148×210mm)',
-  // 폴백 내부 식별자
   SQUAREBOOK_HC: '정방형 하드커버 (243×248mm)',
-  LAYFLAT_HC: '웨딩/사진집 레이플랫 (243×248mm)',
-  SLIMALBUM_HC: '슬림 앨범 하드커버 (243×248mm)',
+  PHOTOBOOK_A4_SC: 'A4 소프트커버 포토북 (210×297mm)',
+  PHOTOBOOK_A5_SC: 'A5 소프트커버 포토북 (148×210mm)',
 };
 
 // 주문 상태 매핑

@@ -13,14 +13,18 @@ import StepIndicator from '@/components/StepIndicator';
 import { toast } from '@/lib/toast';
 import { fetchWithRetry } from '@/lib/fetchWithRetry';
 
-// ─── 템플릿 상수 ────────────────────────────────────────────────
-const COVER_TEMPLATE    = 'tpl_F8d15af9fd'; // 앞표지
-const TPL_TEXT_IMAGE    = 'cnH0Ud1nl1f9';   // 내지: 사진+텍스트
-const TPL_IMAGE_ONLY    = '6dJ0Qy6ZmXej';   // 내지: 이미지 전용
+// ─── 템플릿 상수 (SQUAREBOOK_HC 기준 실제 검증된 UID) ─────────
+// coverPhoto+title+dateRange / photo1+date+title+diaryText / date+title+diaryText
+const COVER_TEMPLATE = '79yjMH3qRPly'; // 표지: { coverPhoto, title, dateRange }
+const TPL_WITH_PHOTO = '3FhSEhJ94c0T'; // 내지(사진): { photo1, date, title, diaryText }
+const TPL_TEXT_ONLY  = 'vHA59XPPKqak'; // 내지(텍스트): { date, title, diaryText }
+// 하위 호환: 이전 상수명 유지
+const TPL_TEXT_IMAGE = TPL_WITH_PHOTO;
+const TPL_IMAGE_ONLY = TPL_WITH_PHOTO;
 
 // ─── 유효성 임계값 ─────────────────────────────────────────────
 const MIN_CONTENT = 8;   // [최종 생성] 버튼 활성화 최소 내지 수 (UI)
-const API_MIN     = 20;  // SweetBook API 최종화 최소 페이지 수 (자동 패딩)
+const API_MIN     = 25;  // SQUAREBOOK_HC 최소 24페이지 + 여유 1 (자동 패딩)
 
 export default function EditorPage() {
   const router = useRouter();
@@ -225,38 +229,22 @@ export default function EditorPage() {
         ? `${name}의 ${service.name}`
         : fd.bookTitle || fd.tripName || service.name;
 
-      // bookSpecUid 검증 — 'bs_' 접두사가 없으면 내부 폴백 키이므로 기본값으로 보정
+      // bookSpecUid 검증 — API에서 실제로 책 생성 가능한 UID인지 확인 후 보정
+      // bs_ 접두사 UID(bs_6a8OUY 등)는 빈 플레이스홀더로 API가 400 반환 — 반드시 내부 키(SQUAREBOOK_HC 등) 사용
+      const VALID_SPEC_UIDS = ['SQUAREBOOK_HC', 'PHOTOBOOK_A4_SC', 'PHOTOBOOK_A5_SC'];
       const rawSpecUid  = session?.bookSpecUid;
-      const bookSpecUid = rawSpecUid && rawSpecUid.startsWith('bs_') ? rawSpecUid : 'bs_6a8OUY';
+      const bookSpecUid = VALID_SPEC_UIDS.includes(rawSpecUid) ? rawSpecUid : 'SQUAREBOOK_HC';
       if (bookSpecUid !== rawSpecUid)
         addLog(`⚠️ bookSpecUid 보정: "${rawSpecUid || '(없음)'}" → "${bookSpecUid}"`);
       addLog(`📐 판형: ${BOOK_SPEC_LABELS[bookSpecUid] || bookSpecUid}`);
 
-      // ── 동적 템플릿 UID 조회 — bookSpecUid 호환 보장 ─────────────
-      addLog('🔍 사용 가능한 템플릿 조회 중...');
-      let dynamicCoverTpl   = COVER_TEMPLATE;
-      let dynamicImageOnly  = TPL_IMAGE_ONLY;
-      let dynamicTextImage  = TPL_TEXT_IMAGE;
-      try {
-        const tplRes  = await fetch(`/api/templates?bookSpecUid=${bookSpecUid}&limit=50`);
-        const tplData = await tplRes.json();
-        const avail   = Array.isArray(tplData?.data) ? tplData.data : [];
-        if (avail.length > 0) {
-          const coverTpl   = avail.find(t => (t.templateKind || '').toLowerCase().includes('cover'));
-          const contentTpl = avail.find(t => (t.templateKind || '').toLowerCase().includes('content'));
-          const textTpl    = avail.find(t =>
-            (t.templateKind || '').toLowerCase().includes('content') &&
-            (t.name || '').toLowerCase().includes('text')
-          );
-          if (coverTpl)   { dynamicCoverTpl  = coverTpl.templateUid;   addLog(`✅ 커버 템플릿: ${dynamicCoverTpl}`); }
-          if (contentTpl) { dynamicImageOnly = contentTpl.templateUid; addLog(`✅ 내지 템플릿: ${dynamicImageOnly}`); }
-          if (textTpl)    { dynamicTextImage = textTpl.templateUid;    addLog(`✅ 텍스트 내지 템플릿: ${dynamicTextImage}`); }
-        } else {
-          addLog('⚠️ 템플릿 API 미응답 — 하드코딩 폴백 사용');
-        }
-      } catch (tplErr) {
-        addLog(`⚠️ 템플릿 조회 실패(${tplErr.message}) — 하드코딩 폴백 사용`);
-      }
+      // ── 검증된 하드코딩 템플릿 UID 사용 ─────────────────────────
+      // 각 템플릿의 파라미터 이름이 다르므로 직접 find()로 선택하면 잘못된 파라미터 전달 위험
+      // 실제 API로 검증된 UID를 고정 사용. SQUAREBOOK_HC 전용.
+      const dynamicCoverTpl  = COVER_TEMPLATE; // 79yjMH3qRPly: { coverPhoto, title, dateRange }
+      const dynamicImageOnly = TPL_WITH_PHOTO; // 3FhSEhJ94c0T: { photo1, date, title, diaryText }
+      const dynamicTextImage = TPL_TEXT_ONLY;  // vHA59XPPKqak: { date, title, diaryText }
+      addLog(`📐 템플릿 — 표지: ${dynamicCoverTpl} / 내지(사진): ${dynamicImageOnly} / 내지(텍스트): ${dynamicTextImage}`);
 
       // ── STEP 1: 책 생성 ────────────────────────────────────────
       addLog(`📗 책 생성 중... (${title})`);
@@ -366,14 +354,18 @@ export default function EditorPage() {
       addLog(`📄 내지 ${paddedPages.length}페이지 추가 중...`);
       for (let i = 0; i < paddedPages.length; i++) {
         const page    = paddedPages[i];
-        const hasText = !!(page.text || '').trim();
-        const tplUid  = page.templateUid || (hasText ? dynamicTextImage : dynamicImageOnly);
+        // 사진 유무로 템플릿 분기:
+        // - 사진 있음 → TPL_WITH_PHOTO (photo1 파라미터 사용)
+        // - 텍스트만  → TPL_TEXT_ONLY  (photo1 불필요)
+        const hasImage = !!(page.imageUrl);
+        const tplUid  = page.templateUid || (hasImage ? dynamicImageOnly : dynamicTextImage);
         const params  = {
           date:      page.date  || new Date().toISOString().slice(0, 10),
           title:     page.title || `페이지 ${i + 1}`,
           diaryText: page.text  || '',
         };
-        if (page.imageUrl) params.diaryPhoto = page.imageUrl;
+        // 실제 API 파라미터명: photo1 (diaryPhoto 아님)
+        if (page.imageUrl) params.photo1 = page.imageUrl;
 
         const r = await fetch(`/api/books/${uid}/contents`, {
           method:  'POST',
@@ -394,7 +386,7 @@ export default function EditorPage() {
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
           templateUid:  dynamicImageOnly,
-          parameters:   { date: new Date().toISOString().slice(0, 10), title: '뒤표지', diaryText: '', diaryPhoto: coverBackUrl },
+          parameters:   { date: new Date().toISOString().slice(0, 10), title: '뒤표지', diaryText: '', photo1: coverBackUrl },
           breakBefore:  'page',
         }),
       });
