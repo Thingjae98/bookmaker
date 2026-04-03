@@ -232,6 +232,32 @@ export default function EditorPage() {
         addLog(`⚠️ bookSpecUid 보정: "${rawSpecUid || '(없음)'}" → "${bookSpecUid}"`);
       addLog(`📐 판형: ${BOOK_SPEC_LABELS[bookSpecUid] || bookSpecUid}`);
 
+      // ── 동적 템플릿 UID 조회 — bookSpecUid 호환 보장 ─────────────
+      addLog('🔍 사용 가능한 템플릿 조회 중...');
+      let dynamicCoverTpl   = COVER_TEMPLATE;
+      let dynamicImageOnly  = TPL_IMAGE_ONLY;
+      let dynamicTextImage  = TPL_TEXT_IMAGE;
+      try {
+        const tplRes  = await fetch(`/api/templates?bookSpecUid=${bookSpecUid}&limit=50`);
+        const tplData = await tplRes.json();
+        const avail   = Array.isArray(tplData?.data) ? tplData.data : [];
+        if (avail.length > 0) {
+          const coverTpl   = avail.find(t => (t.templateKind || '').toLowerCase().includes('cover'));
+          const contentTpl = avail.find(t => (t.templateKind || '').toLowerCase().includes('content'));
+          const textTpl    = avail.find(t =>
+            (t.templateKind || '').toLowerCase().includes('content') &&
+            (t.name || '').toLowerCase().includes('text')
+          );
+          if (coverTpl)   { dynamicCoverTpl  = coverTpl.templateUid;   addLog(`✅ 커버 템플릿: ${dynamicCoverTpl}`); }
+          if (contentTpl) { dynamicImageOnly = contentTpl.templateUid; addLog(`✅ 내지 템플릿: ${dynamicImageOnly}`); }
+          if (textTpl)    { dynamicTextImage = textTpl.templateUid;    addLog(`✅ 텍스트 내지 템플릿: ${dynamicTextImage}`); }
+        } else {
+          addLog('⚠️ 템플릿 API 미응답 — 하드코딩 폴백 사용');
+        }
+      } catch (tplErr) {
+        addLog(`⚠️ 템플릿 조회 실패(${tplErr.message}) — 하드코딩 폴백 사용`);
+      }
+
       // ── STEP 1: 책 생성 ────────────────────────────────────────
       addLog(`📗 책 생성 중... (${title})`);
       const bookRes  = await fetchWithRetry('/api/books', {
@@ -296,7 +322,7 @@ export default function EditorPage() {
             const leftUrl    = await uploadFile(leftFile,  '양면-좌');
             const rightUrl   = await uploadFile(rightFile, '양면-우');
             contentPageData.push({ imageUrl: leftUrl,  text: item.text,  title: item.title, date: item.date, templateUid: item.templateUid });
-            contentPageData.push({ imageUrl: rightUrl, text: '',          title: '',         date: item.date, templateUid: TPL_IMAGE_ONLY });
+            contentPageData.push({ imageUrl: rightUrl, text: '',          title: '',         date: item.date, templateUid: dynamicImageOnly });
             addLog('✅ 양면 분할 → 2페이지');
           } catch (e) {
             addLog(`⚠️ 양면 분할 실패(${e.message}) — 원본 단일 업로드`);
@@ -323,7 +349,7 @@ export default function EditorPage() {
         addLog(`📋 API 최소 ${API_MIN}p 충족 위해 ${paddedPages.length - contentPageData.length}페이지 패딩`);
 
       // ── STEP 3: 앞표지 추가 ────────────────────────────────────
-      const coverTplUid = session.coverTemplateUid || COVER_TEMPLATE;
+      const coverTplUid = session.coverTemplateUid || dynamicCoverTpl;
       addLog(`🎨 앞표지 추가 중... (템플릿: ${coverTplUid})`);
       const dateRange = fd.period || fd.semester
         ? `${fd.year || new Date().getFullYear()}년 ${fd.semester || fd.period}`
@@ -341,7 +367,7 @@ export default function EditorPage() {
       for (let i = 0; i < paddedPages.length; i++) {
         const page    = paddedPages[i];
         const hasText = !!(page.text || '').trim();
-        const tplUid  = page.templateUid || (hasText ? TPL_TEXT_IMAGE : TPL_IMAGE_ONLY);
+        const tplUid  = page.templateUid || (hasText ? dynamicTextImage : dynamicImageOnly);
         const params  = {
           date:      page.date  || new Date().toISOString().slice(0, 10),
           title:     page.title || `페이지 ${i + 1}`,
@@ -367,7 +393,7 @@ export default function EditorPage() {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
-          templateUid:  TPL_IMAGE_ONLY,
+          templateUid:  dynamicImageOnly,
           parameters:   { date: new Date().toISOString().slice(0, 10), title: '뒤표지', diaryText: '', diaryPhoto: coverBackUrl },
           breakBefore:  'page',
         }),

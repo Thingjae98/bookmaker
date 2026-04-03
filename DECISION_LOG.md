@@ -5,9 +5,34 @@
 
 ---
 
-## 🚨 2026-04-03 — [미해결 버그] GET /book-specs · GET /templates · POST /contents 400 에러 원인 분석 및 다음 세션 수정 가이드
+## ✅ 2026-04-03 — [해결완료] sweetFetch 에러 처리 · ok() 래핑 · 동적 템플릿 UID · 템플릿 라우트 4건 수정
 
-> ⚠️ **이 항목은 코드 수정 전 분석 기록이다. 다음 세션에서 반드시 수정할 것.**
+> 이전 세션(2026-04-03)에서 분석만 했던 버그 A~D를 이번 세션에서 모두 수정하고 빌드 검증 완료.
+
+### 수정 내역
+
+| 버그 | 파일 | 수정 내용 | 결과 |
+|------|------|----------|------|
+| B (1순위) | `src/lib/sweetbook.js` | `sweetFetch`에 `!res.ok` 시 `throw` 추가 — 400/404도 에러로 올바르게 전파 | API 에러 가시화 완료 |
+| A (2순위) | `src/lib/sweetbook.js` | `listBookSpecs`, `listTemplates` 등 sweetFetch 기반 5개 함수에 `ok()` 래핑 + `items` 배열 추출 | 프론트 응답 형식 통일 |
+| C (3순위) | `src/app/editor/page.jsx` | `handleCreateBook` 초반에 `/api/templates?bookSpecUid=...` 동적 조회 → `dynamicCoverTpl` · `dynamicImageOnly` · `dynamicTextImage` 변수로 4곳 교체 (하드코딩은 폴백으로만 잔존) | contents 400 방지 |
+| D (4순위) | `src/app/api/templates/[templateUid]/route.js` | 신규 파일 생성 — `GET /api/templates/:uid` 라우트 | 개별 템플릿 조회 가능 |
+
+### 핵심 결정 사항
+
+**버그 A 수정 시 주의점**: SweetBook API의 리스트 응답은 `{ items: [...] }` 형태. 프론트엔드는 `data.data`가 배열임을 기대하므로 `ok(data?.items || data)` 패턴으로 items를 추출해 래핑. 단순 `ok(data)` 로는 `data.data`가 `{ items: [...] }` 객체가 되어 `Array.isArray()` 체크 실패.
+
+**버그 C 수정 시 주의점**: 동적 조회가 실패해도 기존 하드코딩 상수(`COVER_TEMPLATE`, `TPL_IMAGE_ONLY`, `TPL_TEXT_IMAGE`)를 fallback으로 유지. 완전히 제거하지 않고 let 초기값으로 활용.
+
+### 빌드 결과
+- `npm run build` → `✓ Compiled successfully`, 15/15 페이지 정상 생성
+- `/api/templates/[templateUid]` 라우트 빌드 결과에 정상 등록 확인
+
+---
+
+## 🚨 2026-04-03 — [분석기록] GET /book-specs · GET /templates · POST /contents 400 에러 원인 분석
+
+> ✅ **위 항목에서 모두 해결 완료. 이 항목은 분석 기록으로만 보존.**
 
 ### 증상
 - `GET /api/book-specs` → 응답은 200이지만 프론트엔드가 항상 fallback 처리

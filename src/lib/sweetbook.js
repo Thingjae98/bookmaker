@@ -116,27 +116,38 @@ async function sweetFetch(path, params = {}) {
   });
   const json = await res.json();
   if (!res.ok) {
+    const msg = json?.message || json?.error || `SweetBook API ${res.status}`;
     console.error(`스위트북 API 상세 에러 [${res.status}] ${path}:`, json);
+    const err = new Error(msg);
+    err.statusCode = res.status;
+    throw err;
   }
   return json;
 }
 
 export async function listTemplates({ bookSpecUid, category, templateKind, limit = 50, offset = 0 } = {}) {
-  return sweetFetch('/templates', { bookSpecUid, category, templateKind, limit, offset });
+  const data = await sweetFetch('/templates', { bookSpecUid, category, templateKind, limit, offset });
+  // SweetBook API는 { items: [...] } 형태로 반환 — 프론트가 배열을 기대하므로 items 추출
+  return ok(data?.items || data);
 }
 
 export async function getTemplate(templateUid) {
-  return sweetFetch(`/templates/${templateUid}`);
+  const data = await sweetFetch(`/templates/${templateUid}`);
+  return ok(data);
 }
 
 export async function listTemplateCategories() {
-  return sweetFetch('/template-categories');
+  const data = await sweetFetch('/template-categories');
+  return ok(data?.items || data);
 }
 
 export async function listBookSpecs() {
-  return sweetFetch('/book-specs');
+  const data = await sweetFetch('/book-specs');
+  // SweetBook API는 { items: [...] } 형태로 반환 — 프론트가 배열을 기대하므로 items 추출
+  return ok(data?.items || data);
 }
 
 export async function getBookSpec(bookSpecUid) {
-  return sweetFetch(`/book-specs/${bookSpecUid}`);
+  const data = await sweetFetch(`/book-specs/${bookSpecUid}`);
+  return ok(data);
 }
