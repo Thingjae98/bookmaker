@@ -308,18 +308,20 @@ try {
 - [x] 앞표지/뒤표지 직접 지정 UI (갤러리 썸네일 클릭 → 모달 → 역할 지정, 중복 방지 Validation)
 - [x] 텍스트 유무에 따른 템플릿 동적 분기 (텍스트 있음 → 3FhSEhJ94c0T, 없음 → vHA59XPPKqak)
 - [x] 가로형 사진 Canvas API 양면(Spread) 분할 — splitImageHalves()로 좌/우 2장 분할 후 연속 2페이지 전송 (quality=1.0)
-- [x] 판형별 pageMin + pageIncrement 수학적 준수 — BOOK_SPECS 기반 동적 패딩 계산 (홀수 페이지 400 방지)
+- [x] 판형별 pageMin + pageIncrement 수학적 준수 — pageMin=순수 내지 수 기준으로 재해석, 표지 제외 패딩 계산 수정 → 최종화 400 완벽 해결 ✅
 - [x] API 라우트 catch 블록 SDK 에러 구조 대응 — err.statusCode / err.errorCode / err.details 로깅 및 클라이언트 전달
 - [x] 에디터 갤러리 모달에서 사진별 레이아웃(템플릿) 선택 UI — 앞표지·내지 역할별 카드 그리드 구현, allTemplates 필터링, templateUid 즉시 반영
+- [x] 텍스트 입력 유무 기반 템플릿 동적 필터링 — 텍스트 있음→텍스트 포함 레이아웃만, 없음→이미지 전용 레이아웃만 실시간 노출 (인지 부하 최소화)
+- [x] 미니 와이어프레임 UI — API 미리보기 없을 때 cover/photo_text/text_only/blank/calendar/photo_only 6종 Tailwind CSS 와이어프레임 렌더링
 
 ### P1 — 면접 전 개선
 - [x] 이미지 파일 직접 업로드 (Drag & Drop + Photos API) — 에디터 내 구현 완료
 - [x] 표지 이미지 (앞/뒤) 전용 업로드 UI — 에디터 좌측 패널
 - [x] 미리보기 블러 티저 UI (상위 5p 공개 + 구매 유도 오버레이)
 - [x] GET /templates로 실제 템플릿 목록 가져와서 선택 UI — 에디터 모달 내 카드 그리드 (create 페이지에서 이동)
+- [x] DECISION_LOG.md 내용 보강 — 최종화 400 해결·템플릿 동적 필터링 UX 의사결정 상세 기록
 - [ ] 페이지 미리보기 시각화 (템플릿 레이아웃 렌더링)
 - [ ] Skeleton UI 로딩 (현재 spinner만 있음)
-- [ ] DECISION_LOG.md 내용 보강
 
 ### P2 — 시간 여유 시
 - [ ] 웹훅 연동 (주문 상태 변경 실시간 알림)

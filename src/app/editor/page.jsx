@@ -300,22 +300,51 @@ export default function EditorPage() {
 
   // 4) 공통 템플릿 선택 카드 그리드 렌더 함수
   const renderTemplateSelector = (role) => {
-    const tpls = getTemplatesForRole(role);
     const isFront = role === 'front';
+    const allTpls = getTemplatesForRole(role);
+
+    // 내지 역할: 텍스트 입력 유무에 따라 레이아웃 실시간 필터링
+    // · 텍스트 있음 → 텍스트 구역을 가진 레이아웃(photo_text, text_only, calendar)만 노출
+    // · 텍스트 없음 → 사진 전용 레이아웃(photo_only, blank, photo_text 기본)만 노출
+    const TEXT_WIRE_TYPES = new Set(['photo_text', 'text_only', 'calendar']);
+    const hasText = !isFront && (modalItem?.text || '').trim().length > 0;
+    const visibleTpls = isFront
+      ? allTpls
+      : allTpls.filter((t) => {
+          const wt = t.thumbnailUrl || t.previewUrl || t.imageUrl || t.thumbUrl
+            ? 'photo_text'   // 이미지 있으면 항상 표시
+            : inferWireframeType(t);
+          return hasText ? TEXT_WIRE_TYPES.has(wt) : !TEXT_WIRE_TYPES.has(wt);
+        });
+
     const autoLabel = isFront ? '기본 표지형' : '자동 선택';
     const autoDesc  = isFront
       ? '검증된 기본 표지 템플릿 적용'
       : '텍스트 입력 여부에 따라 최적 템플릿 자동 분기';
     const sectionTitle = isFront ? '표지 템플릿' : '내지 템플릿';
 
+    // 필터 안내 문구 (내지 전용)
+    const filterHint = !isFront && allTpls.length > 0
+      ? hasText
+        ? '✍ 텍스트 포함 레이아웃만 표시 중'
+        : '🖼 이미지 전용 레이아웃만 표시 중'
+      : null;
+
     return (
       <div>
-        <p className="text-xs font-medium text-ink-700 mb-2">
-          {sectionTitle}
-          {tpls.length === 0 && (
-            <span className="ml-1.5 font-normal text-ink-400">(기본값 자동 적용)</span>
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-xs font-medium text-ink-700">
+            {sectionTitle}
+            {allTpls.length === 0 && (
+              <span className="ml-1.5 font-normal text-ink-400">(기본값 자동 적용)</span>
+            )}
+          </p>
+          {filterHint && (
+            <span className="text-[10px] text-ink-400 bg-ink-50 px-2 py-0.5 rounded-full">
+              {filterHint}
+            </span>
           )}
-        </p>
+        </div>
 
         <div className="grid grid-cols-2 gap-2">
           {/* ★ 자동 선택 — 전체 너비, 강조 디자인 */}
@@ -341,10 +370,10 @@ export default function EditorPage() {
             )}
           </button>
 
-          {/* API 템플릿 카드 */}
-          {tpls.map((t) => {
-            const previewImg = t.thumbnailUrl || t.previewUrl || t.imageUrl || t.thumbUrl;
-            const wfType     = previewImg ? null : inferWireframeType(t);
+          {/* API 템플릿 카드 — 필터링된 목록 */}
+          {visibleTpls.map((t) => {
+            const previewImg  = t.thumbnailUrl || t.previewUrl || t.imageUrl || t.thumbUrl;
+            const wfType      = previewImg ? null : inferWireframeType(t);
             const displayName = t.name || t.templateName || t.templateUid;
             const isSelected  = modalItem.templateUid === t.templateUid;
             return (
