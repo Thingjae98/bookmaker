@@ -5,6 +5,43 @@
 
 ---
 
+## ✅ 2026-04-03 — [해결완료] 최종화 400 에러 수정 및 에디터 모달 내 템플릿 선택 UI 구현
+
+### 증상
+- `POST /books/{bookUid}/finalization` → 400 Bad Request (최종화 불가)
+- Create 단계에서 동적으로 받아온 템플릿 UID가 session에 그대로 저장되어 에디터에서 잘못된 UID로 표지 전송
+
+### 원인 분석
+
+**1. 페이지 계산식 오류 (최종화 400의 직접 원인)**
+- 기존 로직: `targetContentCount = max(pageMin, contentCount + 2) - 2`
+  - `pageMin = 24` 기준, user가 내지 8장 → `rawTotal = 24`, `targetContentCount = 22`
+  - 실제 contents API 호출 횟수: 22 → 총 23페이지(22 + cover 1)로 `pageMin 24` 미달 → 400
+- `pageMin`은 순수 내지(Contents) API 호출 횟수 기준으로 재해석
+
+**2. 검증 안 된 templateUID가 세션 오염**
+- Create 페이지가 `GET /templates` 응답의 첫 번째 templateUid(예: `4MY2fokVjkeY`)를 `coverTemplateUid`로 저장
+- 에디터가 `session.coverTemplateUid || COVER_TEMPLATE` 순서로 읽어 잘못된 UID 사용 → 표지 400
+
+### 해결책
+
+| 파일 | 수정 내용 |
+|------|----------|
+| `editor/page.jsx` | 페이지 계산식 수정: `targetContentCount = align(max(pageMin, contentCount), increment)` |
+| `editor/page.jsx` | `session.coverTemplateUid` 참조 제거 → 검증 상수 `dynamicCoverTpl` 항상 사용 |
+| `editor/page.jsx` | 모달 내 템플릿 select → 카드 그리드 UI로 교체 (앞표지·내지 역할별 필터링) |
+| `create/page.jsx` | 템플릿 선택 섹션 삭제 — 이제 에디터 모달에서 페이지별 선택 가능 |
+| `create/page.jsx` | `coverTemplateUid`, `contentTemplateUid`, `availableTemplates`, `templatesLoading` 상태 제거 |
+
+### 수정 후 예상 계산 (SQUAREBOOK_HC, pageMin=24, user 내지 8장)
+```
+rawCount = max(24, 8) = 24
+targetContentCount = 24 (24 % 2 == 0, 패딩 없음)
+총 페이지 = 24(내지) + 1(앞표지) = 25 → 최종화 성공 예상
+```
+
+---
+
 ## ✅ 2026-04-03 — [해결완료] bookSpecUid·템플릿 UID·파라미터명 전면 교정 (실제 API 테스트 기반)
 
 ### 증상

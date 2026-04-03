@@ -310,13 +310,13 @@ try {
 - [x] 가로형 사진 Canvas API 양면(Spread) 분할 — splitImageHalves()로 좌/우 2장 분할 후 연속 2페이지 전송 (quality=1.0)
 - [x] 판형별 pageMin + pageIncrement 수학적 준수 — BOOK_SPECS 기반 동적 패딩 계산 (홀수 페이지 400 방지)
 - [x] API 라우트 catch 블록 SDK 에러 구조 대응 — err.statusCode / err.errorCode / err.details 로깅 및 클라이언트 전달
-- [ ] 에디터 갤러리 모달에서 사진별 레이아웃(템플릿) 선택 UI — 역할 지정과 동시에 선택 가능하도록 (현재 hardcode)
+- [x] 에디터 갤러리 모달에서 사진별 레이아웃(템플릿) 선택 UI — 앞표지·내지 역할별 카드 그리드 구현, allTemplates 필터링, templateUid 즉시 반영
 
 ### P1 — 면접 전 개선
 - [x] 이미지 파일 직접 업로드 (Drag & Drop + Photos API) — 에디터 내 구현 완료
 - [x] 표지 이미지 (앞/뒤) 전용 업로드 UI — 에디터 좌측 패널
 - [x] 미리보기 블러 티저 UI (상위 5p 공개 + 구매 유도 오버레이)
-- [x] GET /templates로 실제 템플릿 목록 가져와서 선택 UI — create 페이지 카드 선택 UI
+- [x] GET /templates로 실제 템플릿 목록 가져와서 선택 UI — 에디터 모달 내 카드 그리드 (create 페이지에서 이동)
 - [ ] 페이지 미리보기 시각화 (템플릿 레이아웃 렌더링)
 - [ ] Skeleton UI 로딩 (현재 spinner만 있음)
 - [ ] DECISION_LOG.md 내용 보강

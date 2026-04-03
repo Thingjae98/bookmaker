@@ -23,13 +23,7 @@ export default function CreatePage() {
   const [bookSpecs, setBookSpecs] = useState([]);
   const [specsLoading, setSpecsLoading] = useState(true);
 
-  // API에서 불러온 템플릿 (GET /templates?bookSpecUid=..)
-  const [coverTemplateUid, setCoverTemplateUid] = useState('79yjMH3qRPly');   // 기본값 폴백
-  const [contentTemplateUid, setContentTemplateUid] = useState('vHA59XPPKqak'); // 기본값 폴백
-  const [templatesLoading, setTemplatesLoading] = useState(false);
-  // 사용 가능한 템플릿 목록 (cover / content 별로 분류)
-  const [availableTemplates, setAvailableTemplates] = useState({ cover: [], content: [] });
-  // API에서 받아온 전체 템플릿 raw 데이터 — 에디터 모달 등 다음 단계에서 사용
+  // API에서 받아온 전체 템플릿 raw 데이터 — 에디터 모달 템플릿 선택에서 사용
   const [allTemplates, setAllTemplates] = useState([]);
 
   // 1단계: 마운트 시 GET /book-specs 호출
@@ -61,45 +55,18 @@ export default function CreatePage() {
     loadBookSpecs();
   }, [service]);
 
-  // 2단계: 판형 선택 시 GET /templates?bookSpecUid=.. 호출
+  // 2단계: 판형 선택 시 GET /templates?bookSpecUid=.. 호출 — 에디터 모달 템플릿 선택용
   useEffect(() => {
     if (!selectedSpec) return;
     const loadTemplates = async () => {
-      setTemplatesLoading(true);
       try {
         const res = await fetch(`/api/templates?bookSpecUid=${selectedSpec}&limit=50`);
         const data = await res.json();
         if (data.success && Array.isArray(data.data) && data.data.length > 0) {
-          // 전체 raw 목록 저장 (에디터 모달 등 다음 단계에서 활용)
           setAllTemplates(data.data);
-
-          // cover / content 분류
-          const coverList = data.data.filter(t =>
-            (t.templateKind || t.category || '').toLowerCase().includes('cover')
-          );
-          const contentList = data.data.filter(t =>
-            (t.templateKind || t.category || '').toLowerCase().includes('content') ||
-            (t.templateKind || t.category || '').toLowerCase().includes('page')
-          );
-          // 분류가 안 되면 전체를 cover로 간주
-          const fallbackList = (coverList.length === 0 && contentList.length === 0) ? data.data : [];
-
-          setAvailableTemplates({
-            cover:   [...coverList,   ...fallbackList],
-            content: [...contentList, ...fallbackList],
-          });
-
-          // 기본값 선택
-          const firstCover   = coverList[0]   || fallbackList[0];
-          const firstContent = contentList[0] || fallbackList[0];
-          if (firstCover)   setCoverTemplateUid(firstCover.templateUid);
-          if (firstContent) setContentTemplateUid(firstContent.templateUid);
         }
-        // API 응답에 템플릿이 없으면 기존 하드코딩 값 유지
       } catch {
-        // 실패 시 기본값 유지
-      } finally {
-        setTemplatesLoading(false);
+        // 실패 시 빈 배열 유지 — 에디터 모달에서 기본값 자동 사용
       }
     };
     loadTemplates();
@@ -162,8 +129,6 @@ export default function CreatePage() {
         serviceType,
         formData: { ...formData, bookTitle: data.data.title },
         bookSpecUid: selectedSpec,
-        coverTemplateUid,
-        contentTemplateUid,
         allTemplates,
         useDummy: false,
         aiGenerated: true,
@@ -191,13 +156,11 @@ export default function CreatePage() {
       return;
     }
 
-    // 세션 스토리지에 저장 후 에디터로 이동 (템플릿 UID + 전체 목록 포함)
+    // 세션 스토리지에 저장 후 에디터로 이동 (allTemplates 포함 — 에디터 모달 템플릿 선택용)
     const sessionData = {
       serviceType,
       formData,
       bookSpecUid: selectedSpec,
-      coverTemplateUid,
-      contentTemplateUid,
       allTemplates,
       useDummy,
     };
@@ -304,7 +267,6 @@ export default function CreatePage() {
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-display font-bold text-lg text-ink-900">판형 선택</h2>
               {specsLoading && <span className="text-xs text-ink-400 flex items-center gap-1"><span className="spinner" style={{width:12,height:12}} /> API 조회 중...</span>}
-              {templatesLoading && <span className="text-xs text-violet-500 flex items-center gap-1"><span className="spinner" style={{width:12,height:12}} /> 템플릿 조회 중...</span>}
             </div>
             <div className="space-y-3">
               {(bookSpecs.length > 0 ? bookSpecs : Object.values(BOOK_SPECS).map(s => ({ bookSpecUid: s.uid, ...s }))).map((s) => {
@@ -348,86 +310,6 @@ export default function CreatePage() {
                 );
               })}
             </div>
-            {/* 템플릿 선택 UI */}
-            {!templatesLoading && selectedSpec && (
-              <div className="mt-3">
-                {/* API 템플릿이 있는 경우: 선택 가능한 카드 형태 */}
-                {(availableTemplates.cover.length > 0 || availableTemplates.content.length > 0) ? (
-                  <div className="space-y-3">
-                    {/* 표지 템플릿 */}
-                    {availableTemplates.cover.length > 0 && (
-                      <div>
-                        <p className="text-xs font-medium text-ink-600 mb-1.5">📄 앞표지 템플릿</p>
-                        <div className="grid grid-cols-1 gap-1.5">
-                          {availableTemplates.cover.map((tpl) => (
-                            <button
-                              key={tpl.templateUid}
-                              type="button"
-                              onClick={() => setCoverTemplateUid(tpl.templateUid)}
-                              className={`text-left p-2.5 rounded-lg border-2 transition-all text-xs ${
-                                coverTemplateUid === tpl.templateUid
-                                  ? 'border-warm-600 bg-warm-50 text-warm-800'
-                                  : 'border-ink-100 hover:border-ink-300 text-ink-600'
-                              }`}
-                            >
-                              <span className="font-medium">
-                                {tpl.name || tpl.templateName || tpl.templateUid}
-                              </span>
-                              {coverTemplateUid === tpl.templateUid && (
-                                <span className="ml-1.5 text-warm-600">✓ 선택됨</span>
-                              )}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* 내지 템플릿 */}
-                    {availableTemplates.content.length > 0 && (
-                      <div>
-                        <p className="text-xs font-medium text-ink-600 mb-1.5">📄 내지 템플릿</p>
-                        <div className="grid grid-cols-1 gap-1.5">
-                          {availableTemplates.content.map((tpl) => (
-                            <button
-                              key={tpl.templateUid}
-                              type="button"
-                              onClick={() => setContentTemplateUid(tpl.templateUid)}
-                              className={`text-left p-2.5 rounded-lg border-2 transition-all text-xs ${
-                                contentTemplateUid === tpl.templateUid
-                                  ? 'border-warm-600 bg-warm-50 text-warm-800'
-                                  : 'border-ink-100 hover:border-ink-300 text-ink-600'
-                              }`}
-                            >
-                              <span className="font-medium">
-                                {tpl.name || tpl.templateName || tpl.templateUid}
-                              </span>
-                              {contentTemplateUid === tpl.templateUid && (
-                                <span className="ml-1.5 text-warm-600">✓ 선택됨</span>
-                              )}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  /* API 템플릿 없음: 기본값 표시만 */
-                  <div className="p-3 bg-ink-50 rounded-xl">
-                    <p className="text-xs font-medium text-ink-600 mb-1.5">📄 적용 템플릿</p>
-                    <div className="flex flex-col gap-1">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-ink-500">앞표지</span>
-                        <span className="font-medium text-ink-700">기본 표지형</span>
-                      </div>
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-ink-500">내지</span>
-                        <span className="font-medium text-ink-700">사진+텍스트형</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
 
           {/* AI 동화 생성 패널 (fairytale 전용) */}

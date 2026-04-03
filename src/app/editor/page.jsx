@@ -202,15 +202,16 @@ export default function EditorPage() {
   const contentItems = useMemo(() => gallery.filter((g) => g.role === 'content'), [gallery]);
   const isReady      = frontItems.length === 1 && backItems.length === 1 && contentItems.length >= MIN_CONTENT;
 
-  // 세션에서 내지용 템플릿 목록 추출 (templateKind가 content/page 포함)
-  const contentTemplates = useMemo(() => {
+  // 모달용 템플릿 필터 헬퍼 — role에 따라 cover/content 분류
+  const getTemplatesForRole = (role) => {
     const all = session?.allTemplates || [];
-    const filtered = all.filter((t) => {
+    return all.filter((t) => {
       const kind = (t.templateKind || t.category || '').toLowerCase();
-      return kind.includes('content') || kind.includes('page');
+      return role === 'front'
+        ? kind.includes('cover')
+        : kind.includes('content') || kind.includes('page');
     });
-    return filtered;
-  }, [session]);
+  };
 
   // ── 책 생성 API — 선 구성 후 순차 처리 (트랜잭션 방식) ───────
   const handleCreateBook = async () => {
@@ -326,14 +327,15 @@ export default function EditorPage() {
       setUploadingPhoto(false);
 
       // API 최소 페이지 수 충족 — pageMin + pageIncrement 수학적 준수
-      // SweetBook 총 페이지 = 앞표지(1) + contentInserts + 뒤표지(1) = contentInserts + 2
-      // 따라서 contentInserts 개수 = targetTotal - 2
+      // SweetBook pageMin = 순수 내지(Contents) API 호출 횟수 기준
+      // 뒤표지도 /contents API로 전송하므로 targetContentCount에 포함됨
+      // 총 페이지 = 앞표지 1장(/cover) + targetContentCount 장(/contents)
       const specPageMin       = BOOK_SPECS[bookSpecUid]?.pageMin       || 24;
       const specPageIncrement = BOOK_SPECS[bookSpecUid]?.pageIncrement || 2;
-      const rawTotal          = Math.max(specPageMin, contentPageData.length + 2);
-      const rem               = rawTotal % specPageIncrement;
-      const targetTotal       = rem === 0 ? rawTotal : rawTotal + (specPageIncrement - rem);
-      const targetContentCount = targetTotal - 2;
+      const rawCount          = Math.max(specPageMin, contentPageData.length);
+      const rem               = rawCount % specPageIncrement;
+      const targetContentCount = rem === 0 ? rawCount : rawCount + (specPageIncrement - rem);
+      const targetTotal       = targetContentCount + 1; // 로그용: 앞표지 1 포함 총 페이지
 
       const paddedPages = [...contentPageData];
       let ri = 0;
@@ -342,7 +344,7 @@ export default function EditorPage() {
         ri++;
       }
       if (paddedPages.length > contentPageData.length)
-        addLog(`📋 판형 최소 ${specPageMin}p / 증분 ${specPageIncrement}p 충족 위해 ${paddedPages.length - contentPageData.length}페이지 패딩 (총 ${targetTotal}p)`);
+        addLog(`📋 판형 최소 ${specPageMin}p(내지) / 증분 ${specPageIncrement}p 충족 위해 ${paddedPages.length - contentPageData.length}페이지 패딩 (내지 ${targetContentCount}p → 총 ${targetTotal}p)`);
 
       // ── STEP 3: 앞표지 추가 ────────────────────────────────────
       // session.coverTemplateUid는 create 단계에서 API가 동적으로 반환한 값으로
@@ -523,6 +525,58 @@ export default function EditorPage() {
                 </div>
               </div>
 
+              {/* 앞표지 전용 — 표지 템플릿 선택 */}
+              {modalItem.role === 'front' && (() => {
+                const tpls = getTemplatesForRole('front');
+                if (tpls.length === 0) return null;
+                return (
+                  <div>
+                    <p className="text-xs font-medium text-ink-700 mb-1.5">
+                      표지 템플릿
+                      <span className="ml-1 font-normal text-ink-400">(미선택 시 기본 표지형 적용)</span>
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => updateGalleryItem(galleryModal.idx, { templateUid: null })}
+                        className={`p-2.5 rounded-xl border-2 text-xs text-left transition-all ${
+                          !modalItem.templateUid
+                            ? 'border-warm-600 bg-warm-50 text-warm-800'
+                            : 'border-ink-100 hover:border-ink-300 text-ink-500'
+                        }`}
+                      >
+                        <span className="font-medium block">기본 표지형</span>
+                        <span className="text-[10px] opacity-70 block mt-0.5">검증된 기본 표지 템플릿</span>
+                      </button>
+                      {tpls.map((t) => (
+                        <button
+                          key={t.templateUid}
+                          type="button"
+                          onClick={() => updateGalleryItem(galleryModal.idx, { templateUid: t.templateUid })}
+                          className={`p-2.5 rounded-xl border-2 text-xs text-left transition-all ${
+                            modalItem.templateUid === t.templateUid
+                              ? 'border-warm-600 bg-warm-50 text-warm-800'
+                              : 'border-ink-100 hover:border-ink-300 text-ink-600'
+                          }`}
+                        >
+                          {(t.thumbnailUrl || t.previewUrl) && (
+                            <img
+                              src={t.thumbnailUrl || t.previewUrl}
+                              alt={t.name || t.templateUid}
+                              className="w-full h-14 object-cover rounded-lg mb-1.5"
+                            />
+                          )}
+                          <span className="font-medium block">{t.name || t.templateName || t.templateUid}</span>
+                          {modalItem.templateUid === t.templateUid && (
+                            <span className="text-warm-600 text-[10px]">✓ 선택됨</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* 내지 전용 — 제목·날짜·텍스트 입력 */}
               {modalItem.role === 'content' && (
                 <div className="space-y-3">
@@ -572,31 +626,57 @@ export default function EditorPage() {
                     </p>
                   </div>
 
-                  {/* 템플릿 선택 (session.allTemplates에서 내지용 필터) */}
-                  {contentTemplates.length > 0 && (
-                    <div>
-                      <label className="block text-xs font-medium text-ink-700 mb-1">
-                        내지 템플릿
-                        <span className="ml-1 font-normal text-ink-400">(선택하지 않으면 텍스트 유무로 자동 결정)</span>
-                      </label>
-                      <select
-                        className="input-field text-sm"
-                        value={modalItem.templateUid || ''}
-                        onChange={(e) =>
-                          updateGalleryItem(galleryModal.idx, { templateUid: e.target.value || null })
-                        }
-                      >
-                        <option value="">자동 (텍스트 유무 기반)</option>
-                        <option value={TPL_IMAGE_ONLY}>이미지 전용 (6dJ0Qy6ZmXej)</option>
-                        <option value={TPL_TEXT_IMAGE}>텍스트+사진 (cnH0Ud1nl1f9)</option>
-                        {contentTemplates.map((t) => (
-                          <option key={t.templateUid} value={t.templateUid}>
-                            {t.name || t.templateUid}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
+                  {/* 내지 템플릿 선택 — session.allTemplates 카드 그리드 */}
+                  {(() => {
+                    const tpls = getTemplatesForRole('content');
+                    if (tpls.length === 0) return null;
+                    return (
+                      <div>
+                        <p className="text-xs font-medium text-ink-700 mb-1.5">
+                          내지 템플릿
+                          <span className="ml-1 font-normal text-ink-400">(미선택 시 텍스트 유무로 자동 결정)</span>
+                        </p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => updateGalleryItem(galleryModal.idx, { templateUid: null })}
+                            className={`p-2.5 rounded-xl border-2 text-xs text-left transition-all ${
+                              !modalItem.templateUid
+                                ? 'border-warm-600 bg-warm-50 text-warm-800'
+                                : 'border-ink-100 hover:border-ink-300 text-ink-500'
+                            }`}
+                          >
+                            <span className="font-medium block">자동 선택</span>
+                            <span className="text-[10px] opacity-70 block mt-0.5">텍스트 유무 자동 분기</span>
+                          </button>
+                          {tpls.map((t) => (
+                            <button
+                              key={t.templateUid}
+                              type="button"
+                              onClick={() => updateGalleryItem(galleryModal.idx, { templateUid: t.templateUid })}
+                              className={`p-2.5 rounded-xl border-2 text-xs text-left transition-all ${
+                                modalItem.templateUid === t.templateUid
+                                  ? 'border-warm-600 bg-warm-50 text-warm-800'
+                                  : 'border-ink-100 hover:border-ink-300 text-ink-600'
+                              }`}
+                            >
+                              {(t.thumbnailUrl || t.previewUrl) && (
+                                <img
+                                  src={t.thumbnailUrl || t.previewUrl}
+                                  alt={t.name || t.templateUid}
+                                  className="w-full h-14 object-cover rounded-lg mb-1.5"
+                                />
+                              )}
+                              <span className="font-medium block">{t.name || t.templateName || t.templateUid}</span>
+                              {modalItem.templateUid === t.templateUid && (
+                                <span className="text-warm-600 text-[10px]">✓ 선택됨</span>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* 양면(Spread) 분할 옵션 */}
                   {modalItem.isLandscape && (
