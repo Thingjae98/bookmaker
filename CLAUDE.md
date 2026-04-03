@@ -137,18 +137,23 @@ bookmaker/
 Authorization: Bearer {SWEETBOOK_API_KEY}
 ```
 
-### 핵심 워크플로우 (책 생성 -> 주문)
+### 핵심 워크플로우 (선 구성 → 트랜잭션 생성 → 주문)
+
 ```
-1. POST /books                           — 책 생성 (draft)
-2. POST /books/{bookUid}/photos          — 앞표지 사진 업로드 (multipart)
-2. POST /books/{bookUid}/photos          — 뒤표지 사진 업로드 (multipart)
-2. POST /books/{bookUid}/photos          — 내지 사진들 업로드 (multipart, 반복)
-3. POST /books/{bookUid}/cover           — 앞표지 추가 (업로드된 URL 사용)
-4. POST /books/{bookUid}/contents        — 내지 추가 (multipart, 반복)
-4. POST /books/{bookUid}/contents        — 뒤표지 추가 (마지막 contents 페이지로 처리)
-5. POST /books/{bookUid}/finalization    — 최종화 (편집 완료)
-6. POST /orders/estimate                 — 가격 견적 조회
-7. POST /orders                          — 주문 생성 (충전금 차감)
+1. 에디터 갤러리에 사진 업로드
+2. 썸네일 클릭 → 모달에서 앞표지/내지/뒤표지 역할 지정 + 제목·날짜·텍스트 입력
+3. 구성 미리보기 패널에서 앞표지·내지·뒤표지 확인 (최소: 내지 8장 이상)
+4. [최종 생성 및 주문] 클릭 → 아래 API 순차 호출 (트랜잭션)
+   4-1. POST /books                           — 책 생성 (draft)
+   4-2. POST /books/{bookUid}/photos          — 앞표지 사진 업로드 (multipart)
+   4-2. POST /books/{bookUid}/photos          — 뒤표지 사진 업로드 (multipart)
+   4-2. POST /books/{bookUid}/photos          — 내지 사진들 업로드 (multipart, 반복)
+   4-3. POST /books/{bookUid}/cover           — 앞표지 추가 (업로드된 URL 사용)
+   4-4. POST /books/{bookUid}/contents        — 내지 추가 (multipart, 반복)
+   4-4. POST /books/{bookUid}/contents        — 뒤표지 추가 (마지막 contents 페이지)
+   4-5. POST /books/{bookUid}/finalization    — 최종화 (편집 완료)
+5. POST /orders/estimate                 — 가격 견적 조회
+6. POST /orders                          — 주문 생성 (충전금 차감)
 ```
 
 ### 이미지 업로드 전략
