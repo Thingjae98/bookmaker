@@ -5,6 +5,56 @@
 
 ---
 
+## 📅 2026-04-03 — POST /books 400 에러 해결: 동적 bookSpecUid 바인딩 보정 및 재시도 로직 개선
+
+### 원인 분석
+
+`/api/book-specs` 호출 실패 시 폴백으로 `constants.js`의 `BOOK_SPECS` 전체를 렌더링했는데, 여기에는 실제 API UID(`bs_6a8OUY` 등)와 내부 식별자(`SQUAREBOOK_HC`, `LAYFLAT_HC`, `SLIMALBUM_HC`)가 섞여 있었다. 사용자가 내부 식별자 항목을 클릭하면 `session.bookSpecUid = 'SQUAREBOOK_HC'` 같은 무효한 값이 저장되고, 에디터에서 이를 그대로 SweetBook API에 전달해 400 에러가 발생했다.
+
+---
+
+### 1. 에디터 `handleCreateBook` — bookSpecUid 유효성 검증 및 자동 보정 도입
+
+**결정:**
+`handleCreateBook` 실행 시 `session.bookSpecUid`를 그대로 사용하는 대신, `bs_` 접두사 여부로 실제 API UID인지 먼저 검증하도록 변경했다. 내부 키이거나 빈 값이면 기본값 `'bs_6a8OUY'`(정방형 하드커버)로 자동 보정하고 API 로그에 경고를 표시한다.
+
+```js
+const rawSpecUid = session?.bookSpecUid;
+const bookSpecUid = rawSpecUid && rawSpecUid.startsWith('bs_') ? rawSpecUid : 'bs_6a8OUY';
+if (!rawSpecUid || bookSpecUid !== rawSpecUid) {
+  addLog(`⚠️ bookSpecUid 보정: "${rawSpecUid || '(없음)'}" → "${bookSpecUid}"`);
+}
+```
+
+**이유:**
+- create 페이지의 폴백 목록에서 어떤 항목을 선택하더라도 에디터 단에서 방어가 가능해진다.
+- 보정이 발생하면 API 로그에 즉시 표시되므로, 사용자/개발자 모두 원인을 쉽게 파악할 수 있다.
+- create 페이지 폴백 로직(BOOK_SPECS 정제)은 별도 이슈로 분리 — 에디터 단에서의 방어가 더 안전한 최후 보루 역할을 한다.
+
+---
+
+### 2. `POST /api/books` 라우트 — 에러 상세 정보 클라이언트 전달
+
+**결정:**
+- 유효성 오류 시 어떤 값이 넘어왔는지 터미널 로그와 클라이언트 응답에 함께 기록
+- SDK 에러의 `err.body` / `err.response?.data`(SweetBook 서버 원본 메시지)를 클라이언트 응답 `message` 필드에 포함
+
+**이유:**
+기존에는 400 에러 발생 시 클라이언트가 단순 "책 생성 실패" 메시지만 받아 실제 원인 파악이 불가능했다. SweetBook이 반환한 상세 메시지까지 토스트에 표시되면 빠른 디버깅이 가능하다.
+
+---
+
+### 3. `fetchWithRetry` — 재시도 조건 429 추가 및 4xx 즉시 반환
+
+**결정:**
+재시도 조건을 `res.status >= 500` → `res.status >= 500 || res.status === 429`로 수정했다. 400·401·403·404 등 4xx는 같은 요청을 반복해도 결과가 바뀌지 않으므로 즉시 반환한다.
+
+**이유:**
+- 400 에러(잘못된 bookSpecUid)를 3회 재시도하던 기존 동작은 불필요한 지연을 유발했다.
+- 429는 일시적 할당량 초과이므로 백오프 재시도가 유효하다.
+
+---
+
 ## 📅 2026-04-03 — 사용자 시선 흐름에 최적화된 에디터 UI/UX 리팩토링
 
 ### 배경
