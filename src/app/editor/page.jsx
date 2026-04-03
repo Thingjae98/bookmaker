@@ -271,7 +271,8 @@ export default function EditorPage() {
         const d   = await r.json();
         const url = d.data?.url || d.data?.photoUrl || d.data?.fileUrl;
         if (d.success && url) { addLog(`✅ ${label}`); return url; }
-        addLog(`⚠️ ${label} 실패: ${d.message}`);
+        const uploadDetail = d.details ? ` | ${JSON.stringify(d.details)}` : '';
+        addLog(`⚠️ ${label} 실패: ${d.message}${uploadDetail}`);
         return null;
       };
 
@@ -345,7 +346,9 @@ export default function EditorPage() {
         addLog(`📋 판형 최소 ${specPageMin}p / 증분 ${specPageIncrement}p 충족 위해 ${paddedPages.length - contentPageData.length}페이지 패딩 (총 ${targetTotal}p)`);
 
       // ── STEP 3: 앞표지 추가 ────────────────────────────────────
-      const coverTplUid = session.coverTemplateUid || dynamicCoverTpl;
+      // session.coverTemplateUid는 사용하지 않음 — 검증된 상수 COVER_TEMPLATE 고정 사용
+      // (session에 저장된 templateUid가 잘못된 UID일 경우 400 에러의 원인이 됨)
+      const coverTplUid = dynamicCoverTpl;
       addLog(`🎨 앞표지 추가 중... (템플릿: ${coverTplUid})`);
       const dateRange = fd.period || fd.semester
         ? `${fd.year || new Date().getFullYear()}년 ${fd.semester || fd.period}`
@@ -356,7 +359,12 @@ export default function EditorPage() {
         body:    JSON.stringify({ templateUid: coverTplUid, parameters: { coverPhoto: coverFrontUrl, title, dateRange } }),
       });
       const coverData = await coverRes.json();
-      addLog(coverData.success ? '✅ 앞표지 추가 완료' : `⚠️ 앞표지: ${coverData.message}`);
+      if (coverData.success) {
+        addLog('✅ 앞표지 추가 완료');
+      } else {
+        const coverDetail = coverData.details ? ` | ${JSON.stringify(coverData.details)}` : '';
+        addLog(`⚠️ 앞표지 실패: ${coverData.message}${coverDetail}`);
+      }
 
       // ── STEP 4: 내지 추가 ─────────────────────────────────────
       addLog(`📄 내지 ${paddedPages.length}페이지 추가 중...`);
@@ -381,8 +389,10 @@ export default function EditorPage() {
           body:    JSON.stringify({ templateUid: tplUid, parameters: params, breakBefore: 'page' }),
         });
         const d = await r.json();
-        if (!d.success) addLog(`⚠️ 페이지 ${i + 1}: ${d.message}`);
-        else if (i % 5 === 0 || i === paddedPages.length - 1)
+        if (!d.success) {
+          const detail = d.details ? ` | ${JSON.stringify(d.details)}` : '';
+          addLog(`⚠️ 페이지 ${i + 1} 실패: ${d.message}${detail}`);
+        } else if (i % 5 === 0 || i === paddedPages.length - 1)
           addLog(`📄 내지 ${i + 1}/${paddedPages.length}`);
       }
       addLog(`✅ 내지 ${paddedPages.length}페이지 완료`);
@@ -399,7 +409,12 @@ export default function EditorPage() {
         }),
       });
       const backData = await backRes.json();
-      addLog(backData.success ? '✅ 뒤표지 추가 완료' : `⚠️ 뒤표지: ${backData.message}`);
+      if (backData.success) {
+        addLog('✅ 뒤표지 추가 완료');
+      } else {
+        const backDetail = backData.details ? ` | ${JSON.stringify(backData.details)}` : '';
+        addLog(`⚠️ 뒤표지 실패: ${backData.message}${backDetail}`);
+      }
 
       // ── STEP 5: 최종화 ────────────────────────────────────────
       addLog('🔒 최종화 중...');
