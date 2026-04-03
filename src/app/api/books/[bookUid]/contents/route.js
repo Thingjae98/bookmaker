@@ -15,9 +15,14 @@ export async function POST(request, { params }) {
     const result = await addContents(bookUid, { templateUid, parameters, breakBefore });
     return NextResponse.json(result, { status: 201 });
   } catch (err) {
-    console.error('POST contents 상세 에러:', err.response?.data || err.message || err);
+    console.error('POST contents 상세 에러:', {
+      message: err.message,
+      statusCode: err.statusCode,
+      errorCode: err.errorCode,
+      details: err.details,
+    });
     return NextResponse.json(
-      { success: false, message: err.message },
+      { success: false, message: err.message, details: err.details },
       { status: err.statusCode || 500 }
     );
   }

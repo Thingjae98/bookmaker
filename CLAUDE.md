@@ -306,8 +306,11 @@ try {
 - [x] 에러 발생 시 재시도 로직 — fetchWithRetry, 5xx 3회 재시도, 지수 백오프
 - [x] 다중 이미지 Drag & Drop 업로드 + 갤러리 UI (업로드된 사진을 썸네일 그리드로 표시, 드래그 리오더)
 - [x] 앞표지/뒤표지 직접 지정 UI (갤러리 썸네일 클릭 → 모달 → 역할 지정, 중복 방지 Validation)
-- [x] 텍스트 유무에 따른 템플릿 동적 분기 (텍스트 있음 → cnH0Ud1nl1f9, 없음 → 6dJ0Qy6ZmXej)
+- [x] 텍스트 유무에 따른 템플릿 동적 분기 (텍스트 있음 → 3FhSEhJ94c0T, 없음 → vHA59XPPKqak)
 - [x] 가로형 사진 Canvas API 양면(Spread) 분할 — splitImageHalves()로 좌/우 2장 분할 후 연속 2페이지 전송 (quality=1.0)
+- [x] 판형별 pageMin + pageIncrement 수학적 준수 — BOOK_SPECS 기반 동적 패딩 계산 (홀수 페이지 400 방지)
+- [x] API 라우트 catch 블록 SDK 에러 구조 대응 — err.statusCode / err.errorCode / err.details 로깅 및 클라이언트 전달
+- [ ] 에디터 갤러리 모달에서 사진별 레이아웃(템플릿) 선택 UI — 역할 지정과 동시에 선택 가능하도록 (현재 hardcode)
 
 ### P1 — 면접 전 개선
 - [x] 이미지 파일 직접 업로드 (Drag & Drop + Photos API) — 에디터 내 구현 완료

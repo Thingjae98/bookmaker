@@ -997,6 +997,66 @@ const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
 - 모델명 접두사 `models/` 제거 (SDK가 자동으로 v1beta 경로 사용)
 - 재시도 간 1,000ms delay 유지
 
+---
+
+## ✅ 2026-04-03 — [해결완료] HTTP 400 페이지 증분 위반 수정 · API 라우트 에러 로깅 개선
+
+### 증상
+- `POST /books/{uid}/finalization` → 400 Bad Request
+- 서버 로그에 `'HTTP 400'` 문자열만 출력되어 원인 불명
+
+### 원인 분석
+
+**1. 홀수 페이지 전송 (페이지 증분 위반)**
+- `API_MIN = 25` 하드코딩 → 내지 25페이지 + 뒤표지 1 = 26 contentInserts + 앞표지 1 = 총 27페이지
+- SQUAREBOOK_HC의 `pageIncrement = 2` → 총 페이지가 홀수면 400 반환
+- 공식: `총 페이지 = contentInserts + 2 (앞표지 + 뒤표지)` → 반드시 짝수여야 함
+
+**2. API 라우트 catch 블록이 SDK 에러 구조 미지원**
+- `err.response?.data` 참조 → SweetBook SDK는 `err.response`가 아닌 `err.message / err.statusCode / err.errorCode / err.details` 구조
+- 실제 에러 정보가 로그에 전혀 안 찍혀 디버깅 불가
+
+### 해결책
+
+| 파일 | 수정 내용 |
+|------|----------|
+| `src/lib/constants.js` | BOOK_SPECS 각 항목에 `pageMin` 필드 추가 (SQUAREBOOK_HC=24, PHOTOBOOK_A4_SC=24, PHOTOBOOK_A5_SC=50) |
+| `src/app/editor/page.jsx` | `API_MIN` 하드코딩 제거 → `BOOK_SPECS[bookSpecUid].pageMin / pageIncrement` 기반 수학적 계산으로 교체 |
+| `src/app/api/books/[bookUid]/cover/route.js` | catch 블록 → `{ message, statusCode, errorCode, details }` 구조 로깅, 클라이언트에 `details` 포함 |
+| `src/app/api/books/[bookUid]/contents/route.js` | 동일 수정 |
+| `src/app/api/books/[bookUid]/finalize/route.js` | 동일 수정 |
+| `src/app/api/books/[bookUid]/photos/route.js` | 동일 수정 (GET + POST catch 모두) |
+
+**페이지 패딩 수식 (editor/page.jsx)**:
+```js
+const specPageMin       = BOOK_SPECS[bookSpecUid]?.pageMin       || 24;
+const specPageIncrement = BOOK_SPECS[bookSpecUid]?.pageIncrement || 2;
+const rawTotal          = Math.max(specPageMin, contentPageData.length + 2);
+const rem               = rawTotal % specPageIncrement;
+const targetTotal       = rem === 0 ? rawTotal : rawTotal + (specPageIncrement - rem);
+const targetContentCount = targetTotal - 2;
+```
+
+### 결과
+- 어떤 판형을 선택해도 API 요구사항(pageMin, pageIncrement)을 자동으로 만족
+- 서버 에러 로그에 SweetBook SDK 상세 정보 표시 → 디버깅 즉시 가능
+
+---
+
+## 🏗️ 2026-04-03 — [UX 결정] 템플릿 선택 UI를 에디터 모달로 이전
+
+### 결정
+템플릿 선택을 정보 입력(Create) 단계에서 제거하고, 에디터 모달에서 사진별로 직접 선택하도록 UX를 개선하기로 결정함.
+
+### 배경
+- Create 단계에서 사용자가 템플릿 UID를 선택해도 각 템플릿의 파라미터 이름이 상이해서, 에디터에서 파라미터를 잘못 매핑하면 POST /contents 400 발생
+- 사용자 입장에서 "템플릿이 무엇인지" 모르는 상태에서 선택하는 것은 UX 장벽
+
+### 결정 근거
+- 사진마다 다른 레이아웃(사진+텍스트, 텍스트 전용, 이미지 전용)을 적용해야 하므로 페이지 단위 선택이 자연스러움
+- 에디터 갤러리 썸네일 클릭 모달에서 역할(앞표지/뒤표지/내지) + 레이아웃(템플릿) 동시 선택 가능
+- 향후 실제 템플릿 파라미터 목록을 API에서 가져와 모달에 동적으로 표시 가능
+
 <!-- 새 기록 추가 시 아래 템플릿 복사 -->
 <!--
 ## 📅 YYYY-MM-DD — 제목

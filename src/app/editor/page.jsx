@@ -7,7 +7,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { SERVICE_TYPES, BOOK_SPEC_LABELS } from '@/lib/constants';
+import { SERVICE_TYPES, BOOK_SPECS, BOOK_SPEC_LABELS } from '@/lib/constants';
 import { DUMMY_DATA } from '@/data/dummy';
 import StepIndicator from '@/components/StepIndicator';
 import { toast } from '@/lib/toast';
@@ -24,7 +24,6 @@ const TPL_IMAGE_ONLY = TPL_WITH_PHOTO;
 
 // ─── 유효성 임계값 ─────────────────────────────────────────────
 const MIN_CONTENT = 8;   // [최종 생성] 버튼 활성화 최소 내지 수 (UI)
-const API_MIN     = 25;  // SQUAREBOOK_HC 최소 24페이지 + 여유 1 (자동 패딩)
 
 export default function EditorPage() {
   const router = useRouter();
@@ -326,15 +325,24 @@ export default function EditorPage() {
       }
       setUploadingPhoto(false);
 
-      // API 최소 페이지 수 충족 — 콘텐츠 반복 패딩
+      // API 최소 페이지 수 충족 — pageMin + pageIncrement 수학적 준수
+      // SweetBook 총 페이지 = 앞표지(1) + contentInserts + 뒤표지(1) = contentInserts + 2
+      // 따라서 contentInserts 개수 = targetTotal - 2
+      const specPageMin       = BOOK_SPECS[bookSpecUid]?.pageMin       || 24;
+      const specPageIncrement = BOOK_SPECS[bookSpecUid]?.pageIncrement || 2;
+      const rawTotal          = Math.max(specPageMin, contentPageData.length + 2);
+      const rem               = rawTotal % specPageIncrement;
+      const targetTotal       = rem === 0 ? rawTotal : rawTotal + (specPageIncrement - rem);
+      const targetContentCount = targetTotal - 2;
+
       const paddedPages = [...contentPageData];
       let ri = 0;
-      while (paddedPages.length < API_MIN) {
+      while (paddedPages.length < targetContentCount) {
         paddedPages.push({ ...contentPageData[ri % contentPageData.length] });
         ri++;
       }
       if (paddedPages.length > contentPageData.length)
-        addLog(`📋 API 최소 ${API_MIN}p 충족 위해 ${paddedPages.length - contentPageData.length}페이지 패딩`);
+        addLog(`📋 판형 최소 ${specPageMin}p / 증분 ${specPageIncrement}p 충족 위해 ${paddedPages.length - contentPageData.length}페이지 패딩 (총 ${targetTotal}p)`);
 
       // ── STEP 3: 앞표지 추가 ────────────────────────────────────
       const coverTplUid = session.coverTemplateUid || dynamicCoverTpl;
