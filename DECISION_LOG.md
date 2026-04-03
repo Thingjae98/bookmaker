@@ -5,6 +5,44 @@
 
 ---
 
+## ✅ 2026-04-03 — [해결완료] bookSpecUid·템플릿 UID·파라미터명 전면 교정 (실제 API 테스트 기반)
+
+### 증상
+- `POST /api/books` → 400 Bad Request (API 연동 전혀 안 됨)
+
+### 원인 분석 (Node.js 직접 호출로 검증)
+
+**1. bookSpecUid 오류**: `bs_6a8OUY`, `bs_3EzPkz`, `bs_518IVG`는 실제로 빈 플레이스홀더 UID.
+- 이 UID로 `POST /Books` 시 API가 400 반환
+- 실제로 책 생성 가능한 UID: `SQUAREBOOK_HC`, `PHOTOBOOK_A4_SC`, `PHOTOBOOK_A5_SC`
+
+**2. 템플릿 API 응답 구조**: `{ success, message, data: { templates: [...] } }` 형태
+- 기존 코드는 `data.items`로 접근 → 항상 빈 배열
+- `book-specs` 응답: `{ data: [...] }` (배열 직접), 단 유효 spec은 name/pageMin 기준 필터 필요
+
+**3. 템플릿 UID 및 파라미터명 불일치**
+- 기존 하드코딩(`tpl_F8d15af9fd`, `cnH0Ud1nl1f9`, `6dJ0Qy6ZmXej`) 모두 동작하지 않음
+- 각 템플릿은 고유한 파라미터 이름을 가짐 — 실제로 필요한 파라미터:
+  - `79yjMH3qRPly` (표지): `{ coverPhoto, title, dateRange }` ✅
+  - `3FhSEhJ94c0T` (내지_사진): `{ photo1, date, title, diaryText }` ✅
+  - `vHA59XPPKqak` (내지_텍스트): `{ date, title, diaryText }` ✅
+- 기존 코드의 `diaryPhoto` → 실제 파라미터명 `photo1`
+
+### 해결책
+
+| 파일 | 수정 내용 |
+|------|----------|
+| `constants.js` | `recommendedSpec`: `bs_6a8OUY` → `SQUAREBOOK_HC` 전체 교체, BOOK_SPECS/LABELS 재구성 |
+| `sweetbook.js` | `listBookSpecs`: `data.data` 배열 + 빈 spec 필터 / `listTemplates`: `data.data.templates` 추출 |
+| `editor/page.jsx` | 템플릿 상수 교체, `diaryPhoto` → `photo1`, 동적 조회 제거(파라미터 불일치 위험), API_MIN 25로 상향 |
+
+### 전체 플로우 검증 결과 (Node.js 직접 테스트)
+```
+책생성(SQUAREBOOK_HC) → 표지(79yjMH3qRPly) → 내지25p(3FhSEhJ94c0T) → 최종화 → pageCount: 26 ✅
+```
+
+---
+
 ## ✅ 2026-04-03 — [해결완료] sweetFetch 에러 처리 · ok() 래핑 · 동적 템플릿 UID · 템플릿 라우트 4건 수정
 
 > 이전 세션(2026-04-03)에서 분석만 했던 버그 A~D를 이번 세션에서 모두 수정하고 빌드 검증 완료.
