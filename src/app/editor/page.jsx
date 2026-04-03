@@ -202,15 +202,183 @@ export default function EditorPage() {
   const contentItems = useMemo(() => gallery.filter((g) => g.role === 'content'), [gallery]);
   const isReady      = frontItems.length === 1 && backItems.length === 1 && contentItems.length >= MIN_CONTENT;
 
-  // 모달용 템플릿 필터 헬퍼 — role에 따라 cover/content 분류
+  // ── 모달 템플릿 선택 헬퍼 ──────────────────────────────────────
+
+  // 1) 판형 일치 + 역할 일치 필터 + 이름 기준 중복 제거
   const getTemplatesForRole = (role) => {
-    const all = session?.allTemplates || [];
-    return all.filter((t) => {
+    const all     = session?.allTemplates || [];
+    const specUid = session?.bookSpecUid;
+    const filtered = all.filter((t) => {
+      if (specUid && t.bookSpecUid && t.bookSpecUid !== specUid) return false;
       const kind = (t.templateKind || t.category || '').toLowerCase();
       return role === 'front'
         ? kind.includes('cover')
         : kind.includes('content') || kind.includes('page');
     });
+    // 이름 기준 중복 제거
+    const seen = new Set();
+    return filtered.filter((t) => {
+      const key = (t.name || t.templateName || t.templateUid || '').trim();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+
+  // 2) 템플릿 이름/kind → 와이어프레임 타입 추론
+  const inferWireframeType = (t) => {
+    const name = (t.name || t.templateName || '').toLowerCase();
+    const kind = (t.templateKind || t.category || '').toLowerCase();
+    if (kind.includes('cover')) return 'cover';
+    if (name.includes('빈') || name.includes('blank')) return 'blank';
+    if (name.includes('월') || name.includes('month') || name.includes('calendar')) return 'calendar';
+    if ((name.includes('텍스트') || name.includes('text')) &&
+        !(name.includes('사진') || name.includes('photo') || name.includes('이미지')))
+      return 'text_only';
+    if (name.includes('사진') || name.includes('photo') || name.includes('이미지'))
+      return name.includes('텍스트') || name.includes('text') ? 'photo_text' : 'photo_only';
+    // 기본값: 사진+텍스트
+    return 'photo_text';
+  };
+
+  // 3) 와이어프레임 렌더링 — Tailwind CSS 미니 레이아웃 (이미지 없을 때 사용)
+  const renderWireframe = (type) => {
+    if (type === 'cover') return (
+      <div className="w-full h-[72px] bg-ink-100 rounded-lg mb-1.5 flex flex-col overflow-hidden">
+        <div className="flex-1 bg-ink-200" />
+        <div className="px-2 py-1.5 space-y-1 bg-white">
+          <div className="h-1.5 bg-ink-300 rounded w-3/4" />
+          <div className="h-1   bg-ink-200 rounded w-1/2" />
+        </div>
+      </div>
+    );
+    if (type === 'photo_text') return (
+      <div className="w-full h-[72px] bg-ink-100 rounded-lg mb-1.5 overflow-hidden flex flex-col">
+        <div className="h-9 bg-ink-200" />
+        <div className="flex-1 px-2 py-1 space-y-1 bg-white">
+          <div className="h-1.5 bg-ink-300 rounded w-5/6" />
+          <div className="h-1   bg-ink-200 rounded w-3/5" />
+          <div className="h-1   bg-ink-200 rounded w-2/3" />
+        </div>
+      </div>
+    );
+    if (type === 'text_only') return (
+      <div className="w-full h-[72px] bg-white border border-ink-100 rounded-lg mb-1.5 flex flex-col p-2 space-y-1.5">
+        <div className="h-1   bg-ink-200 rounded w-1/3" />
+        <div className="h-2   bg-ink-300 rounded w-5/6" />
+        <div className="h-1   bg-ink-200 rounded w-4/5" />
+        <div className="h-1   bg-ink-200 rounded w-3/4" />
+        <div className="h-1   bg-ink-200 rounded w-2/3" />
+      </div>
+    );
+    if (type === 'blank') return (
+      <div className="w-full h-[72px] bg-white rounded-lg mb-1.5 border-2 border-dashed border-ink-200 flex items-center justify-center">
+        <span className="text-ink-300 text-[10px]">빈 페이지</span>
+      </div>
+    );
+    if (type === 'calendar') return (
+      <div className="w-full h-[72px] bg-ink-100 rounded-lg mb-1.5 overflow-hidden">
+        <div className="h-4 bg-warm-300 flex items-center px-2">
+          <div className="h-1.5 w-10 bg-warm-500 rounded" />
+        </div>
+        <div className="p-1 grid grid-cols-7 gap-0.5">
+          {Array.from({ length: 21 }).map((_, i) => (
+            <div key={i} className="h-2 bg-ink-200 rounded-sm" />
+          ))}
+        </div>
+      </div>
+    );
+    // photo_only
+    return (
+      <div className="w-full h-[72px] bg-ink-200 rounded-lg mb-1.5 flex items-center justify-center">
+        <svg className="text-ink-300" width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-1.1 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+        </svg>
+      </div>
+    );
+  };
+
+  // 4) 공통 템플릿 선택 카드 그리드 렌더 함수
+  const renderTemplateSelector = (role) => {
+    const tpls = getTemplatesForRole(role);
+    const isFront = role === 'front';
+    const autoLabel = isFront ? '기본 표지형' : '자동 선택';
+    const autoDesc  = isFront
+      ? '검증된 기본 표지 템플릿 적용'
+      : '텍스트 입력 여부에 따라 최적 템플릿 자동 분기';
+    const sectionTitle = isFront ? '표지 템플릿' : '내지 템플릿';
+
+    return (
+      <div>
+        <p className="text-xs font-medium text-ink-700 mb-2">
+          {sectionTitle}
+          {tpls.length === 0 && (
+            <span className="ml-1.5 font-normal text-ink-400">(기본값 자동 적용)</span>
+          )}
+        </p>
+
+        <div className="grid grid-cols-2 gap-2">
+          {/* ★ 자동 선택 — 전체 너비, 강조 디자인 */}
+          <button
+            type="button"
+            onClick={() => updateGalleryItem(galleryModal.idx, { templateUid: null })}
+            className={`col-span-2 p-3 rounded-xl border-2 text-left transition-all flex items-center gap-3 ${
+              !modalItem.templateUid
+                ? 'border-warm-600 bg-warm-50'
+                : 'border-ink-200 hover:border-warm-400 bg-white'
+            }`}
+          >
+            <span className="text-xl shrink-0">⭐</span>
+            <div className="flex-1 min-w-0">
+              <p className={`text-sm font-bold leading-tight ${!modalItem.templateUid ? 'text-warm-800' : 'text-ink-800'}`}>
+                {autoLabel}
+                <span className="ml-1.5 text-[10px] font-normal bg-warm-100 text-warm-700 px-1.5 py-0.5 rounded-full">추천</span>
+              </p>
+              <p className="text-[11px] text-ink-400 mt-0.5 truncate">{autoDesc}</p>
+            </div>
+            {!modalItem.templateUid && (
+              <span className="shrink-0 text-warm-600 font-bold text-sm">✓</span>
+            )}
+          </button>
+
+          {/* API 템플릿 카드 */}
+          {tpls.map((t) => {
+            const previewImg = t.thumbnailUrl || t.previewUrl || t.imageUrl || t.thumbUrl;
+            const wfType     = previewImg ? null : inferWireframeType(t);
+            const displayName = t.name || t.templateName || t.templateUid;
+            const isSelected  = modalItem.templateUid === t.templateUid;
+            return (
+              <button
+                key={t.templateUid}
+                type="button"
+                onClick={() => updateGalleryItem(galleryModal.idx, { templateUid: t.templateUid })}
+                className={`p-2 rounded-xl border-2 text-left transition-all ${
+                  isSelected
+                    ? 'border-warm-600 bg-warm-50'
+                    : 'border-ink-100 hover:border-ink-300 bg-white'
+                }`}
+              >
+                {previewImg ? (
+                  <img
+                    src={previewImg}
+                    alt={displayName}
+                    className="w-full h-[72px] object-cover rounded-lg mb-1.5"
+                  />
+                ) : (
+                  renderWireframe(wfType)
+                )}
+                <p className={`text-[11px] font-medium leading-tight truncate ${isSelected ? 'text-warm-800' : 'text-ink-700'}`}>
+                  {displayName}
+                </p>
+                {isSelected && (
+                  <p className="text-[10px] text-warm-600 mt-0.5">✓ 선택됨</p>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
   };
 
   // ── 책 생성 API — 선 구성 후 순차 처리 (트랜잭션 방식) ───────
@@ -526,56 +694,7 @@ export default function EditorPage() {
               </div>
 
               {/* 앞표지 전용 — 표지 템플릿 선택 */}
-              {modalItem.role === 'front' && (() => {
-                const tpls = getTemplatesForRole('front');
-                if (tpls.length === 0) return null;
-                return (
-                  <div>
-                    <p className="text-xs font-medium text-ink-700 mb-1.5">
-                      표지 템플릿
-                      <span className="ml-1 font-normal text-ink-400">(미선택 시 기본 표지형 적용)</span>
-                    </p>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => updateGalleryItem(galleryModal.idx, { templateUid: null })}
-                        className={`p-2.5 rounded-xl border-2 text-xs text-left transition-all ${
-                          !modalItem.templateUid
-                            ? 'border-warm-600 bg-warm-50 text-warm-800'
-                            : 'border-ink-100 hover:border-ink-300 text-ink-500'
-                        }`}
-                      >
-                        <span className="font-medium block">기본 표지형</span>
-                        <span className="text-[10px] opacity-70 block mt-0.5">검증된 기본 표지 템플릿</span>
-                      </button>
-                      {tpls.map((t) => (
-                        <button
-                          key={t.templateUid}
-                          type="button"
-                          onClick={() => updateGalleryItem(galleryModal.idx, { templateUid: t.templateUid })}
-                          className={`p-2.5 rounded-xl border-2 text-xs text-left transition-all ${
-                            modalItem.templateUid === t.templateUid
-                              ? 'border-warm-600 bg-warm-50 text-warm-800'
-                              : 'border-ink-100 hover:border-ink-300 text-ink-600'
-                          }`}
-                        >
-                          {(t.thumbnailUrl || t.previewUrl) && (
-                            <img
-                              src={t.thumbnailUrl || t.previewUrl}
-                              alt={t.name || t.templateUid}
-                              className="w-full h-14 object-cover rounded-lg mb-1.5"
-                            />
-                          )}
-                          <span className="font-medium block">{t.name || t.templateName || t.templateUid}</span>
-                          {modalItem.templateUid === t.templateUid && (
-                            <span className="text-warm-600 text-[10px]">✓ 선택됨</span>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()}
+              {modalItem.role === 'front' && renderTemplateSelector('front')}
 
               {/* 내지 전용 — 제목·날짜·텍스트 입력 */}
               {modalItem.role === 'content' && (
@@ -627,56 +746,7 @@ export default function EditorPage() {
                   </div>
 
                   {/* 내지 템플릿 선택 — session.allTemplates 카드 그리드 */}
-                  {(() => {
-                    const tpls = getTemplatesForRole('content');
-                    if (tpls.length === 0) return null;
-                    return (
-                      <div>
-                        <p className="text-xs font-medium text-ink-700 mb-1.5">
-                          내지 템플릿
-                          <span className="ml-1 font-normal text-ink-400">(미선택 시 텍스트 유무로 자동 결정)</span>
-                        </p>
-                        <div className="grid grid-cols-2 gap-2">
-                          <button
-                            type="button"
-                            onClick={() => updateGalleryItem(galleryModal.idx, { templateUid: null })}
-                            className={`p-2.5 rounded-xl border-2 text-xs text-left transition-all ${
-                              !modalItem.templateUid
-                                ? 'border-warm-600 bg-warm-50 text-warm-800'
-                                : 'border-ink-100 hover:border-ink-300 text-ink-500'
-                            }`}
-                          >
-                            <span className="font-medium block">자동 선택</span>
-                            <span className="text-[10px] opacity-70 block mt-0.5">텍스트 유무 자동 분기</span>
-                          </button>
-                          {tpls.map((t) => (
-                            <button
-                              key={t.templateUid}
-                              type="button"
-                              onClick={() => updateGalleryItem(galleryModal.idx, { templateUid: t.templateUid })}
-                              className={`p-2.5 rounded-xl border-2 text-xs text-left transition-all ${
-                                modalItem.templateUid === t.templateUid
-                                  ? 'border-warm-600 bg-warm-50 text-warm-800'
-                                  : 'border-ink-100 hover:border-ink-300 text-ink-600'
-                              }`}
-                            >
-                              {(t.thumbnailUrl || t.previewUrl) && (
-                                <img
-                                  src={t.thumbnailUrl || t.previewUrl}
-                                  alt={t.name || t.templateUid}
-                                  className="w-full h-14 object-cover rounded-lg mb-1.5"
-                                />
-                              )}
-                              <span className="font-medium block">{t.name || t.templateName || t.templateUid}</span>
-                              {modalItem.templateUid === t.templateUid && (
-                                <span className="text-warm-600 text-[10px]">✓ 선택됨</span>
-                              )}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })()}
+                  {renderTemplateSelector('content')}
 
                   {/* 양면(Spread) 분할 옵션 */}
                   {modalItem.isLandscape && (
