@@ -79,9 +79,14 @@ export default function EditorPage() {
       const items = initialPages.map((p, i) => ({
         id:          `init-${i}-${Date.now()}`,
         file:        null,
-        previewUrl:  p.image?.startsWith('http')
-                       ? p.image
-                       : `https://picsum.photos/seed/${data.serviceType}-${i}/600/600`,
+        // image === null : text-only 의도 명시 → previewUrl = null 보존 (TPL_TEXT_ONLY 분기)
+        // image === ""   : 동일하게 null 처리
+        // image 미정의   : picsum fallback 적용
+        previewUrl:  (p.image === null || p.image === '')
+                       ? null
+                       : (p.image?.startsWith('http')
+                           ? p.image
+                           : `https://picsum.photos/seed/${data.serviceType}-${i}/600/600`),
         role:        i === 0 ? 'front'
                    : i === initialPages.length - 1 ? 'back'
                    : 'content',
@@ -89,8 +94,8 @@ export default function EditorPage() {
         text:        p.text        || p.teacherComment || '',
         date:        p.date        || new Date().toISOString().slice(0, 10),
         templateUid: null,   // null = 텍스트 유무 자동 분기
-        isLandscape: false,
-        useSpread:   false,
+        isLandscape: p.isLandscape || false, // 더미 파노라마 이미지 가로형 플래그
+        useSpread:   false,                  // spread는 사용자 업로드 시에만 활성화
       }));
       setGallery(items);
     }

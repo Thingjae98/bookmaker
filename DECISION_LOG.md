@@ -5,6 +5,57 @@
 
 ---
 
+## ✅ 2026-04-04 — 24p 규격 대응 고퀄리티 더미 데이터 대개편 + 감성 에세이 리브랜딩
+
+### 배경 / 요구사항
+
+- SQUAREBOOK_HC 최소 24페이지 규격을 만족하려면 더미 데이터도 24개 페이지가 필요
+- 기존 더미 데이터(8~12개)로는 에디터 로드 시 UI가 빈약하게 보여 시연 퀄리티 저하
+- 세 가지 템플릿 유형(text+photo, text_only, photo_only Full-bleed)이 실제로 모두 시연되어야 함
+- '1인 출판 플랫폼'이라는 이름이 서비스 정체성을 제대로 전달하지 못함
+
+### 의사결정
+
+**리브랜딩: `1인 출판 플랫폼` → `감성 에세이`**
+- `constants.js`: `name`, `subtitle`, `description`, `icon` (✍️) 전부 변경
+- 대상: `selfpublish` 서비스 키 유지, UI 표시 이름만 교체
+- README.md 서비스 설명 동기화
+
+**더미 데이터 24페이지 전면 재작성 (6개 서비스 × 24페이지)**
+
+| 구분 | 1~12p | 13~24p |
+|------|-------|--------|
+| 육아 일기 | 감성 장문 텍스트 + 사진 (TPL_WITH_PHOTO) | text: "" Full-bleed 사진 (TPL_WITH_PHOTO) |
+| 유치원 졸업 | 선생님·부모 코멘트 + 활동사진 | text: "" 활동 사진 Full-bleed |
+| AI 동화책 | 10페이지 이야기 텍스트 + 삽화 | 챕터 구분 Full-bleed 삽화 12장 |
+| 여행 포토북 | 장소·감성 캡션 + 사진 (파노라마 1장 포함) | text: "" 풍경 Full-bleed (파노라마 1장 포함) |
+| 감성 에세이 | **교차 배치** — image:null 텍스트 전용 12장 | **교차 배치** — photo Full-bleed 12장 |
+| 반려동물 | 감성 캡션 + 귀여운 사진 | text: "" 사진 Full-bleed |
+
+**세 가지 템플릿 분기 완전 지원**
+
+```
+image: PLACEHOLDER + text: "텍스트"  → TPL_WITH_PHOTO (사진+텍스트)
+image: PLACEHOLDER + text: ""        → TPL_WITH_PHOTO (Full-bleed, diaryText=' ')
+image: null        + text: "텍스트"  → TPL_TEXT_ONLY  (텍스트 전용)
+```
+
+**editor/page.jsx useEffect 버그 수정**
+- 기존: `p.image?.startsWith('http') ? p.image : picsum_fallback` — `p.image === null`일 때 fallback으로 덮어씌워 text-only 의도 파괴
+- 수정: `p.image === null || p.image === '' ? null : (...)` — null 명시적 보존 → TPL_TEXT_ONLY 분기 정상 동작
+
+**파노라마 이미지 지원**
+- `PANORAMA(seed)` 헬퍼 추가: `https://picsum.photos/seed/{seed}/1200/600` (2:1 비율)
+- 여행 더미 14p·22p에 파노라마 2장 포함, `isLandscape: true` 플래그
+- useEffect에서 `isLandscape: p.isLandscape || false` 읽기 추가 → 갤러리 가로형 배지 표시
+
+### 결과
+- 6개 서비스 모두 더미 데이터 채우기 즉시 24페이지 갤러리 구성 → API 최소 페이지 조건 자동 충족
+- 감성 에세이의 text_only ↔ photo_only 교차 배치로 TPL_TEXT_ONLY 매력 시연 가능
+- 여행 파노라마로 isLandscape 배지 UI 자연스럽게 시연 가능
+
+---
+
 ## ✅ 2026-04-04 — [해결완료] Photos API 업로드 성공 후 URL 추출 실패 ("업로드 실패: undefined") 해결
 
 ### 배경 / 문제
