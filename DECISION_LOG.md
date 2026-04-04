@@ -47,10 +47,25 @@ const url =
 - URL 미발견이지만 `d.success=true` → 응답 전체를 `addLog`로 출력하여 필드명 즉시 파악 가능: `업로드 성공했으나 URL 필드 미발견. 응답: {...}`
 - 모든 분기에 `console.log('[업로드 응답]', JSON.stringify(d))` 추가
 
-### 결과
-- 14개 URL 필드명 폴백 탐색으로 SweetBook API 응답 구조 변경에 강건하게 대응
-- 업로드 성공 시 정확한 URL 반환 → 실제 사용자 사진이 내지/표지에 적용
-- 실패 시 응답 전체 구조가 로그에 노출 → 향후 필드명 불일치 즉시 진단 가능
+### 결과 (1차 수정)
+- 14개 URL 필드명 폴백 탐색 + 응답 전체 addLog 출력으로 실제 응답 구조 확인
+- **실제 API 응답 확인**: `{ fileName, originalName, size, mimeType, uploadedAt, isDuplicate, hash }` — **URL 필드 없음**
+
+### 2차 수정 — `fileName` 참조 사용
+
+**실제 원인 (로그 분석 후 확정)**:
+SweetBook Photos API는 URL을 반환하지 않는다. `fileName`(`photo260404064434599.PNG`)이 SweetBook 내부 사진 참조 ID이며, 이를 템플릿 파라미터(`photo1`, `coverPhoto`)에 전달하면 SweetBook 렌더링 엔진이 해당 book 스코프 내 업로드된 사진을 자동으로 조회한다.
+
+```js
+// URL 탐색 실패 → fileName을 SweetBook 내부 참조로 반환
+if (raw?.fileName) {
+  addLog(`✅ ${label} 업로드 완료 (fileName 참조) → ${raw.fileName}`);
+  return raw.fileName;
+}
+```
+
+- `fileName`이 truthy string이므로 picsum fallback 분기 스킵 → 실제 사진 사용
+- `params.photo1 = "photo260404xxxxxx.PNG"` → SweetBook API에 fileName 전달
 
 ---
 
