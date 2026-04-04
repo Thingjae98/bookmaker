@@ -5,6 +5,52 @@
 
 ---
 
+## ✅ 2026-04-04 — 템플릿 동적 매핑 시 판형(bookSpecUid) 불일치 400 에러 해결
+
+### 배경 / 문제
+
+`resolveTemplates()` 함수에서 API로 조회한 템플릿 목록을 판형별로 필터링할 때, **느슨한 조건**이 사용되고 있었음:
+
+```js
+// 🐛 기존 (느슨한 필터)
+const filtered = apiTemplates.filter((t) => {
+  if (bookSpecUid && t.bookSpecUid && t.bookSpecUid !== bookSpecUid) return false;
+  return true;  // ← t.bookSpecUid가 없으면 무조건 통과!
+});
+```
+
+- `t.bookSpecUid`가 `undefined`/`null`인 템플릿이 필터를 통과하여 다른 판형의 UID(예: `4MY2fokVjkeY`)가 `tplMap`에 할당됨
+- 이로 인해 `POST /books/{uid}/contents` 호출 시 **모든 페이지에서 HTTP 400** 반환
+- 표지(`POST /books/{uid}/cover`)도 동일한 문제로 실패
+
+### 해결
+
+**엄격 필터링(Strict Match)** 으로 교체:
+
+```js
+// ✅ 수정 (엄격 필터)
+const filtered = bookSpecUid
+  ? apiTemplates.filter((t) => {
+      if (t.bookSpecUid === bookSpecUid) return true;
+      if (Array.isArray(t.bookSpecUids) && t.bookSpecUids.includes(bookSpecUid)) return true;
+      return false;  // ← bookSpecUid 미일치 or 미보유 → 무조건 제외
+    })
+  : apiTemplates;
+```
+
+- `t.bookSpecUid === bookSpecUid` 정확 일치만 허용
+- `t.bookSpecUids` (복수형 배열) 필드도 호환 지원
+- 필터 통과 0개일 경우 검증된 폴백 상수(`79yjMH3qRPly`, `3FhSEhJ94c0T`, `vHA59XPPKqak`) 자동 적용
+- 로그에 `전체 N개 중 판형 일치 M개` 출력하여 디버깅 용이성 확보
+
+### 교훈
+
+- API가 `bookSpecUid` 쿼리 파라미터를 받아도, 응답에 다른 판형 템플릿이 섞여 올 수 있음
+- 클라이언트 측에서 반드시 **이중 필터링** 적용 (서버 필터 + 클라이언트 엄격 필터)
+- 필터 조건의 `&&` 단락 평가가 의도치 않은 통과를 허용하는 전형적 패턴 — 방어적으로 `=== false` 반환 기본값 사용
+
+---
+
 ## ✅ 2026-04-04 — 템플릿 동적 할당 로직 및 실데이터 기반 스프레드 미리보기 구현
 
 ### 배경 / 문제

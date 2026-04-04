@@ -365,6 +365,7 @@ try {
 - [x] 내지 전송 400 에러 해결 — templateUid 강제 표준화(항상 TPL_WITH_PHOTO / TPL_TEXT_ONLY), `diaryText` 빈 문자열 폴백(단일 공백), 실패 페이지 `console.dir` 수준 로깅
 - [x] 최종화 에러 100% 해결 — 모든 내지 전송 성공 보장 + 최종화 실패 시 `console.dir(finalizeError)` 상세 로깅
 - [x] 사진 업로드 인덱스 매핑 최종 동기화 — `stagedFilesRef` (useRef, itemId→File) 도입으로 gallery state와 독립적으로 파일 이중 보관. `handleCreateBook` 시작 시 `contentFileMap[ci]` 스냅샷으로 절대 내지 인덱스 기준 파일 매핑. `uploadFile()` 헬퍼에 instanceof 타입 체크 + `console.log` 진단 로그 추가
+- [x] 동적 템플릿 판형 필터링 버그 픽스 완료 — `resolveTemplates()` 엄격 필터링 적용. `t.bookSpecUid === bookSpecUid` 정확 일치만 허용, `bookSpecUids` 배열도 호환. 다른 판형 UID 혼입으로 인한 전체 400 에러 해결
 
 ### P0 — 과제 제출 전 필수 (마감: 4/8 화 23:59)
 - [ ] GitHub 저장소 **Public** 설정 확인 (심사자 접근 가능해야 함)

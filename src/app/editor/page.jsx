@@ -43,18 +43,22 @@ const classifyTemplate = (t) => {
 
 // ─── API 기반 동적 템플릿 매핑 ─────────────────────────────────────
 // GET /api/templates?bookSpecUid=... 응답에서 역할·와이어프레임 타입별 최적 템플릿을 선택
+// ⚠️ 엄격 필터링: 현재 판형(bookSpecUid)과 정확히 일치하는 템플릿만 사용.
+//    다른 판형의 UID(예: 4MY2fokVjkeY)가 섞이면 contents/cover API에서 400 반환됨.
 const resolveTemplates = (apiTemplates, bookSpecUid) => {
-  // 판형 일치 필터
-  const filtered = apiTemplates.filter((t) => {
-    if (bookSpecUid && t.bookSpecUid && t.bookSpecUid !== bookSpecUid) return false;
-    return true;
-  });
+  // ── 엄격 판형 필터 ── bookSpecUid가 정확히 일치하는 템플릿만 허용
+  // t.bookSpecUid가 없거나(undefined/null) 불일치하면 전부 제외
+  const filtered = bookSpecUid
+    ? apiTemplates.filter((t) => {
+        // 단수 필드(bookSpecUid) 또는 복수 필드(bookSpecUids 배열) 모두 지원
+        if (t.bookSpecUid === bookSpecUid) return true;
+        if (Array.isArray(t.bookSpecUids) && t.bookSpecUids.includes(bookSpecUid)) return true;
+        return false;
+      })
+    : apiTemplates;
 
   const covers   = filtered.filter((t) => classifyTemplate(t) === 'cover');
-  const contents = filtered.filter((t) => {
-    const ct = classifyTemplate(t);
-    return ct !== 'cover'; // cover가 아닌 모든 템플릿
-  });
+  const contents = filtered.filter((t) => classifyTemplate(t) !== 'cover');
 
   // 타입별 첫 번째 매칭
   const findByType = (list, type) => list.find((t) => classifyTemplate(t) === type);
@@ -65,7 +69,9 @@ const resolveTemplates = (apiTemplates, bookSpecUid) => {
     photoOnly:  findByType(contents, 'photo_only')?.templateUid  || TPL_WITH_PHOTO_FALLBACK,
     textOnly:   findByType(contents, 'text_only')?.templateUid   || TPL_TEXT_ONLY_FALLBACK,
     spread:     findByType(contents, 'photo_only')?.templateUid  || findByType(contents, 'photo_text')?.templateUid || TPL_WITH_PHOTO_FALLBACK,
-    source:     apiTemplates.length > 0 ? 'API' : 'fallback',
+    source:     filtered.length > 0 ? 'API' : 'fallback',
+    totalFiltered: filtered.length,
+    totalRaw:      apiTemplates.length,
   };
 };
 
@@ -663,16 +669,17 @@ export default function EditorPage() {
         const apiTpls = tplData?.data || tplData?.items || [];
         if (Array.isArray(apiTpls) && apiTpls.length > 0) {
           tplMap = resolveTemplates(apiTpls, bookSpecUid);
-          addLog(`📐 템플릿 동적 매핑 (${tplMap.source}) — 표지: ${tplMap.cover} / 사진+텍스트: ${tplMap.photoText} / 사진: ${tplMap.photoOnly} / 텍스트: ${tplMap.textOnly}`);
+          addLog(`📐 템플릿 동적 매핑 (${tplMap.source}) — 전체 ${tplMap.totalRaw}개 중 판형 일치 ${tplMap.totalFiltered}개`);
+          addLog(`   표지: ${tplMap.cover} / 사진+텍스트: ${tplMap.photoText} / 사진: ${tplMap.photoOnly} / 텍스트: ${tplMap.textOnly}`);
+          if (tplMap.totalFiltered === 0) {
+            addLog(`⚠️ 판형(${bookSpecUid}) 일치 템플릿 0개 — 검증된 폴백 UID 사용`);
+          }
         } else {
           addLog(`⚠️ 템플릿 API 응답 없음 — 검증된 폴백 UID 사용`);
         }
       } catch (tplErr) {
         addLog(`⚠️ 템플릿 조회 실패(${tplErr.message}) — 검증된 폴백 UID 사용`);
       }
-      const dynamicCoverTpl  = tplMap.cover;
-      const dynamicImageOnly = tplMap.photoText;  // 사진+텍스트 겸용 (photo1 파라미터 포함)
-      const dynamicTextImage = tplMap.textOnly;
 
       // ── STEP 1: 책 생성 ────────────────────────────────────────
       addLog(`📗 책 생성 중... (${title})`);
@@ -898,7 +905,7 @@ export default function EditorPage() {
       // ── STEP 3: 앞표지 추가 ────────────────────────────────────
       // session.coverTemplateUid는 create 단계에서 API가 동적으로 반환한 값으로
       // 검증되지 않은 UID(예: 4MY2fokVjkeY)가 들어올 수 있음 → 항상 검증된 상수 사용
-      const coverTplUid = dynamicCoverTpl;
+      const coverTplUid = tplMap.cover;
       // 앞/뒤 통합 표지 — 인쇄 규격상 표지는 Spread 1장으로 관리되므로 단일 cover API 호출에 양쪽 URL 전달
       addLog(`🎨 표지 추가 중... (앞+뒤 통합 Spread, 템플릿: ${coverTplUid})`);
       const dateRange = fd.period || fd.semester
