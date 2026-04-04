@@ -202,6 +202,18 @@ Authorization: Bearer {SWEETBOOK_API_KEY}
 - **템플릿 선택기**: 표지 역할(`isCover=true`)일 때 카드 그리드 상단에 파란 안내 박스 고정 표시
 - Validation: `frontItems.length === 1 && backItems.length === 1` 미충족 시 "앞표지와 뒤표지 사진을 모두 지정해 주세요" 메시지
 
+### 내지 2페이지 Spread 단위 편집 규칙 (2026-04-04 추가)
+- 내지는 항상 2페이지(L+R) 한 쌍의 Spread 단위로 관리 — 홀수 상태 방지
+- **`makeBlankItem()`**: `isBlankSlot: true`, `previewUrl: null` 빈 슬롯 생성 함수
+- **`addSpread()`**: 빈 슬롯 2개를 동시 추가 → 항상 짝수 유지
+- **`removeSpreadPair(galleryIdx)`**: 클릭 아이템이 속한 Spread 쌍(L+R) 2장 동시 제거
+- **`swapSpreadSlot(galleryIdx)`**: 같은 Spread 내 L/R 위치 교환
+- **`spreadGroups` useMemo**: `contentItems`를 2개씩 묶어 `{ spreadNum, leftItem, rightItem, leftPageNum, rightPageNum }` 구조 생성
+- **좌측 패널**: `spreadGroups.map()`으로 스프레드 카드("스프레드 N · M–K쪽") 렌더링, 하단에 "+2페이지(1장) 추가" 버튼
+- **인라인 편집 패널 내지 섹션 최상단**: 스프레드 슬롯 인디케이터 박스 — "스프레드 N · 왼쪽(L)/오른쪽(R) 페이지" + 미니 L/R 프리뷰(현재 슬롯 amber 강조) + "↔ L/R 교체" 버튼
+- **삭제 버튼**: 내지 아이템일 때 "스프레드 삭제 (2p)" 레이블로 `removeSpreadPair()` 호출; 표지 아이템은 기존 "이 사진 삭제" 유지
+- 빈 슬롯은 갤러리 그리드에서 회색 📄 자리표시자 렌더링; API 전송 시 `TPL_TEXT_ONLY` 자동 적용
+
 ### ✅ 해결된 버그 (2026-04-03)
 
 #### 버그 A — `sweetFetch` ok() 래핑 누락 → **해결**
@@ -339,6 +351,7 @@ try {
 - [x] 표지 Spread 통합 완료 — 앞/뒤표지를 단일 `POST /books/{uid}/cover` 호출(coverPhoto + backPhoto)로 통합. 뒤표지를 내지 마지막 장으로 처리하던 STEP 4-b 방식 제거
 - [x] 페이지 규격 실시간 검증 도입 — `getPageConsumption(item)` 함수(Spread 2p 소모 반영) + `totalContentPages` useMemo + `isPageMinMet` + `isIncrementOk`로 버튼 활성화 조건 강화. 미충족 시 버튼 옆 빨간 안내 문구 표시
 - [x] 표지 듀얼 슬롯 UX 구현 — 좌측 패널: `[뒤표지 슬롯 | 앞표지 슬롯]` Spread 프레임으로 통합. 인라인 패널 우측 컬럼: 표지 역할 지정 시 현재 Spread 현황 실시간 표시 + 미완성 경고. 템플릿 선택기: "2장 필수" 안내 박스 상단 고정
+- [x] 2페이지 Spread 단위 내지 편집 시스템 — `spreadGroups` useMemo로 내지 쌍 그룹화, 좌측 패널 스프레드 카드 뷰, "+2페이지(1장) 추가" 버튼, 쌍 단위 삭제(`removeSpreadPair`), L/R 교체(`swapSpreadSlot`), 인라인 패널 스프레드 슬롯 인디케이터(미니 프리뷰 + 현재 슬롯 amber 강조 + L/R 교체 버튼), 빈 슬롯(isBlankSlot) → TPL_TEXT_ONLY 자동 적용
 
 ### P1 — 면접 전 개선
 - [x] 이미지 파일 직접 업로드 (Drag & Drop + Photos API) — 에디터 내 구현 완료

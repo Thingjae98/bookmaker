@@ -200,6 +200,72 @@ export default function EditorPage() {
     handleGalleryUpload(e.dataTransfer.files);
   };
 
+  // ── 스프레드(2페이지 쌍) 관련 헬퍼 ──────────────────────────
+  // 빈 내지 슬롯 생성 — previewUrl: null로 갤러리에서 특수 렌더링
+  const makeBlankItem = () => ({
+    id:          `blank-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    file:        null,
+    previewUrl:  null,
+    role:        'content',
+    title:       '',
+    text:        '',
+    date:        new Date().toISOString().slice(0, 10),
+    templateUid: null,
+    isLandscape: false,
+    useSpread:   false,
+    isBlankSlot: true,
+  });
+
+  // 스프레드 1장(2페이지) 추가 — pageIncrement: 2 규격 준수
+  const addSpread = () => {
+    setGallery((prev) => [...prev, makeBlankItem(), makeBlankItem()]);
+    toast.success('스프레드 1장(2페이지)이 추가됐습니다');
+  };
+
+  // 스프레드 쌍 삭제 — 내지 아이템의 파트너까지 함께 제거해 항상 짝수 유지
+  const removeSpreadPair = (galleryIdx) => {
+    setGallery((prev) => {
+      const item    = prev[galleryIdx];
+      const cItems  = prev.filter((g) => g.role === 'content');
+      const cIdx    = cItems.findIndex((c) => c === item);
+      if (cIdx === -1) {
+        // 내지가 아니면 단순 삭제
+        if (item?.previewUrl?.startsWith('blob:')) URL.revokeObjectURL(item.previewUrl);
+        return prev.filter((_, i) => i !== galleryIdx);
+      }
+      const spreadStart = Math.floor(cIdx / 2) * 2;
+      const pairSet     = new Set(
+        [cItems[spreadStart], cItems[spreadStart + 1]]
+          .filter(Boolean)
+          .map((p) => prev.indexOf(p))
+      );
+      prev.forEach((it, i) => {
+        if (pairSet.has(i) && it?.previewUrl?.startsWith('blob:')) URL.revokeObjectURL(it.previewUrl);
+      });
+      return prev.filter((_, i) => !pairSet.has(i));
+    });
+    setSelectedIdx(null);
+  };
+
+  // 스프레드 내 L/R 슬롯 교체 — 내지 아이템을 갤러리에서 파트너와 swap
+  const swapSpreadSlot = (galleryIdx) => {
+    setGallery((prev) => {
+      const item   = prev[galleryIdx];
+      const cItems = prev.filter((g) => g.role === 'content');
+      const cIdx   = cItems.findIndex((c) => c === item);
+      if (cIdx === -1) return prev;
+      const isLeft  = cIdx % 2 === 0;
+      const pCIdx   = isLeft ? cIdx + 1 : cIdx - 1;
+      if (pCIdx < 0 || pCIdx >= cItems.length) return prev;
+      const partner = cItems[pCIdx];
+      const pGIdx   = prev.indexOf(partner);
+      const next    = [...prev];
+      [next[galleryIdx], next[pGIdx]] = [next[pGIdx], next[galleryIdx]];
+      return next;
+    });
+    setSelectedIdx(null); // swap 후 패널 닫기 (인덱스가 바뀌어 혼란 방지)
+  };
+
   // ── 검증 (파생 상태) ─────────────────────────────────────────
   const frontItems        = useMemo(() => gallery.filter((g) => g.role === 'front'),   [gallery]);
   const backItems         = useMemo(() => gallery.filter((g) => g.role === 'back'),    [gallery]);
@@ -216,6 +282,21 @@ export default function EditorPage() {
   // 0페이지는 isPageMinMet가 false이므로 별도 처리 불필요; 정확히 specPageIncUI 배수인지 확인
   const isIncrementOk = totalContentPages > 0 && totalContentPages % specPageIncUI === 0;
   const isReady       = frontItems.length === 1 && backItems.length === 1 && isPageMinMet && isIncrementOk;
+
+  // 스프레드 그룹: 내지 2장씩 묶어 [L슬롯 | R슬롯] 쌍으로 관리
+  const spreadGroups = useMemo(() => {
+    const groups = [];
+    for (let i = 0; i < contentItems.length; i += 2) {
+      groups.push({
+        spreadNum:    Math.floor(i / 2) + 1,
+        leftItem:     contentItems[i]     ?? null,
+        rightItem:    contentItems[i + 1] ?? null,
+        leftPageNum:  i + 1,
+        rightPageNum: i + 2,
+      });
+    }
+    return groups;
+  }, [contentItems]);
 
   // ── 모달 템플릿 선택 헬퍼 ──────────────────────────────────────
 
@@ -689,6 +770,20 @@ export default function EditorPage() {
   const hasFrontElse = gallery.some((g, i) => g.role === 'front' && i !== selectedIdx);
   const hasBackElse  = gallery.some((g, i) => g.role === 'back'  && i !== selectedIdx);
 
+  // 선택된 아이템의 스프레드 슬롯 정보 (내지일 때만 유효)
+  const contentIdxOfSelected = (modalItem?.role === 'content')
+    ? contentItems.findIndex((c) => c === modalItem)
+    : -1;
+  const spreadNumOfSelected  = contentIdxOfSelected >= 0
+    ? Math.floor(contentIdxOfSelected / 2) + 1
+    : null;
+  const isLeftPage  = contentIdxOfSelected >= 0 && contentIdxOfSelected % 2 === 0;
+  const partnerItem = contentIdxOfSelected >= 0
+    ? (isLeftPage
+        ? contentItems[contentIdxOfSelected + 1]
+        : contentItems[contentIdxOfSelected - 1]) ?? null
+    : null;
+
   return (
     <div className="min-h-screen pb-20">
       <StepIndicator currentStep="editor" />
@@ -793,10 +888,11 @@ export default function EditorPage() {
                 <p className="text-[9px] text-ink-400 text-center mt-1">← 뒤표지 | 앞표지 →</p>
               </div>
 
-              {/* 내지 목록 */}
+              {/* ── 내지 스프레드 뷰 ────────────────────────────── */}
+              {/* pageIncrement: 2 규격에 맞춰 2장씩 묶어 [L | R] 쌍으로 표시 */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <p className="text-xs font-bold text-ink-500">내지</p>
+                  <p className="text-xs font-bold text-ink-500">내지 (스프레드 뷰)</p>
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                     isPageMinMet && isIncrementOk
                       ? 'bg-green-100 text-green-700'
@@ -804,40 +900,83 @@ export default function EditorPage() {
                       ? 'bg-yellow-100 text-yellow-700'
                       : 'bg-orange-100 text-orange-700'
                   }`}>
-                    {totalContentPages}p / 최소 {specPageMinUI}p ({specPageIncUI}p 단위)
+                    {totalContentPages}p / 최소 {specPageMinUI}p
                   </span>
                 </div>
-                <div className="space-y-1 max-h-64 overflow-y-auto pr-1">
-                  {contentItems.map((item, i) => (
-                    <div
-                      key={item.id}
-                      className="flex items-center gap-2 p-2 bg-ink-50 rounded-lg cursor-pointer hover:bg-warm-50 transition-colors group"
-                      onClick={() => setSelectedIdx(gallery.indexOf(item))}
-                    >
-                      <span className="text-[10px] text-ink-400 w-5 shrink-0">#{i + 1}</span>
-                      <img
-                        src={item.previewUrl}
-                        alt=""
-                        className="w-8 h-8 object-cover rounded shrink-0"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs text-ink-700 truncate">
-                          {item.title || `페이지 ${i + 1}`}
-                        </p>
-                        <p className="text-[10px] text-ink-400">
-                          {item.text.trim() ? '📝 텍스트' : '🖼️ 이미지'}
-                          {item.useSpread ? ' · ↔ 2p' : ''}
-                        </p>
-                      </div>
-                      <span className="text-ink-300 opacity-0 group-hover:opacity-100 text-xs">✏️</span>
-                    </div>
-                  ))}
-                  {contentItems.length === 0 && (
+
+                {/* 스프레드 그룹 목록 */}
+                <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+                  {spreadGroups.length === 0 && (
                     <p className="text-xs text-ink-400 text-center py-6">
-                      갤러리에서 내지를 지정하세요
+                      갤러리에서 내지를 지정하거나<br/>아래 버튼으로 추가하세요
                     </p>
                   )}
+                  {spreadGroups.map((sg) => (
+                    <div key={`sg-${sg.spreadNum}`} className="rounded-xl border border-ink-200 overflow-hidden bg-white">
+                      {/* 스프레드 헤더 */}
+                      <div className="flex items-center px-2 py-0.5 bg-ink-50 border-b border-ink-100">
+                        <span className="text-[9px] font-bold text-ink-500 tracking-wide">
+                          스프레드 {sg.spreadNum} · {sg.leftPageNum}–{sg.rightPageNum}쪽
+                        </span>
+                      </div>
+                      {/* L / R 두 슬롯 */}
+                      <div className="grid grid-cols-2 divide-x divide-ink-100">
+                        {[
+                          { item: sg.leftItem,  slot: 'L', pageNum: sg.leftPageNum  },
+                          { item: sg.rightItem, slot: 'R', pageNum: sg.rightPageNum },
+                        ].map(({ item, slot, pageNum }) => (
+                          <div
+                            key={slot}
+                            className={`relative flex items-center gap-1.5 p-1.5 transition-colors group ${
+                              item
+                                ? 'cursor-pointer hover:bg-warm-50'
+                                : 'bg-ink-50 cursor-default opacity-60'
+                            }`}
+                            onClick={() => item && setSelectedIdx(gallery.indexOf(item))}
+                          >
+                            <span className="text-[9px] font-bold text-ink-400 w-3 shrink-0">{slot}</span>
+                            {item ? (
+                              item.previewUrl ? (
+                                <img
+                                  src={item.previewUrl}
+                                  alt=""
+                                  className="w-6 h-6 object-cover rounded shrink-0"
+                                />
+                              ) : (
+                                <div className="w-6 h-6 bg-ink-200 rounded flex items-center justify-center shrink-0">
+                                  <span className="text-ink-400 text-[8px]">빈</span>
+                                </div>
+                              )
+                            ) : (
+                              <div className="w-6 h-6 border border-dashed border-ink-300 rounded shrink-0 bg-ink-100" />
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[10px] text-ink-700 truncate">
+                                {item?.title || `${pageNum}쪽`}
+                              </p>
+                              <p className="text-[9px] text-ink-400">
+                                {item ? ((item.text || '').trim() ? '📝' : '🖼️') : '—'}
+                              </p>
+                            </div>
+                            {item && (
+                              <span className="text-ink-300 opacity-0 group-hover:opacity-100 text-[10px] shrink-0">✏️</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
+
+                {/* + 2페이지 추가 버튼 */}
+                <button
+                  type="button"
+                  onClick={addSpread}
+                  className="mt-2 w-full py-1.5 rounded-xl text-xs font-medium border border-dashed border-warm-400 text-warm-600 hover:bg-warm-50 transition-all flex items-center justify-center gap-1"
+                >
+                  <span>＋</span>
+                  <span>2페이지(1장) 추가</span>
+                </button>
               </div>
 
               {/* 검증 상태 배너 */}
@@ -943,12 +1082,20 @@ export default function EditorPage() {
                         'border-transparent hover:border-ink-300'
                       }`}
                     >
-                      <img
-                        src={item.previewUrl}
-                        alt=""
-                        className="w-full h-full object-cover pointer-events-none"
-                        draggable={false}
-                      />
+                      {/* 이미지 or 빈 슬롯 플레이스홀더 */}
+                      {item.previewUrl ? (
+                        <img
+                          src={item.previewUrl}
+                          alt=""
+                          className="w-full h-full object-cover pointer-events-none"
+                          draggable={false}
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-ink-100 flex flex-col items-center justify-center gap-1 pointer-events-none">
+                          <span className="text-2xl text-ink-300">📄</span>
+                          <span className="text-[9px] text-ink-400 font-medium">빈 슬롯</span>
+                        </div>
+                      )}
 
                       {/* 역할 뱃지 */}
                       {item.role && (
@@ -975,10 +1122,10 @@ export default function EditorPage() {
                         </div>
                       )}
 
-                      {/* 내지 텍스트 유무 */}
-                      {item.role === 'content' && (
+                      {/* 내지 텍스트 유무 (빈 슬롯 제외) */}
+                      {item.role === 'content' && !item.isBlankSlot && (
                         <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-[10px] py-0.5 text-center leading-none">
-                          {item.text.trim() ? '📝' : '🖼️'}
+                          {(item.text || '').trim() ? '📝' : '🖼️'}
                         </div>
                       )}
 
@@ -1089,6 +1236,67 @@ export default function EditorPage() {
                   {/* 우: 내지 전용 편집 컨트롤 */}
                   {modalItem.role === 'content' ? (
                     <div className="space-y-4 overflow-y-auto max-h-[480px] pr-1">
+
+                      {/* 스프레드 슬롯 인디케이터 */}
+                      {contentIdxOfSelected >= 0 && (
+                        <div className="bg-ink-50 rounded-xl p-3 border border-ink-200">
+                          <div className="flex items-center justify-between mb-2">
+                            <p className="text-xs font-bold text-ink-700">
+                              📄 스프레드 {spreadNumOfSelected} · {isLeftPage ? '왼쪽(L)' : '오른쪽(R)'} 페이지
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => swapSpreadSlot(selectedIdx)}
+                              className="text-[11px] text-ink-500 hover:text-warm-700 border border-ink-200 hover:border-warm-400 px-2 py-0.5 rounded-lg transition-all"
+                            >
+                              ↔ L/R 교체
+                            </button>
+                          </div>
+                          {/* 미니 스프레드 미리보기 */}
+                          <div className="flex gap-0.5 h-10 rounded-lg overflow-hidden border border-ink-200">
+                            {/* L 슬롯 */}
+                            <div className="flex-1 relative overflow-hidden border-r border-ink-200">
+                              {(isLeftPage ? modalItem : partnerItem)?.previewUrl ? (
+                                <img
+                                  src={(isLeftPage ? modalItem : partnerItem).previewUrl}
+                                  alt=""
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <div className="w-full h-full bg-ink-100 flex items-center justify-center">
+                                  <span className="text-[8px] text-ink-400">빈</span>
+                                </div>
+                              )}
+                              {isLeftPage && (
+                                <div className="absolute inset-0 bg-warm-600/40 flex items-center justify-center">
+                                  <span className="text-white text-[8px] font-bold">현재</span>
+                                </div>
+                              )}
+                            </div>
+                            {/* R 슬롯 */}
+                            <div className="flex-1 relative overflow-hidden">
+                              {(!isLeftPage ? modalItem : partnerItem)?.previewUrl ? (
+                                <img
+                                  src={(!isLeftPage ? modalItem : partnerItem).previewUrl}
+                                  alt=""
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <div className="w-full h-full bg-ink-100 flex items-center justify-center">
+                                  <span className="text-[8px] text-ink-400">빈</span>
+                                </div>
+                              )}
+                              {!isLeftPage && (
+                                <div className="absolute inset-0 bg-warm-600/40 flex items-center justify-center">
+                                  <span className="text-white text-[8px] font-bold">현재</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <p className="text-[9px] text-ink-400 text-center mt-1">← L (왼쪽) | R (오른쪽) →</p>
+                        </div>
+                      )}
+
                       {/* 제목 + 날짜 */}
                       <div className="grid grid-cols-2 gap-2">
                         <div>
@@ -1248,10 +1456,14 @@ export default function EditorPage() {
                 <div className="px-6 py-4 flex gap-3 border-t border-ink-100">
                   <button
                     type="button"
-                    onClick={() => removeGalleryItem(selectedIdx)}
+                    onClick={() =>
+                      modalItem.role === 'content'
+                        ? removeSpreadPair(selectedIdx)
+                        : removeGalleryItem(selectedIdx)
+                    }
                     className="px-4 py-2 rounded-xl text-sm text-red-500 hover:text-red-700 hover:bg-red-50 border border-red-200 transition-all"
                   >
-                    이 사진 삭제
+                    {modalItem.role === 'content' ? '스프레드 삭제 (2p)' : '이 사진 삭제'}
                   </button>
                   <button
                     type="button"
