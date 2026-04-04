@@ -488,8 +488,21 @@ export default function EditorPage() {
       return 'text_only';
     if (name.includes('사진') || name.includes('photo') || name.includes('이미지'))
       return name.includes('텍스트') || name.includes('text') ? 'photo_text' : 'photo_only';
-    // 기본값: 사진+텍스트
     return 'photo_text';
+  };
+
+  // 2-b) 와이어프레임 타입 → 사용자 친화적 한글 라벨 매핑
+  const WIREFRAME_LABELS = {
+    cover:      '표지',
+    photo_text: '사진 + 글',
+    photo_only: '사진 꽉 차게',
+    text_only:  '글만',
+    blank:      '빈 페이지',
+    calendar:   '캘린더',
+  };
+  const getTemplateLabel = (t) => {
+    const wt = inferWireframeType(t);
+    return WIREFRAME_LABELS[wt] || '사진 + 글';
   };
 
   // 3) 와이어프레임 렌더링 — Tailwind CSS 미니 레이아웃 (이미지 없을 때 사용)
@@ -550,23 +563,10 @@ export default function EditorPage() {
   };
 
   // 4) 공통 템플릿 선택 카드 그리드 렌더 함수
+  // 모든 타입의 템플릿을 카테고리 그룹으로 보여주되, API 원본 이름은 숨기고 정제된 한글 라벨 표시
   const renderTemplateSelector = (role) => {
-    const isCover  = role === 'front' || role === 'back'; // 표지 템플릿 여부
+    const isCover  = role === 'front' || role === 'back';
     const allTpls  = getTemplatesForRole(role);
-
-    // 내지 역할: 텍스트 입력 유무에 따라 레이아웃 실시간 필터링
-    // · 텍스트 있음 → 텍스트 구역을 가진 레이아웃(photo_text, text_only, calendar)만 노출
-    // · 텍스트 없음 → 사진 전용 레이아웃(photo_only, blank, photo_text 기본)만 노출
-    const TEXT_WIRE_TYPES = new Set(['photo_text', 'text_only', 'calendar']);
-    const hasText = !isCover && (modalItem?.text || '').trim().length > 0;
-    const visibleTpls = isCover
-      ? allTpls
-      : allTpls.filter((t) => {
-          const wt = (t.thumbnails?.layout || t.thumbnails?.baseLayerOdd || t.thumbnails?.baseLayerEven || t.thumbnailUrl || t.previewUrl || t.imageUrl || t.thumbUrl)
-            ? 'photo_text'   // 이미지 있으면 항상 표시
-            : inferWireframeType(t);
-          return hasText ? TEXT_WIRE_TYPES.has(wt) : !TEXT_WIRE_TYPES.has(wt);
-        });
 
     const autoLabel    = isCover ? '기본 표지형' : '자동 선택';
     const autoDesc     = isCover
@@ -574,116 +574,150 @@ export default function EditorPage() {
       : '텍스트 입력 여부에 따라 최적 템플릿 자동 분기';
     const sectionTitle = isCover ? '표지 템플릿' : '내지 템플릿';
 
-    // 필터 안내 문구 (내지 전용)
-    const filterHint = !isCover && allTpls.length > 0
-      ? hasText
-        ? '✍ 텍스트 포함 레이아웃만 표시 중'
-        : '🖼 이미지 전용 레이아웃만 표시 중'
-      : null;
+    // 내지: 카테고리별 그룹화 (표지는 그룹 없이 전체 표시)
+    const CATEGORY_ORDER = ['photo_text', 'photo_only', 'text_only', 'calendar', 'blank'];
+    const CATEGORY_LABELS = {
+      photo_text: '사진 + 글',
+      photo_only: '사진 꽉 차게',
+      text_only:  '글만',
+      calendar:   '캘린더',
+      blank:      '빈 페이지',
+    };
+    const CATEGORY_ICONS = {
+      photo_text: '🖼',
+      photo_only: '📷',
+      text_only:  '✍',
+      calendar:   '📅',
+      blank:      '📄',
+    };
+
+    // 카테고리별 템플릿 그룹 생성
+    const grouped = {};
+    allTpls.forEach((t) => {
+      const wt = inferWireframeType(t);
+      const cat = CATEGORY_ORDER.includes(wt) ? wt : 'photo_text';
+      if (!grouped[cat]) grouped[cat] = [];
+      grouped[cat].push(t);
+    });
+
+    // 개별 템플릿 카드 렌더
+    const renderTplCard = (t) => {
+      const previewImg  = t.thumbnails?.layout || t.thumbnails?.baseLayerOdd || t.thumbnails?.baseLayerEven || t.thumbnailUrl || t.previewUrl || t.imageUrl || t.thumbUrl;
+      const wfType      = inferWireframeType(t);
+      const label       = getTemplateLabel(t);
+      const isSelected  = modalItem.templateUid === t.templateUid;
+      return (
+        <button
+          key={t.templateUid}
+          type="button"
+          onClick={() => updateGalleryItem(selectedIdx, { templateUid: t.templateUid })}
+          className={`p-2 rounded-xl border-2 text-left transition-all ${
+            isSelected
+              ? 'border-warm-600 bg-warm-50'
+              : 'border-ink-100 hover:border-ink-300 bg-white'
+          }`}
+        >
+          {previewImg ? (
+            <>
+              <div className="w-full h-[72px] overflow-hidden rounded-lg mb-1.5 relative bg-ink-100">
+                <img
+                  src={previewImg}
+                  alt={label}
+                  className={`absolute h-full top-0 ${
+                    isCover
+                      ? role === 'front'
+                        ? 'right-0 w-[200%]'
+                        : 'left-0 w-[200%]'
+                      : 'left-0 w-full object-cover'
+                  }`}
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                    const wf = e.currentTarget.parentElement.querySelector('[data-wf]');
+                    if (wf) wf.style.display = 'block';
+                  }}
+                />
+                <div data-wf="1" style={{ display: 'none' }}>{renderWireframe(wfType)}</div>
+              </div>
+            </>
+          ) : (
+            renderWireframe(wfType)
+          )}
+          <p className={`text-[11px] font-medium leading-tight truncate ${isSelected ? 'text-warm-800' : 'text-ink-700'}`}>
+            {label}
+          </p>
+          {isSelected && (
+            <p className="text-[10px] text-warm-600 mt-0.5">✓ 선택됨</p>
+          )}
+        </button>
+      );
+    };
 
     return (
       <div>
-        <div className="flex items-center justify-between mb-2">
-          <p className="text-xs font-medium text-ink-700">
-            {sectionTitle}
-            {allTpls.length === 0 && (
-              <span className="ml-1.5 font-normal text-ink-400">(기본값 자동 적용)</span>
-            )}
-          </p>
-          {filterHint && (
-            <span className="text-[10px] text-ink-400 bg-ink-50 px-2 py-0.5 rounded-full">
-              {filterHint}
-            </span>
+        <p className="text-xs font-medium text-ink-700 mb-2">
+          {sectionTitle}
+          {allTpls.length === 0 && (
+            <span className="ml-1.5 font-normal text-ink-400">(기본값 자동 적용)</span>
           )}
-        </div>
+        </p>
 
         {/* 표지 전용 — Spread 2장 필수 안내 */}
         {isCover && (
           <div className="flex items-start gap-1.5 mb-2 bg-blue-50 border border-blue-200 rounded-lg px-2.5 py-2">
             <span className="text-blue-500 text-sm shrink-0 mt-0.5">ℹ</span>
             <p className="text-[11px] text-blue-700 leading-relaxed">
-              이 템플릿은 <strong>앞/뒤표지 2장의 사진이 모두 필요</strong>합니다. 갤러리에서 앞표지와 뒤표지를 각각 지정해 주세요.
+              이 템플릿은 <strong>앞/뒤표지 2장의 사진이 모두 필요</strong>합니다.
             </p>
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-2">
-          {/* ★ 자동 선택 — 전체 너비, 강조 디자인 */}
-          <button
-            type="button"
-            onClick={() => updateGalleryItem(selectedIdx, { templateUid: null })}
-            className={`col-span-2 p-3 rounded-xl border-2 text-left transition-all flex items-center gap-3 ${
-              !modalItem.templateUid
-                ? 'border-warm-600 bg-warm-50'
-                : 'border-ink-200 hover:border-warm-400 bg-white'
-            }`}
-          >
-            <span className="text-xl shrink-0">⭐</span>
-            <div className="flex-1 min-w-0">
-              <p className={`text-sm font-bold leading-tight ${!modalItem.templateUid ? 'text-warm-800' : 'text-ink-800'}`}>
-                {autoLabel}
-                <span className="ml-1.5 text-[10px] font-normal bg-warm-100 text-warm-700 px-1.5 py-0.5 rounded-full">추천</span>
-              </p>
-              <p className="text-[11px] text-ink-400 mt-0.5 truncate">{autoDesc}</p>
-            </div>
-            {!modalItem.templateUid && (
-              <span className="shrink-0 text-warm-600 font-bold text-sm">✓</span>
-            )}
-          </button>
+        {/* ★ 자동 선택 카드 */}
+        <button
+          type="button"
+          onClick={() => updateGalleryItem(selectedIdx, { templateUid: null })}
+          className={`w-full p-3 rounded-xl border-2 text-left transition-all flex items-center gap-3 mb-3 ${
+            !modalItem.templateUid
+              ? 'border-warm-600 bg-warm-50'
+              : 'border-ink-200 hover:border-warm-400 bg-white'
+          }`}
+        >
+          <span className="text-xl shrink-0">⭐</span>
+          <div className="flex-1 min-w-0">
+            <p className={`text-sm font-bold leading-tight ${!modalItem.templateUid ? 'text-warm-800' : 'text-ink-800'}`}>
+              {autoLabel}
+              <span className="ml-1.5 text-[10px] font-normal bg-warm-100 text-warm-700 px-1.5 py-0.5 rounded-full">추천</span>
+            </p>
+            <p className="text-[11px] text-ink-400 mt-0.5 truncate">{autoDesc}</p>
+          </div>
+          {!modalItem.templateUid && (
+            <span className="shrink-0 text-warm-600 font-bold text-sm">✓</span>
+          )}
+        </button>
 
-          {/* API 템플릿 카드 — 필터링된 목록 */}
-          {visibleTpls.map((t) => {
-            const previewImg  = t.thumbnails?.layout || t.thumbnails?.baseLayerOdd || t.thumbnails?.baseLayerEven || t.thumbnailUrl || t.previewUrl || t.imageUrl || t.thumbUrl;
-            const wfType      = inferWireframeType(t); // onError 폴백용으로 항상 계산
-            const displayName = t.name || t.templateName || t.templateUid;
-            const isSelected  = modalItem.templateUid === t.templateUid;
-            return (
-              <button
-                key={t.templateUid}
-                type="button"
-                onClick={() => updateGalleryItem(selectedIdx, { templateUid: t.templateUid })}
-                className={`p-2 rounded-xl border-2 text-left transition-all ${
-                  isSelected
-                    ? 'border-warm-600 bg-warm-50'
-                    : 'border-ink-100 hover:border-ink-300 bg-white'
-                }`}
-              >
-                {previewImg ? (
-                  <>
-                    {/* 표지 썸네일: 앞표지→우측 절반, 뒤표지→좌측 절반 CSS 크롭 */}
-                    <div className="w-full h-[72px] overflow-hidden rounded-lg mb-1.5 relative">
-                      <img
-                        src={previewImg}
-                        alt={displayName}
-                        className={`absolute h-full top-0 ${
-                          isCover
-                            ? role === 'front'
-                              ? 'right-0 w-[200%]'   // 오른쪽 절반 = 앞표지
-                              : 'left-0 w-[200%]'    // 왼쪽 절반 = 뒤표지
-                            : 'left-0 w-full object-cover'  // 내지: 전체 표시
-                        }`}
-                        onError={(e) => {
-                          e.currentTarget.parentElement.style.display = 'none';
-                          const fb = e.currentTarget.parentElement.nextElementSibling;
-                          if (fb) fb.style.display = 'block';
-                        }}
-                      />
-                    </div>
-                    <div style={{ display: 'none' }}>{renderWireframe(wfType)}</div>
-                  </>
-                ) : (
-                  renderWireframe(wfType)
-                )}
-                <p className={`text-[11px] font-medium leading-tight truncate ${isSelected ? 'text-warm-800' : 'text-ink-700'}`}>
-                  {displayName}
-                </p>
-                {isSelected && (
-                  <p className="text-[10px] text-warm-600 mt-0.5">✓ 선택됨</p>
-                )}
-              </button>
-            );
-          })}
-        </div>
+        {/* 표지: 그룹 없이 전체 표시 */}
+        {isCover && allTpls.length > 0 && (
+          <div className="grid grid-cols-2 gap-2">
+            {allTpls.map(renderTplCard)}
+          </div>
+        )}
+
+        {/* 내지: 카테고리별 그룹으로 분리 표시 — 모든 타입 노출 */}
+        {!isCover && CATEGORY_ORDER.map((cat) => {
+          const catTpls = grouped[cat];
+          if (!catTpls || catTpls.length === 0) return null;
+          return (
+            <div key={cat} className="mb-3">
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <span className="text-xs">{CATEGORY_ICONS[cat]}</span>
+                <span className="text-[11px] font-semibold text-ink-600">{CATEGORY_LABELS[cat]}</span>
+                <span className="text-[10px] text-ink-400">({catTpls.length})</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {catTpls.map(renderTplCard)}
+              </div>
+            </div>
+          );
+        })}
       </div>
     );
   };
