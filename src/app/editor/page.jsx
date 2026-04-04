@@ -705,13 +705,20 @@ export default function EditorPage() {
             null;
 
           if (url) {
-            addLog(`✅ ${label} 업로드 완료 → ${url.slice(0, 60)}`);
+            addLog(`✅ ${label} 업로드 완료 (URL) → ${url.slice(0, 60)}`);
             return url;
           }
 
-          // URL을 찾지 못했지만 success=true — photoUid 등 다른 필드 존재 가능
-          addLog(`⚠️ ${label} 업로드 성공했으나 URL 필드 미발견. 응답: ${JSON.stringify(raw)?.slice(0, 200)}`);
-          console.warn(`[URL 필드 없음] ${label}:`, raw);
+          // SweetBook Photos API는 URL을 반환하지 않고 fileName(내부 참조 ID)만 반환함.
+          // 템플릿 파라미터(photo1, coverPhoto)에 fileName을 그대로 전달하면
+          // SweetBook 렌더링 엔진이 해당 book 내 업로드된 사진을 자동으로 조회함.
+          if (raw?.fileName) {
+            addLog(`✅ ${label} 업로드 완료 (fileName 참조) → ${raw.fileName}`);
+            return raw.fileName;
+          }
+
+          addLog(`⚠️ ${label} 업로드 성공했으나 URL/fileName 모두 미발견. 응답: ${JSON.stringify(raw)?.slice(0, 200)}`);
+          console.warn(`[참조값 없음] ${label}:`, raw);
           return null;
         } catch (err) {
           addLog(`⚠️ ${label} 업로드 예외: ${err.message}`);
