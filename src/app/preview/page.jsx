@@ -2,17 +2,18 @@
 
 // src/app/preview/page.jsx
 // 미리보기 & 가격 확인 페이지
-// 상위 5페이지는 선명하게, 이후 페이지는 blur 처리하여 구매 전환 유도
+// 에디터에서 작성된 실제 데이터 기반 스프레드 뷰(Spread View) 렌더링
+// 상위 스프레드는 선명하게, 이후는 blur 처리하여 구매 전환 유도
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { SERVICE_TYPES, BOOK_SPECS, BOOK_SPEC_LABELS } from '@/lib/constants';
 import { DUMMY_DATA } from '@/data/dummy';
 import StepIndicator from '@/components/StepIndicator';
 
-// 선명하게 보여주는 페이지 수
-const PREVIEW_THRESHOLD = 5;
+// 선명하게 보여주는 스프레드 수
+const CLEAR_SPREAD_COUNT = 3;
 
 export default function PreviewPage() {
   const router = useRouter();
@@ -20,7 +21,7 @@ export default function PreviewPage() {
   const [estimate, setEstimate] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [pageImages, setPageImages] = useState([]);
+  const [previewData, setPreviewData] = useState(null);
 
   useEffect(() => {
     const raw = sessionStorage.getItem('bookmaker_session');
@@ -29,30 +30,70 @@ export default function PreviewPage() {
     if (!data.bookUid) { router.push('/editor'); return; }
     setSession(data);
     fetchEstimate(data.bookUid);
-    buildPagePreviews(data);
+
+    // 에디터에서 저장한 실데이터 로드
+    const previewRaw = sessionStorage.getItem('bookmaker_preview');
+    if (previewRaw) {
+      setPreviewData(JSON.parse(previewRaw));
+    } else {
+      // 폴백: 더미 데이터 기반 미리보기 구성
+      buildFallbackPreview(data);
+    }
   }, [router]);
 
-  // 페이지 미리보기 이미지 구성
-  // 더미 데이터 사용 시 실제 이미지 URL 활용, 아니면 서비스별 시드 기반 플레이스홀더 사용
-  const buildPagePreviews = (data) => {
+  // 폴백: 에디터 데이터가 없을 때 더미 기반 구성
+  const buildFallbackPreview = (data) => {
     const serviceType = data.serviceType || 'baby';
     const dummy = DUMMY_DATA[serviceType];
     const dummyPages = dummy?.pages || [];
-
     const totalCount = data.pageCount || Math.max(dummyPages.length, 12);
 
-    const images = Array.from({ length: totalCount }, (_, i) => {
-      const dummyPage = dummyPages[i % dummyPages.length];
+    const pages = Array.from({ length: totalCount }, (_, i) => {
+      const dp = dummyPages[i % dummyPages.length];
       return {
-        index: i,
-        src: dummyPage?.image || `https://picsum.photos/seed/${serviceType}-pg${i}/480/640`,
-        title: dummyPage?.title || `${i + 1}페이지`,
-        date: dummyPage?.date || '',
+        imageUrl: dp?.image || `https://picsum.photos/seed/${serviceType}-pg${i}/480/640`,
+        title: dp?.title || `${i + 1}페이지`,
+        text: dp?.text || '',
+        date: dp?.date || '',
       };
     });
 
-    setPageImages(images);
+    setPreviewData({
+      coverFront: { url: pages[0]?.imageUrl, title: data.formData?.bookTitle || SERVICE_TYPES[serviceType]?.name || '표지' },
+      coverBack:  { url: pages[pages.length - 1]?.imageUrl, title: '뒤표지' },
+      pages: pages.slice(1, -1),
+    });
   };
+
+  // 스프레드 그룹 생성: [뒤표지|앞표지], [내지1|내지2], [내지3|내지4], ...
+  const spreads = useMemo(() => {
+    if (!previewData) return [];
+    const result = [];
+
+    // 첫 스프레드: 표지 (뒤표지 좌 | 앞표지 우)
+    result.push({
+      type: 'cover',
+      left:  { imageUrl: previewData.coverBack?.url,  title: previewData.coverBack?.title  || '뒤표지', isCover: true, label: '뒤표지' },
+      right: { imageUrl: previewData.coverFront?.url, title: previewData.coverFront?.title || '앞표지', isCover: true, label: '앞표지' },
+    });
+
+    // 내지 스프레드: 2페이지씩 묶기
+    const pages = previewData.pages || [];
+    for (let i = 0; i < pages.length; i += 2) {
+      result.push({
+        type: 'content',
+        left:  pages[i] || null,
+        right: pages[i + 1] || null,
+        pageNumL: i + 1,
+        pageNumR: i + 2,
+      });
+    }
+
+    return result;
+  }, [previewData]);
+
+  const clearSpreads = spreads.slice(0, CLEAR_SPREAD_COUNT + 1); // +1 for cover
+  const blurredSpreads = spreads.slice(CLEAR_SPREAD_COUNT + 1);
 
   const fetchEstimate = async (bookUid) => {
     setLoading(true);
@@ -86,57 +127,45 @@ export default function PreviewPage() {
 
   const service = SERVICE_TYPES[session.serviceType];
   const spec = BOOK_SPECS[session.bookSpecUid];
+  const totalPages = previewData?.pages?.length || 0;
   const formatPrice = (n) => (n ? n.toLocaleString('ko-KR') : '—');
-
-  const clearPages = pageImages.slice(0, PREVIEW_THRESHOLD);
-  const blurredPages = pageImages.slice(PREVIEW_THRESHOLD);
-  const hasBlurred = blurredPages.length > 0;
 
   return (
     <div className="min-h-screen pb-20 bg-ink-50">
       <StepIndicator currentStep="preview" />
 
-      <div className="max-w-4xl mx-auto px-6">
+      <div className="max-w-5xl mx-auto px-6">
         {/* 헤더 */}
         <div className="text-center mb-10 opacity-0 animate-fade-up">
           <h1 className="font-display font-bold text-3xl text-ink-900 mb-2">
-            미리보기 & 가격 확인
+            스프레드 미리보기
           </h1>
-          <p className="text-ink-400">책이 완성되었습니다. 일부 페이지를 미리 확인하세요.</p>
+          <p className="text-ink-400">
+            책을 펼친 모습으로 미리 확인하세요 — 총 {totalPages}페이지, {spreads.length}스프레드
+          </p>
         </div>
 
-        {/* ── 페이지 미리보기 갤러리 ── */}
-        {pageImages.length > 0 && (
-          <div className="mb-8 opacity-0 animate-fade-up delay-100">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-display font-bold text-lg text-ink-900">
-                {service.icon} 페이지 미리보기
-              </h2>
-              <span className="text-xs text-ink-400 bg-white border border-ink-100 px-3 py-1 rounded-full">
-                전체 {pageImages.length}페이지
-              </span>
-            </div>
+        {/* ── 스프레드 뷰 ── */}
+        {spreads.length > 0 && (
+          <div className="mb-10 space-y-6 opacity-0 animate-fade-up delay-100">
+            {/* 선명한 스프레드 */}
+            {clearSpreads.map((spread, idx) => (
+              <SpreadCard key={idx} spread={spread} index={idx} blurred={false} />
+            ))}
 
-            {/* 선명한 페이지 (상위 N장) */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 mb-3">
-              {clearPages.map((page) => (
-                <PageCard key={page.index} page={page} blurred={false} />
-              ))}
-            </div>
-
-            {/* 블러 처리된 나머지 페이지 + 구매 유도 오버레이 */}
-            {hasBlurred && (
+            {/* 블러 스프레드 + 구매 유도 오버레이 */}
+            {blurredSpreads.length > 0 && (
               <div className="relative">
-                {/* 블러 페이지 그리드 */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 select-none">
-                  {blurredPages.map((page) => (
-                    <PageCard key={page.index} page={page} blurred={true} />
+                <div className="space-y-6 select-none">
+                  {blurredSpreads.slice(0, 3).map((spread, idx) => (
+                    <SpreadCard key={idx} spread={spread} index={clearSpreads.length + idx} blurred={true} />
                   ))}
                 </div>
 
                 {/* 오버레이 CTA */}
-                <div className="absolute inset-0 flex flex-col items-center justify-center rounded-2xl"
-                  style={{ background: 'linear-gradient(to bottom, rgba(249,247,243,0.15) 0%, rgba(249,247,243,0.88) 35%, rgba(249,247,243,0.97) 100%)' }}
+                <div
+                  className="absolute inset-0 flex flex-col items-center justify-center rounded-2xl"
+                  style={{ background: 'linear-gradient(to bottom, rgba(249,247,243,0.1) 0%, rgba(249,247,243,0.85) 30%, rgba(249,247,243,0.98) 100%)' }}
                 >
                   <div className="text-center px-6 py-8 max-w-sm">
                     <div className="w-14 h-14 rounded-2xl bg-warm-100 flex items-center justify-center mx-auto mb-4">
@@ -146,7 +175,7 @@ export default function PreviewPage() {
                       </svg>
                     </div>
                     <p className="font-display font-bold text-ink-900 text-lg mb-1">
-                      나머지 {blurredPages.length}페이지
+                      나머지 {blurredSpreads.length}스프레드
                     </p>
                     <p className="text-ink-500 text-sm mb-6 leading-relaxed">
                       전체 내용은 주문 후<br />확인하실 수 있습니다
@@ -189,7 +218,7 @@ export default function PreviewPage() {
             </div>
             <div className="p-3 bg-ink-50 rounded-xl">
               <p className="text-xs text-ink-400 mb-0.5">페이지 수</p>
-              <p className="text-sm font-medium text-ink-800">{session.pageCount || '—'} 페이지</p>
+              <p className="text-sm font-medium text-ink-800">{session.pageCount || totalPages || '—'} 페이지</p>
             </div>
           </div>
 
@@ -280,32 +309,146 @@ export default function PreviewPage() {
   );
 }
 
-// ── 단일 페이지 카드 컴포넌트 ──────────────────────────────────
-function PageCard({ page, blurred }) {
-  return (
-    <div className={`relative rounded-xl overflow-hidden aspect-[3/4] bg-ink-100 shadow-sm ${blurred ? 'blur-md pointer-events-none' : ''}`}>
-      {/* 페이지 이미지 */}
-      <img
-        src={page.src}
-        alt={page.title}
-        className="w-full h-full object-cover"
-        loading="lazy"
-        onError={(e) => {
-          e.target.style.display = 'none';
-        }}
-      />
+// ── 스프레드 카드 (책을 펼친 2페이지 뷰) ──────────────────────────
+function SpreadCard({ spread, index, blurred }) {
+  const isCover = spread.type === 'cover';
 
-      {/* 페이지 번호 뱃지 */}
-      {!blurred && (
-        <div className="absolute top-2 left-2 bg-black/40 backdrop-blur-sm text-white text-[10px] font-medium px-2 py-0.5 rounded-full">
-          {page.index + 1}p
+  return (
+    <div className={`${blurred ? 'blur-md pointer-events-none' : ''}`}>
+      {/* 스프레드 라벨 */}
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-[11px] font-medium text-ink-500 bg-white border border-ink-100 px-2.5 py-0.5 rounded-full">
+          {isCover ? '📔 표지 스프레드' : `📖 스프레드 ${index}`}
+        </span>
+        {!isCover && (
+          <span className="text-[10px] text-ink-400">
+            {spread.pageNumL}–{spread.pageNumR}쪽
+          </span>
+        )}
+      </div>
+
+      {/* 스프레드 본체: 책등(Spine) 구분선 + 좌/우 페이지 */}
+      <div
+        className="relative bg-white rounded-2xl overflow-hidden border border-ink-200"
+        style={{ boxShadow: '0 8px 30px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.04)' }}
+      >
+        {/* 책등 중앙 그림자 효과 */}
+        <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-6 z-10 pointer-events-none"
+          style={{
+            background: 'linear-gradient(to right, rgba(0,0,0,0.06) 0%, rgba(0,0,0,0.02) 30%, transparent 50%, rgba(0,0,0,0.02) 70%, rgba(0,0,0,0.06) 100%)',
+          }}
+        />
+        {/* 책등 중앙선 */}
+        <div className="absolute inset-y-0 left-1/2 -translate-x-[0.5px] w-[1px] bg-ink-200 z-10" />
+
+        <div className="grid grid-cols-2">
+          {/* 왼쪽 페이지 */}
+          <SpreadPage
+            page={spread.left}
+            side="left"
+            isCover={isCover}
+            label={isCover ? spread.left?.label : null}
+            pageNum={!isCover ? spread.pageNumL : null}
+          />
+          {/* 오른쪽 페이지 */}
+          <SpreadPage
+            page={spread.right}
+            side="right"
+            isCover={isCover}
+            label={isCover ? spread.right?.label : null}
+            pageNum={!isCover ? spread.pageNumR : null}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── 스프레드 내 단일 페이지 렌더링 ────────────────────────────────
+function SpreadPage({ page, side, isCover, label, pageNum }) {
+  if (!page) {
+    // 빈 페이지 (내지 홀수일 때 우측이 비는 경우)
+    return (
+      <div className="aspect-[3/4] bg-ink-50 flex items-center justify-center">
+        <span className="text-ink-300 text-xs">빈 페이지</span>
+      </div>
+    );
+  }
+
+  const hasImage = !!page.imageUrl;
+  const hasText = !!(page.text || '').trim();
+  const isTextOnly = !hasImage && hasText;
+
+  return (
+    <div className={`relative aspect-[3/4] overflow-hidden ${side === 'left' ? 'border-r-0' : 'border-l-0'}`}>
+      {/* 이미지가 있는 페이지 */}
+      {hasImage && (
+        <img
+          src={page.imageUrl}
+          alt={page.title || ''}
+          className="w-full h-full object-cover"
+          loading="lazy"
+          onError={(e) => {
+            e.target.style.display = 'none';
+          }}
+        />
+      )}
+
+      {/* 텍스트 전용 페이지 */}
+      {isTextOnly && (
+        <div className="w-full h-full bg-cream flex flex-col justify-center px-6 py-8">
+          {page.title && (
+            <p className="font-display font-bold text-ink-800 text-sm mb-3 leading-tight">{page.title}</p>
+          )}
+          <p className="text-ink-600 text-[11px] leading-relaxed line-clamp-[12]">{page.text}</p>
+          {page.date && (
+            <p className="text-ink-400 text-[10px] mt-auto pt-3">{page.date}</p>
+          )}
         </div>
       )}
 
-      {/* 하단 제목 그라디언트 */}
-      {!blurred && page.title && (
-        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-2 py-2">
-          <p className="text-white text-[10px] leading-tight line-clamp-2">{page.title}</p>
+      {/* 이미지+텍스트 오버레이 */}
+      {hasImage && hasText && (
+        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent px-3 py-3">
+          {page.title && (
+            <p className="text-white font-bold text-[11px] leading-tight mb-0.5">{page.title}</p>
+          )}
+          <p className="text-white/80 text-[10px] leading-relaxed line-clamp-3">{page.text}</p>
+        </div>
+      )}
+
+      {/* 이미지만 있는 페이지(Full-bleed) — 제목만 하단에 */}
+      {hasImage && !hasText && page.title && !isCover && (
+        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/50 to-transparent px-2 py-2">
+          <p className="text-white text-[10px] leading-tight line-clamp-1">{page.title}</p>
+        </div>
+      )}
+
+      {/* 표지 라벨 */}
+      {isCover && label && (
+        <div className="absolute top-2 left-2 bg-warm-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
+          {label}
+        </div>
+      )}
+
+      {/* 표지 타이틀 오버레이 */}
+      {isCover && hasImage && (
+        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-3 py-3">
+          <p className="text-white font-display font-bold text-sm leading-tight">{page.title}</p>
+        </div>
+      )}
+
+      {/* 페이지 번호 */}
+      {pageNum && (
+        <div className={`absolute bottom-1.5 text-[9px] text-ink-400 ${side === 'left' ? 'left-2' : 'right-2'}`}>
+          {pageNum}
+        </div>
+      )}
+
+      {/* 이미지도 텍스트도 없는 빈 페이지 */}
+      {!hasImage && !hasText && (
+        <div className="w-full h-full bg-ink-50 flex items-center justify-center">
+          <span className="text-ink-300 text-[10px]">{page.title || '빈 페이지'}</span>
         </div>
       )}
     </div>

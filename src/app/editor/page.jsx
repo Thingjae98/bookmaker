@@ -13,14 +13,61 @@ import StepIndicator from '@/components/StepIndicator';
 import { toast } from '@/lib/toast';
 import { fetchWithRetry } from '@/lib/fetchWithRetry';
 
-// ─── 템플릿 상수 (SQUAREBOOK_HC 기준 실제 검증된 UID) ─────────
-// coverPhoto+title+dateRange / photo1+date+title+diaryText / date+title+diaryText
-const COVER_TEMPLATE = '79yjMH3qRPly'; // 표지: { coverPhoto, title, dateRange }
-const TPL_WITH_PHOTO = '3FhSEhJ94c0T'; // 내지(사진): { photo1, date, title, diaryText }
-const TPL_TEXT_ONLY  = 'vHA59XPPKqak'; // 내지(텍스트): { date, title, diaryText }
-// 하위 호환: 이전 상수명 유지
+// ─── 템플릿 폴백 상수 (SQUAREBOOK_HC 기준 실제 검증된 UID) ─────────
+// API 동적 조회 실패 시에만 사용되는 안전 장치
+const COVER_TEMPLATE_FALLBACK = '79yjMH3qRPly'; // 표지: { coverPhoto, title, dateRange }
+const TPL_WITH_PHOTO_FALLBACK = '3FhSEhJ94c0T'; // 내지(사진): { photo1, date, title, diaryText }
+const TPL_TEXT_ONLY_FALLBACK  = 'vHA59XPPKqak'; // 내지(텍스트): { date, title, diaryText }
+// 하위 호환
+const COVER_TEMPLATE = COVER_TEMPLATE_FALLBACK;
+const TPL_WITH_PHOTO = TPL_WITH_PHOTO_FALLBACK;
+const TPL_TEXT_ONLY  = TPL_TEXT_ONLY_FALLBACK;
 const TPL_TEXT_IMAGE = TPL_WITH_PHOTO;
 const TPL_IMAGE_ONLY = TPL_WITH_PHOTO;
+
+// ─── 템플릿 와이어프레임 타입 추론 (모듈 레벨) ────────────────────
+// API 템플릿 객체에서 레이아웃 유형을 추론하여 동적 매핑에 활용
+const classifyTemplate = (t) => {
+  const name = (t.name || t.templateName || '').toLowerCase();
+  const kind = (t.templateKind || t.category || '').toLowerCase();
+  if (kind.includes('cover')) return 'cover';
+  if (name.includes('빈') || name.includes('blank')) return 'blank';
+  if (name.includes('월') || name.includes('month') || name.includes('calendar')) return 'calendar';
+  if ((name.includes('텍스트') || name.includes('text')) &&
+      !(name.includes('사진') || name.includes('photo') || name.includes('이미지')))
+    return 'text_only';
+  if (name.includes('사진') || name.includes('photo') || name.includes('이미지'))
+    return name.includes('텍스트') || name.includes('text') ? 'photo_text' : 'photo_only';
+  return 'photo_text'; // 기본값
+};
+
+// ─── API 기반 동적 템플릿 매핑 ─────────────────────────────────────
+// GET /api/templates?bookSpecUid=... 응답에서 역할·와이어프레임 타입별 최적 템플릿을 선택
+const resolveTemplates = (apiTemplates, bookSpecUid) => {
+  // 판형 일치 필터
+  const filtered = apiTemplates.filter((t) => {
+    if (bookSpecUid && t.bookSpecUid && t.bookSpecUid !== bookSpecUid) return false;
+    return true;
+  });
+
+  const covers   = filtered.filter((t) => classifyTemplate(t) === 'cover');
+  const contents = filtered.filter((t) => {
+    const ct = classifyTemplate(t);
+    return ct !== 'cover'; // cover가 아닌 모든 템플릿
+  });
+
+  // 타입별 첫 번째 매칭
+  const findByType = (list, type) => list.find((t) => classifyTemplate(t) === type);
+
+  return {
+    cover:      covers[0]?.templateUid   || COVER_TEMPLATE_FALLBACK,
+    photoText:  findByType(contents, 'photo_text')?.templateUid  || TPL_WITH_PHOTO_FALLBACK,
+    photoOnly:  findByType(contents, 'photo_only')?.templateUid  || TPL_WITH_PHOTO_FALLBACK,
+    textOnly:   findByType(contents, 'text_only')?.templateUid   || TPL_TEXT_ONLY_FALLBACK,
+    spread:     findByType(contents, 'photo_only')?.templateUid  || findByType(contents, 'photo_text')?.templateUid || TPL_WITH_PHOTO_FALLBACK,
+    source:     apiTemplates.length > 0 ? 'API' : 'fallback',
+  };
+};
 
 // ─── 페이지 소모량 계산 ────────────────────────────────────────────
 // 기본 1페이지, 양면(Spread) 분할 옵션(useSpread + isLandscape) 적용 시 2페이지 소모
@@ -606,13 +653,26 @@ export default function EditorPage() {
         addLog(`⚠️ bookSpecUid 보정: "${rawSpecUid || '(없음)'}" → "${bookSpecUid}"`);
       addLog(`📐 판형: ${BOOK_SPEC_LABELS[bookSpecUid] || bookSpecUid}`);
 
-      // ── 검증된 하드코딩 템플릿 UID 사용 ─────────────────────────
-      // 각 템플릿의 파라미터 이름이 다르므로 직접 find()로 선택하면 잘못된 파라미터 전달 위험
-      // 실제 API로 검증된 UID를 고정 사용. SQUAREBOOK_HC 전용.
-      const dynamicCoverTpl  = COVER_TEMPLATE; // 79yjMH3qRPly: { coverPhoto, title, dateRange }
-      const dynamicImageOnly = TPL_WITH_PHOTO; // 3FhSEhJ94c0T: { photo1, date, title, diaryText }
-      const dynamicTextImage = TPL_TEXT_ONLY;  // vHA59XPPKqak: { date, title, diaryText }
-      addLog(`📐 템플릿 — 표지: ${dynamicCoverTpl} / 내지(사진): ${dynamicImageOnly} / 내지(텍스트): ${dynamicTextImage}`);
+      // ── API 기반 동적 템플릿 매핑 ────────────────────────────────
+      // GET /templates?bookSpecUid=... 으로 현재 판형의 실제 사용 가능한 템플릿 목록을 조회하고,
+      // 와이어프레임 타입(cover, photo_text, photo_only, text_only)별로 최적 매핑
+      let tplMap = resolveTemplates([], bookSpecUid); // 초기값: 폴백
+      try {
+        const tplRes = await fetch(`/api/templates?bookSpecUid=${bookSpecUid}&limit=50`);
+        const tplData = await tplRes.json();
+        const apiTpls = tplData?.data || tplData?.items || [];
+        if (Array.isArray(apiTpls) && apiTpls.length > 0) {
+          tplMap = resolveTemplates(apiTpls, bookSpecUid);
+          addLog(`📐 템플릿 동적 매핑 (${tplMap.source}) — 표지: ${tplMap.cover} / 사진+텍스트: ${tplMap.photoText} / 사진: ${tplMap.photoOnly} / 텍스트: ${tplMap.textOnly}`);
+        } else {
+          addLog(`⚠️ 템플릿 API 응답 없음 — 검증된 폴백 UID 사용`);
+        }
+      } catch (tplErr) {
+        addLog(`⚠️ 템플릿 조회 실패(${tplErr.message}) — 검증된 폴백 UID 사용`);
+      }
+      const dynamicCoverTpl  = tplMap.cover;
+      const dynamicImageOnly = tplMap.photoText;  // 사진+텍스트 겸용 (photo1 파라미터 포함)
+      const dynamicTextImage = tplMap.textOnly;
 
       // ── STEP 1: 책 생성 ────────────────────────────────────────
       addLog(`📗 책 생성 중... (${title})`);
@@ -770,8 +830,8 @@ export default function EditorPage() {
             const rightFile = new File([rb], 'spread-right.jpg', { type: 'image/jpeg' });
             const leftUrl   = (await uploadFile(leftFile,  `내지 ${ci + 1}-L`)) || fallbackUrl;
             const rightUrl  = (await uploadFile(rightFile, `내지 ${ci + 1}-R`)) || fallbackUrl;
-            contentPageData.push({ imageUrl: leftUrl,  text: item.text || '', title: item.title || '', date: item.date });
-            contentPageData.push({ imageUrl: rightUrl, text: '',               title: '',               date: item.date });
+            contentPageData.push({ imageUrl: leftUrl,  text: item.text || '', title: item.title || '', date: item.date, isSpreadPage: true });
+            contentPageData.push({ imageUrl: rightUrl, text: '',               title: '',               date: item.date, isSpreadPage: true });
             addLog(`✅ 양면 분할 완료 → 2페이지 (내지 ${ci + 1})`);
           } catch (e) {
             addLog(`⚠️ 양면 분할 실패(${e.message}) — 원본 단일 처리`);
@@ -861,17 +921,28 @@ export default function EditorPage() {
       }
 
       // ── STEP 4: 내지 추가 ─────────────────────────────────────
-      // 템플릿 선택 원칙:
-      //   - 이미지 URL 있음 → TPL_WITH_PHOTO (3FhSEhJ94c0T): { photo1, date, title, diaryText }
-      //   - 이미지 URL 없음 → TPL_TEXT_ONLY  (vHA59XPPKqak): { date, title, diaryText }
-      // ※ page.templateUid(사용자 선택)는 무시 — 파라미터명 불일치 400 방지
+      // 템플릿 동적 선택 원칙 (API 매핑 기반):
+      //   - 이미지+텍스트 있음  → tplMap.photoText (사진+텍스트 레이아웃)
+      //   - 이미지만 있음       → tplMap.photoOnly (사진 전용 레이아웃, 없으면 photoText 폴백)
+      //   - 텍스트만 있음       → tplMap.textOnly  (텍스트 전용 레이아웃)
+      //   - 양면(Spread) 페이지 → tplMap.spread    (사진 전용 우선)
       addLog(`📄 내지 ${paddedPages.length}페이지 추가 중...`);
       let contentsFailCount = 0;
       for (let i = 0; i < paddedPages.length; i++) {
         const page = paddedPages[i];
         const hasImage = !!(page.imageUrl);
-        // 항상 검증된 상수 UID 사용 (사용자 선택 templateUid 무시)
-        const tplUid = hasImage ? TPL_WITH_PHOTO : TPL_TEXT_ONLY;
+        const hasText  = !!(page.text || '').trim();
+        // 동적 템플릿 선택: 페이지 데이터 조합에 따른 최적 매핑
+        let tplUid;
+        if (page.isSpreadPage) {
+          tplUid = tplMap.spread;  // 양면 분할 페이지 → 사진 전용 우선
+        } else if (hasImage && hasText) {
+          tplUid = tplMap.photoText;  // 사진 + 텍스트
+        } else if (hasImage && !hasText) {
+          tplUid = tplMap.photoOnly;  // 사진만 (Full-bleed)
+        } else {
+          tplUid = tplMap.textOnly;   // 텍스트만 또는 빈 페이지
+        }
         const params = {
           date:      page.date  || new Date().toISOString().slice(0, 10),
           title:     page.title || `페이지 ${i + 1}`,
@@ -920,6 +991,20 @@ export default function EditorPage() {
         toast.success(`책 생성 완료! ${finalData.data?.pageCount || ''}페이지 포토북이 준비됐습니다.`);
         sessionStorage.setItem('bookmaker_session',
           JSON.stringify({ ...session, bookUid: uid, pageCount: finalData.data?.pageCount }));
+
+        // 미리보기 페이지용 스프레드 데이터 저장 (실데이터 기반 렌더링)
+        const previewData = {
+          coverFront: { url: coverFrontUrl, title },
+          coverBack:  { url: coverBackUrl,  title: '뒤표지' },
+          pages: paddedPages.map((p, idx) => ({
+            imageUrl: p.imageUrl,
+            title:    p.title || `페이지 ${idx + 1}`,
+            text:     p.text  || '',
+            date:     p.date  || '',
+            isSpreadPage: p.isSpreadPage || false,
+          })),
+        };
+        sessionStorage.setItem('bookmaker_preview', JSON.stringify(previewData));
       } else {
         const finalDetail = finalData.details ? ` | 상세: ${JSON.stringify(finalData.details)}` : '';
         addLog(`❌ 최종화 실패: ${finalData.message}${finalDetail}`);
