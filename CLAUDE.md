@@ -193,6 +193,15 @@ Authorization: Bearer {SWEETBOOK_API_KEY}
   - 내지(`content`): `w-full object-cover` — 전체 표시 (크롭 없음)
 - 이미지 로드 실패 시 `onError`로 CSS 와이어프레임(`renderWireframe(wfType)`) 자동 대체
 
+### 표지 듀얼 슬롯 UI 규칙 (2026-04-04 추가)
+- SweetBook 표지 템플릿은 `[뒤표지(좌) | 앞표지(우)]` Spread 1장 구조 — 반드시 2장의 사진이 한 쌍으로 필요
+- **좌측 구성 패널**: 앞/뒤 개별 섹션 대신 통합 "📔 표지 스프레드" 2-slot 프레임으로 표시
+  - 채워진 슬롯: 사진 썸네일 + 배지 레이블
+  - 빈 슬롯: 점선 원형 아이콘 + "미지정" 텍스트
+- **인라인 편집 패널 우측 컬럼**: 표지 역할 지정 시 현재 Spread 현황 실시간 반영 + 미완성 경고 박스
+- **템플릿 선택기**: 표지 역할(`isCover=true`)일 때 카드 그리드 상단에 파란 안내 박스 고정 표시
+- Validation: `frontItems.length === 1 && backItems.length === 1` 미충족 시 "앞표지와 뒤표지 사진을 모두 지정해 주세요" 메시지
+
 ### ✅ 해결된 버그 (2026-04-03)
 
 #### 버그 A — `sweetFetch` ok() 래핑 누락 → **해결**
@@ -329,6 +338,7 @@ try {
 - [x] 표지 썸네일 역할별 CSS 크롭 — SweetBook 표지 템플릿은 양면(Spread) 이미지 1장으로 제공됨. 앞표지 선택 시 `right-0 w-[200%]`(우측 절반), 뒤표지 선택 시 `left-0 w-[200%]`(좌측 절반), 내지는 크롭 없이 전체 표시
 - [x] 표지 Spread 통합 완료 — 앞/뒤표지를 단일 `POST /books/{uid}/cover` 호출(coverPhoto + backPhoto)로 통합. 뒤표지를 내지 마지막 장으로 처리하던 STEP 4-b 방식 제거
 - [x] 페이지 규격 실시간 검증 도입 — `getPageConsumption(item)` 함수(Spread 2p 소모 반영) + `totalContentPages` useMemo + `isPageMinMet` + `isIncrementOk`로 버튼 활성화 조건 강화. 미충족 시 버튼 옆 빨간 안내 문구 표시
+- [x] 표지 듀얼 슬롯 UX 구현 — 좌측 패널: `[뒤표지 슬롯 | 앞표지 슬롯]` Spread 프레임으로 통합. 인라인 패널 우측 컬럼: 표지 역할 지정 시 현재 Spread 현황 실시간 표시 + 미완성 경고. 템플릿 선택기: "2장 필수" 안내 박스 상단 고정
 
 ### P1 — 면접 전 개선
 - [x] 이미지 파일 직접 업로드 (Drag & Drop + Photos API) — 에디터 내 구현 완료

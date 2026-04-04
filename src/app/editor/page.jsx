@@ -361,6 +361,16 @@ export default function EditorPage() {
           )}
         </div>
 
+        {/* 표지 전용 — Spread 2장 필수 안내 */}
+        {isCover && (
+          <div className="flex items-start gap-1.5 mb-2 bg-blue-50 border border-blue-200 rounded-lg px-2.5 py-2">
+            <span className="text-blue-500 text-sm shrink-0 mt-0.5">ℹ</span>
+            <p className="text-[11px] text-blue-700 leading-relaxed">
+              이 템플릿은 <strong>앞/뒤표지 2장의 사진이 모두 필요</strong>합니다. 갤러리에서 앞표지와 뒤표지를 각각 지정해 주세요.
+            </p>
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-2">
           {/* ★ 자동 선택 — 전체 너비, 강조 디자인 */}
           <button
@@ -446,7 +456,7 @@ export default function EditorPage() {
   const handleCreateBook = async () => {
     if (!isReady) {
       if (frontItems.length !== 1 || backItems.length !== 1) {
-        toast.warn('앞표지·뒤표지 각 1장 지정이 필요합니다.');
+        toast.warn('앞표지와 뒤표지 사진을 모두 지정해 주세요.');
       } else if (!isPageMinMet) {
         toast.warn(`내지 최소 ${specPageMinUI}페이지가 필요합니다 (현재 ${totalContentPages}p).`);
       } else {
@@ -716,27 +726,71 @@ export default function EditorPage() {
             <div className="bg-white rounded-2xl border border-ink-100 p-4 sticky top-20 space-y-4">
               <h2 className="font-display font-bold text-ink-900">📖 구성 미리보기</h2>
 
-              {/* 앞표지 */}
+              {/* ── 표지 스프레드 슬롯 ─────────────────────────────── */}
+              {/* SweetBook 표지 템플릿은 [뒤표지(좌) | 앞표지(우)] 한 장 Spread로 인쇄됨 */}
               <div>
-                <div className="flex items-center justify-between mb-1">
-                  <p className="text-xs font-bold text-ink-500">앞표지</p>
-                  {frontItems.length === 1
-                    ? <span className="text-xs text-green-600 font-medium">✓ 지정됨</span>
-                    : <span className="text-xs text-red-500">필수</span>}
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-bold text-ink-500">📔 표지 스프레드</p>
+                  {frontItems.length === 1 && backItems.length === 1
+                    ? <span className="text-xs text-green-600 font-medium">✓ 2장 지정됨</span>
+                    : <span className="text-xs text-red-500">앞+뒤 각 1장 필수</span>}
                 </div>
-                {frontItems[0] ? (
+
+                {/* Spread 프레임: 좌=뒤표지, 우=앞표지 */}
+                <div className="flex rounded-xl overflow-hidden border-2 border-ink-200 h-24">
+                  {/* 뒤표지 슬롯 (좌측) */}
                   <div
-                    className="relative h-20 rounded-xl overflow-hidden border-2 border-green-400 cursor-pointer"
-                    onClick={() => setSelectedIdx(gallery.indexOf(frontItems[0]))}
+                    className={`w-1/2 relative flex items-center justify-center border-r border-ink-200 cursor-pointer overflow-hidden transition-colors ${
+                      backItems[0] ? '' : 'bg-ink-50 hover:bg-ink-100'
+                    }`}
+                    onClick={() => backItems[0] && setSelectedIdx(gallery.indexOf(backItems[0]))}
+                    title="뒤표지 슬롯"
                   >
-                    <img src={frontItems[0].previewUrl} alt="앞표지" className="w-full h-full object-cover" />
-                    <div className="absolute top-1 left-1 bg-green-600 text-white text-[10px] px-1.5 py-0.5 rounded-md">앞표지</div>
+                    {backItems[0] ? (
+                      <>
+                        <img src={backItems[0].previewUrl} alt="뒤표지" className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-black/35 flex flex-col items-center justify-center">
+                          <span className="text-white text-[10px] font-bold drop-shadow">뒤표지</span>
+                          <span className="text-white/70 text-[9px] mt-0.5">클릭 편집</span>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-center px-1">
+                        <div className="w-8 h-8 rounded-full border-2 border-dashed border-ink-300 flex items-center justify-center mx-auto mb-1">
+                          <span className="text-ink-300 text-sm">뒤</span>
+                        </div>
+                        <p className="text-[9px] text-ink-400 leading-tight">뒤표지<br/>미지정</p>
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <div className="h-20 border-2 border-dashed border-red-300 rounded-xl flex items-center justify-center bg-red-50">
-                    <p className="text-xs text-red-400">갤러리에서 지정 필요</p>
+
+                  {/* 앞표지 슬롯 (우측) */}
+                  <div
+                    className={`w-1/2 relative flex items-center justify-center cursor-pointer overflow-hidden transition-colors ${
+                      frontItems[0] ? '' : 'bg-ink-50 hover:bg-ink-100'
+                    }`}
+                    onClick={() => frontItems[0] && setSelectedIdx(gallery.indexOf(frontItems[0]))}
+                    title="앞표지 슬롯"
+                  >
+                    {frontItems[0] ? (
+                      <>
+                        <img src={frontItems[0].previewUrl} alt="앞표지" className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-black/35 flex flex-col items-center justify-center">
+                          <span className="text-white text-[10px] font-bold drop-shadow">앞표지</span>
+                          <span className="text-white/70 text-[9px] mt-0.5">클릭 편집</span>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-center px-1">
+                        <div className="w-8 h-8 rounded-full border-2 border-dashed border-ink-300 flex items-center justify-center mx-auto mb-1">
+                          <span className="text-ink-300 text-sm">앞</span>
+                        </div>
+                        <p className="text-[9px] text-ink-400 leading-tight">앞표지<br/>미지정</p>
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
+                <p className="text-[9px] text-ink-400 text-center mt-1">← 뒤표지 | 앞표지 →</p>
               </div>
 
               {/* 내지 목록 */}
@@ -786,29 +840,6 @@ export default function EditorPage() {
                 </div>
               </div>
 
-              {/* 뒤표지 */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <p className="text-xs font-bold text-ink-500">뒤표지</p>
-                  {backItems.length === 1
-                    ? <span className="text-xs text-green-600 font-medium">✓ 지정됨</span>
-                    : <span className="text-xs text-red-500">필수</span>}
-                </div>
-                {backItems[0] ? (
-                  <div
-                    className="relative h-20 rounded-xl overflow-hidden border-2 border-blue-400 cursor-pointer"
-                    onClick={() => setSelectedIdx(gallery.indexOf(backItems[0]))}
-                  >
-                    <img src={backItems[0].previewUrl} alt="뒤표지" className="w-full h-full object-cover" />
-                    <div className="absolute top-1 left-1 bg-blue-600 text-white text-[10px] px-1.5 py-0.5 rounded-md">뒤표지</div>
-                  </div>
-                ) : (
-                  <div className="h-20 border-2 border-dashed border-red-300 rounded-xl flex items-center justify-center bg-red-50">
-                    <p className="text-xs text-red-400">갤러리에서 지정 필요</p>
-                  </div>
-                )}
-              </div>
-
               {/* 검증 상태 배너 */}
               <div className={`p-3 rounded-xl text-xs border ${
                 isReady
@@ -819,8 +850,9 @@ export default function EditorPage() {
                   <p className="font-medium">✅ 구성 완료 — 생성 가능</p>
                 ) : (
                   <ul className="space-y-0.5">
-                    {frontItems.length !== 1 && <li>• 앞표지 1장 지정 필요</li>}
-                    {backItems.length !== 1  && <li>• 뒤표지 1장 지정 필요</li>}
+                    {(frontItems.length !== 1 || backItems.length !== 1) && (
+                      <li>• 앞표지와 뒤표지 사진을 모두 지정해 주세요</li>
+                    )}
                     {!isPageMinMet && (
                       <li>• 내지 최소 {specPageMinUI}페이지 필요 (현재 {totalContentPages}p, {specPageMinUI - totalContentPages}p 부족)</li>
                     )}
@@ -1121,22 +1153,92 @@ export default function EditorPage() {
                       )}
                     </div>
                   ) : (
-                    /* 내지가 아닐 때 오른쪽 컬럼: 역할 선택 안내 */
-                    <div className="flex flex-col items-center justify-center h-full text-center text-ink-400 py-8">
+                    /* 내지가 아닐 때 오른쪽 컬럼 */
+                    <div>
                       {!modalItem.role ? (
-                        <>
+                        <div className="flex flex-col items-center justify-center h-full text-center text-ink-400 py-8">
                           <p className="text-3xl mb-3">👈</p>
                           <p className="text-sm font-medium text-ink-600">왼쪽에서 역할을 지정하세요</p>
                           <p className="text-xs mt-1">앞표지·뒤표지·내지 중 하나를 선택하면<br/>추가 설정 옵션이 나타납니다</p>
-                        </>
+                        </div>
                       ) : (
-                        <>
-                          <p className="text-3xl mb-3">{modalItem.role === 'front' ? '📗' : '📘'}</p>
-                          <p className="text-sm font-medium text-ink-600">
-                            {modalItem.role === 'front' ? '앞표지' : '뒤표지'}로 지정됨
-                          </p>
-                          <p className="text-xs mt-1">왼쪽 표지 템플릿을 확인하세요</p>
-                        </>
+                        /* 표지 역할 — 스프레드 슬롯 미리보기 */
+                        <div className="space-y-3">
+                          <div>
+                            <p className="text-xs font-bold text-ink-700 mb-1">📔 표지 스프레드 미리보기</p>
+                            <p className="text-[11px] text-ink-400 leading-relaxed">
+                              SweetBook 표지는 <strong>[뒤표지(좌) | 앞표지(우)]</strong> 한 장 Spread로 인쇄됩니다.<br/>
+                              두 슬롯을 모두 채워야 책 생성이 가능합니다.
+                            </p>
+                          </div>
+
+                          {/* Spread 프레임 */}
+                          <div className="flex rounded-xl overflow-hidden border-2 border-ink-200 h-32">
+                            {/* 뒤표지 슬롯 (좌측) */}
+                            <div
+                              className={`w-1/2 relative flex items-center justify-center border-r border-ink-200 overflow-hidden ${
+                                backItems[0] ? 'cursor-pointer' : 'bg-ink-50 border-dashed'
+                              }`}
+                              onClick={() => backItems[0] && setSelectedIdx(gallery.indexOf(backItems[0]))}
+                            >
+                              {backItems[0] ? (
+                                <>
+                                  <img src={backItems[0].previewUrl} alt="뒤표지" className="w-full h-full object-cover" />
+                                  <div className="absolute inset-0 bg-black/30 flex flex-col items-end justify-end p-1.5">
+                                    <span className="bg-blue-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">뒤표지 ✓</span>
+                                  </div>
+                                </>
+                              ) : (
+                                <div className="text-center p-2">
+                                  <div className="w-10 h-10 rounded-full border-2 border-dashed border-ink-300 flex items-center justify-center mx-auto mb-1">
+                                    <span className="text-ink-300 font-bold text-xs">뒤</span>
+                                  </div>
+                                  <p className="text-[10px] text-ink-400 leading-tight">뒤표지<br/>슬롯 비어있음</p>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* 앞표지 슬롯 (우측) */}
+                            <div
+                              className={`w-1/2 relative flex items-center justify-center overflow-hidden ${
+                                frontItems[0] ? 'cursor-pointer' : 'bg-ink-50'
+                              }`}
+                              onClick={() => frontItems[0] && setSelectedIdx(gallery.indexOf(frontItems[0]))}
+                            >
+                              {frontItems[0] ? (
+                                <>
+                                  <img src={frontItems[0].previewUrl} alt="앞표지" className="w-full h-full object-cover" />
+                                  <div className="absolute inset-0 bg-black/30 flex flex-col items-end justify-end p-1.5">
+                                    <span className="bg-green-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">앞표지 ✓</span>
+                                  </div>
+                                </>
+                              ) : (
+                                <div className="text-center p-2">
+                                  <div className="w-10 h-10 rounded-full border-2 border-dashed border-ink-300 flex items-center justify-center mx-auto mb-1">
+                                    <span className="text-ink-300 font-bold text-xs">앞</span>
+                                  </div>
+                                  <p className="text-[10px] text-ink-400 leading-tight">앞표지<br/>슬롯 비어있음</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <p className="text-[9px] text-ink-400 text-center">← 뒤표지 | 앞표지 →</p>
+
+                          {/* 미완성 경고 */}
+                          {(frontItems.length !== 1 || backItems.length !== 1) && (
+                            <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                              <p className="text-[11px] text-amber-700 font-medium">
+                                ⚠️ 앞표지와 뒤표지 사진을 모두 지정해 주세요
+                              </p>
+                              {frontItems.length !== 1 && (
+                                <p className="text-[10px] text-amber-600 mt-0.5">• 앞표지 미지정</p>
+                              )}
+                              {backItems.length !== 1 && (
+                                <p className="text-[10px] text-amber-600 mt-0.5">• 뒤표지 미지정</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
                   )}
@@ -1176,7 +1278,7 @@ export default function EditorPage() {
                       ? `내지 최소 ${specPageMinUI}페이지 필요 (현재 ${totalContentPages}p)`
                       : !isIncrementOk
                       ? `내지 ${specPageIncUI}페이지 단위로 구성해 주세요 (현재 ${totalContentPages}p)`
-                      : '앞표지·뒤표지 각 1장 지정 필요'}
+                      : '앞표지와 뒤표지 사진을 모두 지정해 주세요'}
                   </p>
                   {/* 페이지 규격 검증 힌트 — 앞/뒤표지는 지정됐지만 페이지 수 미충족일 때 빨간 안내 */}
                   {!isReady && !bookCreated && frontItems.length === 1 && backItems.length === 1 && (
