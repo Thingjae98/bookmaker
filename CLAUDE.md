@@ -366,16 +366,26 @@ try {
 - [x] 최종화 에러 100% 해결 — 모든 내지 전송 성공 보장 + 최종화 실패 시 `console.dir(finalizeError)` 상세 로깅
 - [x] 사진 업로드 인덱스 매핑 최종 동기화 — `stagedFilesRef` (useRef, itemId→File) 도입으로 gallery state와 독립적으로 파일 이중 보관. `handleCreateBook` 시작 시 `contentFileMap[ci]` 스냅샷으로 절대 내지 인덱스 기준 파일 매핑. `uploadFile()` 헬퍼에 instanceof 타입 체크 + `console.log` 진단 로그 추가
 
+### P0 — 과제 제출 전 필수 (마감: 4/8 화 23:59)
+- [ ] GitHub 저장소 **Public** 설정 확인 (심사자 접근 가능해야 함)
+- [ ] `.gitignore`에 `.claude/` 추가 (현재 untracked 상태로 노출 위험)
+- [ ] `npm run build` 최종 성공 확인
+- [ ] 구글폼 서술형 4문항 작성 + GitHub URL 제출 (https://forms.gle/PrdSrWNyTucLeZdX9)
+
 ### P1 — 면접 전 개선
 - [x] 이미지 파일 직접 업로드 (Drag & Drop + Photos API) — 에디터 내 구현 완료
 - [x] 표지 이미지 (앞/뒤) 전용 업로드 UI — 에디터 좌측 패널
 - [x] 미리보기 블러 티저 UI (상위 5p 공개 + 구매 유도 오버레이)
 - [x] GET /templates로 실제 템플릿 목록 가져와서 선택 UI — 에디터 모달 내 카드 그리드 (create 페이지에서 이동)
 - [x] DECISION_LOG.md 내용 보강 — 최종화 400 해결·템플릿 동적 필터링 UX 의사결정 상세 기록
+- [ ] 면접 프레젠테이션 자료 준비 (5분 이내, 화면 캡처/동영상 녹화 활용, 현장 시연 없음)
 - [ ] 페이지 미리보기 시각화 (템플릿 레이아웃 렌더링)
 - [ ] Skeleton UI 로딩 (현재 spinner만 있음)
+- [ ] 에디터 전체 플로우 E2E 검증 영상 녹화 (더미 채우기 → 책 생성 → 주문 완료)
+- [ ] 모바일 반응형 최종 점검 (640px 이하)
 
 ### P2 — 시간 여유 시
 - [ ] 웹훅 연동 (주문 상태 변경 실시간 알림)
 - [ ] 사용자 인증 (NextAuth)
 - [ ] 다크 모드
+- [ ] Vercel/Netlify 배포 (심사 편의를 위한 라이브 데모 URL 제공)

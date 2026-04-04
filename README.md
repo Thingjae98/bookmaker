@@ -58,7 +58,7 @@
 
 ```bash
 # 1. 저장소 클론
-git clone https://github.com/YOUR_USERNAME/bookmaker.git
+git clone https://github.com/Thingjae98/bookmaker.git
 cd bookmaker
 
 # 2. 의존성 설치
@@ -81,7 +81,7 @@ npm run dev
 1. 메인 페이지에서 원하는 서비스 선택 (예: 여행 포토북)
 2. **"더미 데이터 채우기"** 버튼 클릭 → 샘플 데이터 자동 입력
 3. 에디터 우측 상단 갤러리 **Drag & Drop 존**에 사진을 한 번에 드롭 (또는 클릭하여 다중 선택)
-4. 갤러리 썸네일 클릭 → 모달에서 **앞표지 / 뒤표지 / 내지** 역할 지정 (가로형 사진은 "양면 펼침" 체크 시 Canvas API로 2페이지 자동 분할)
+4. 갤러리 썸네일 클릭 → 인라인 편집 패널에서 **앞표지 / 뒤표지 / 내지** 역할 지정 (가로형 사진은 "양면 펼침" 체크 시 Canvas API로 2페이지 자동 분할)
 5. 지정된 표지 이미지가 좌측 패널 썸네일에 실시간 반영되는지 확인
 6. 에디터 하단 **"📗 책 생성 & 최종화"** 클릭
 7. API 로그에서 앞표지→내지→뒤표지→최종화 과정 확인
@@ -119,7 +119,7 @@ npm run dev
 |---------|----------|
 | Claude (Anthropic) | 전체 프로젝트 아키텍처 설계, 프론트엔드/백엔드 코드 작성, API 연동 로직 구현 |
 | Claude (Anthropic) | API 문서 분석 및 워크플로우 설계 |
-| Claude (Anthropic) | 더미 데이터 생성 (6가지 서비스 유형별 10~12개 샘플 페이지) |
+| Claude (Anthropic) | 더미 데이터 생성 (6가지 서비스 유형별 24페이지 샘플) |
 | Claude (Anthropic) | README.md 작성 |
 | Gemini (Google) | AI 페이지 초안 생성 기능 — 에디터 내 서비스별 10페이지 콘텐츠 자동 생성 |
 | Gemini (Google) | 모델 404 에러 해결 — `gemini-1.5-flash` 계열이 v1beta API에서 미지원임을 ListModels API로 확인, `gemini-flash-lite-latest` → `gemini-2.5-flash` 순으로 대체 |
@@ -153,26 +153,6 @@ Book Print API의 핵심 가치는 **"콘텐츠를 책으로 만드는 것"**입
 - **사용자 인증**: NextAuth 등으로 사용자별 책/주문 관리
 - **결제 연동**: Sandbox → Live 전환 시 실제 PG 결제 플로우
 
-### ⚠️ 알려진 미해결 이슈 (다음 버전에서 수정 예정)
-
-책 생성 흐름에서 `POST /books/{uid}/contents` 400 에러가 발생하는 구조적 원인이 있으며, 현재 분석 완료 상태다.
-
-**근본 원인 3가지:**
-
-1. **`sweetFetch` 응답 형식 불일치** (`src/lib/sweetbook.js`)
-   - SDK 기반 함수는 `{ success: true, data }` 형식으로 래핑하지만, `sweetFetch` 기반 함수(`listBookSpecs`, `listTemplates`)는 raw JSON을 그대로 반환
-   - 프론트엔드가 `data.success`를 확인하므로 항상 fallback으로 진입 → 올바른 템플릿 UID를 못 받아옴
-
-2. **`sweetFetch` 에러 미전파** (`src/lib/sweetbook.js`)
-   - SweetBook API가 400을 반환해도 throw 없이 에러 JSON을 그대로 반환
-   - route handler가 에러를 HTTP 200으로 클라이언트에 전달 → 에러가 조용히 무시됨
-
-3. **하드코딩된 템플릿 UID** (`src/app/editor/page.jsx`)
-   - `cnH0Ud1nl1f9`, `6dJ0Qy6ZmXej` 등의 UID가 특정 bookSpec에서만 유효
-   - `GET /api/templates?bookSpecUid=...`로 실제 UID를 동적으로 받아 사용해야 함
-
-상세 분석 및 수정 방법은 `DECISION_LOG.md`의 `[미해결 버그]` 항목 참고.
-
 ---
 
 ## 6. 기술 스택
@@ -185,7 +165,7 @@ Book Print API의 핵심 가치는 **"콘텐츠를 책으로 만드는 것"**입
 | API 클라이언트 | bookprintapi-nodejs-sdk (공식 SDK) |
 | API 연동 | SweetBook Book Print API (Sandbox) |
 | 파일 업로드 | HTML5 File API + Drag & Drop + FormData |
-| AI 생성 | Google Gemini 2.0 Flash (@google/generative-ai) |
+| AI 생성 | Google Gemini (@google/generative-ai) — gemini-flash-lite → 2.5-flash → 2.5-pro 순차 폴백 |
 
 ### 프로젝트 구조
 
@@ -216,10 +196,13 @@ bookmaker/
 │   ├── components/
 │   │   ├── Header.jsx                        # 공통 헤더/네비게이션
 │   │   ├── ServiceCard.jsx                   # 서비스 선택 카드
-│   │   └── StepIndicator.jsx                 # 진행 단계 인디케이터
+│   │   ├── StepIndicator.jsx                 # 진행 단계 인디케이터
+│   │   └── Toast.jsx                         # 토스트 알림 컴포넌트
 │   ├── lib/
 │   │   ├── sweetbook.js                      # SweetBook API 클라이언트 (서버 전용)
-│   │   └── constants.js                      # 서비스 타입, 판형, 상태 상수
+│   │   ├── constants.js                      # 서비스 타입, 판형, 상태 상수
+│   │   ├── toast.js                          # 토스트 이벤트 버스 (클라이언트)
+│   │   └── fetchWithRetry.js                 # fetch 재시도 래퍼 (5xx 3회)
 │   └── data/
 │       └── dummy.js                          # 6가지 서비스별 더미 데이터
 ├── .env.example                              # 환경변수 예시
