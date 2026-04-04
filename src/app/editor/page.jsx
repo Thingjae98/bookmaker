@@ -4,7 +4,7 @@
 // 갤러리에서 사진을 업로드하고 역할(앞표지/뒤표지/내지)을 모두 지정한 뒤
 // [최종 생성 및 주문] 버튼 한 번으로 Book → Photos → Cover → Contents → Finalize API를 순차 호출한다.
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { SERVICE_TYPES, BOOK_SPECS, BOOK_SPEC_LABELS } from '@/lib/constants';
@@ -40,6 +40,12 @@ export default function EditorPage() {
   const [selectedIdx, setSelectedIdx]       = useState(null);   // 인라인 편집 패널 대상 인덱스
   const [galleryDragIdx, setGalleryDragIdx] = useState(null);
   const [galleryDropActive, setGalleryDropActive] = useState(false);
+
+  // ── stagedFiles: itemId → File 보조 맵 ──────────────────────
+  // gallery state 업데이트와 독립적으로 파일 객체를 보관.
+  // gallery.filter/map/splice 등이 새 배열을 만들어도 파일 참조가 끊어지지 않도록 이중 보관.
+  // 키: 갤러리 아이템의 고유 id (문자열), 값: File | Blob 객체
+  const stagedFilesRef = useRef({});
 
   // ── API 상태 ─────────────────────────────────────────────────
   const [loading, setLoading]           = useState(false);
@@ -137,18 +143,23 @@ export default function EditorPage() {
     const arr = Array.from(files).filter((f) => f.type.startsWith('image/'));
     if (arr.length === 0) return;
     const newItems = await Promise.all(
-      arr.map(async (file) => ({
-        id:          `g-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        file,
-        previewUrl:  URL.createObjectURL(file),
-        role:        null,
-        title:       '',
-        text:        '',
-        date:        new Date().toISOString().slice(0, 10),
-        templateUid: null,
-        isLandscape: await detectLandscape(file),
-        useSpread:   false,
-      }))
+      arr.map(async (file) => {
+        const id = `g-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        // stagedFilesRef에 파일 등록 — gallery state와 독립적으로 보관
+        stagedFilesRef.current[id] = file;
+        return {
+          id,
+          file,
+          previewUrl:  URL.createObjectURL(file),
+          role:        null,
+          title:       '',
+          text:        '',
+          date:        new Date().toISOString().slice(0, 10),
+          templateUid: null,
+          isLandscape: await detectLandscape(file),
+          useSpread:   false,
+        };
+      })
     );
     setGallery((prev) => [...prev, ...newItems]);
     toast.success(`${arr.length}장이 갤러리에 추가됐습니다`);
@@ -160,6 +171,7 @@ export default function EditorPage() {
   const removeGalleryItem = (idx) => {
     setGallery((prev) => {
       const item = prev[idx];
+      if (item?.id) delete stagedFilesRef.current[item.id]; // stagedFiles 정리
       if (item?.previewUrl?.startsWith('blob:')) URL.revokeObjectURL(item.previewUrl);
       return prev.filter((_, i) => i !== idx);
     });
@@ -201,15 +213,23 @@ export default function EditorPage() {
   };
 
   // ── 빈 슬롯 사진 교체 — 인라인 패널에서 직접 파일 선택 시 ─────
+  // setGallery 함수형 업데이트 내부에서 아이템 ID를 읽어 stagedFilesRef에 이중 등록
   const handleBlankSlotUpload = async (galleryIdx, file) => {
     if (!file) return;
     const previewUrl = URL.createObjectURL(file);
     const isLandscape = await detectLandscape(file);
-    updateGalleryItem(galleryIdx, {
-      file,
-      previewUrl,
-      isLandscape,
-      isBlankSlot: false,
+    setGallery((prev) => {
+      const item = prev[galleryIdx];
+      // stagedFilesRef에 itemId 기반으로 파일 등록 — 절대 누락되지 않도록 이중 보관
+      if (item?.id) {
+        stagedFilesRef.current[item.id] = file;
+        console.log(`[stagedFiles] 빈 슬롯 파일 등록 | itemId: ${item.id} | 파일:`, file);
+      }
+      return prev.map((it, i) =>
+        i === galleryIdx
+          ? { ...it, file, previewUrl, isLandscape, isBlankSlot: false }
+          : it
+      );
     });
     toast.success('사진이 슬롯에 등록됐습니다');
   };
@@ -254,7 +274,10 @@ export default function EditorPage() {
           .map((p) => prev.indexOf(p))
       );
       prev.forEach((it, i) => {
-        if (pairSet.has(i) && it?.previewUrl?.startsWith('blob:')) URL.revokeObjectURL(it.previewUrl);
+        if (pairSet.has(i)) {
+          if (it?.id) delete stagedFilesRef.current[it.id]; // stagedFiles 정리
+          if (it?.previewUrl?.startsWith('blob:')) URL.revokeObjectURL(it.previewUrl);
+        }
       });
       return prev.filter((_, i) => !pairSet.has(i));
     });
@@ -600,19 +623,49 @@ export default function EditorPage() {
       addLog(`✅ 책 생성 완료: ${uid}`);
 
       // ── STEP 2: 사진 업로드 ────────────────────────────────────
-      // ※ 인덱스 매핑 원칙: contentPageData[i]는 contentItems[i]에 1:1 대응
-      //   절대 페이지 인덱스 기준으로 빌드 → 스프레드 재정렬 후에도 순서 보장
+      // ▸ 인덱스 매핑 원칙
+      //   contentFileMap[ci] = contentItems[ci]의 파일 (절대 내지 인덱스 0~N)
+      //   파일 취득 우선순위: stagedFilesRef[item.id] → item.file → previewUrl(http) → fallback
+      //   스프레드 재정렬·삭제 후에도 itemId 기반으로 파일이 안전하게 보존됨
       setUploadingPhoto(true);
-      const totalPhotos = gallery.filter((g) => g.role && g.file).length;
-      addLog(`📸 사진 업로드 시작 (로컬 파일 ${totalPhotos}장)...`);
+
+      // ── 절대 내지 인덱스 기준 파일 맵 스냅샷 ──────────────────────
+      // handleCreateBook 호출 시점의 contentItems 순서를 확정 스냅샷으로 고정
+      const contentFileMap = {}; // ci(0~N) → File|Blob
+      contentItems.forEach((item, ci) => {
+        // 1순위: stagedFilesRef(ID 기반, 가장 신뢰도 높음)
+        // 2순위: item.file (gallery state에 저장된 참조)
+        const f = stagedFilesRef.current[item.id] ?? item.file;
+        if (f instanceof File || f instanceof Blob) {
+          contentFileMap[ci] = f;
+        }
+      });
+      const fileCount = Object.keys(contentFileMap).length;
+      addLog(`📁 내지 파일 맵: ${fileCount}개 / ${contentItems.length}장 보유 (인덱스: [${Object.keys(contentFileMap).join(', ')||'없음'}])`);
+      console.log('[contentFileMap 스냅샷]', contentFileMap);
+
+      // 앞/뒤 표지 파일도 stagedFilesRef 우선으로 취득
+      const frontItem = frontItems[0];
+      const backItem  = backItems[0];
+      const frontFile = stagedFilesRef.current[frontItem.id] ?? frontItem.file;
+      const backFile  = stagedFilesRef.current[backItem.id]  ?? backItem.file;
+
+      const totalPhotos = fileCount + (frontFile ? 1 : 0) + (backFile ? 1 : 0);
+      addLog(`📸 사진 업로드 시작 (로컬 파일 총 ${totalPhotos}장)...`);
 
       // File → Photos API 업로드 헬퍼 (URL 반환)
       // 실패 시 null 반환 (throw 하지 않음 — 상위 루프에서 폴백 처리)
       const uploadFile = async (file, label) => {
-        if (!file) { addLog(`⚠️ ${label}: 파일 객체 없음(null)`); return null; }
+        if (!file) { addLog(`⚠️ ${label}: 파일 객체 없음`); return null; }
+        if (!(file instanceof File) && !(file instanceof Blob)) {
+          addLog(`⚠️ ${label}: 유효하지 않은 파일 타입 (${typeof file})`);
+          console.dir({ invalidFile: file, label });
+          return null;
+        }
         try {
+          console.log(`[업로드 시도] ${label} | 파일:`, file, '| size:', file.size, 'type:', file.type);
           const form = new FormData();
-          form.append('file', file);
+          form.append('file', file, file.name || 'photo.jpg');
           const r = await fetch(`/api/books/${uid}/photos`, { method: 'POST', body: form });
           const d = await r.json();
           const url = d.data?.url || d.data?.photoUrl || d.data?.fileUrl;
@@ -628,72 +681,68 @@ export default function EditorPage() {
       };
 
       // 앞표지 URL 확보
-      const frontItem = frontItems[0];
       let coverFrontUrl = `https://picsum.photos/seed/${session.serviceType}-front/600/600`;
-      if (frontItem.file) {
-        const url = await uploadFile(frontItem.file, '앞표지');
+      if (frontFile) {
+        const url = await uploadFile(frontFile, '앞표지');
         if (url) coverFrontUrl = url;
       } else if (frontItem.previewUrl?.startsWith('http')) {
         coverFrontUrl = frontItem.previewUrl;
       }
-      addLog(`📗 앞표지 URL: ${coverFrontUrl.slice(0, 60)}...`);
+      addLog(`📗 앞표지 URL: ${coverFrontUrl.slice(0, 70)}`);
 
       // 뒤표지 URL 확보
-      const backItem = backItems[0];
       let coverBackUrl = `https://picsum.photos/seed/${session.serviceType}-back/600/600`;
-      if (backItem.file) {
-        const url = await uploadFile(backItem.file, '뒤표지');
+      if (backFile) {
+        const url = await uploadFile(backFile, '뒤표지');
         if (url) coverBackUrl = url;
       } else if (backItem.previewUrl?.startsWith('http')) {
         coverBackUrl = backItem.previewUrl;
       }
-      addLog(`📘 뒤표지 URL: ${coverBackUrl.slice(0, 60)}...`);
+      addLog(`📘 뒤표지 URL: ${coverBackUrl.slice(0, 70)}`);
 
-      // ── 내지 사진 업로드 — 절대 페이지 인덱스(0~N) 기준으로 빌드 ──
-      // contentPageData[i] ↔ contentItems[i] 1:1 매핑 엄수
+      // ── 내지 사진 업로드 — contentFileMap[ci] 기준 (절대 인덱스 매핑) ──
       const contentPageData = [];
       addLog(`📄 내지 ${contentItems.length}장 처리 중...`);
 
       for (let ci = 0; ci < contentItems.length; ci++) {
-        const item = contentItems[ci];
-        // 인덱스 기반 picsum 폴백 — 업로드 실패 / 파일 없을 때 사용
-        const fallbackUrl = `https://picsum.photos/seed/${session.serviceType}-c${ci}/600/600`;
+        const item          = contentItems[ci];
+        const fileToUpload  = contentFileMap[ci]; // 절대 인덱스로 파일 취득
+        const fallbackUrl   = `https://picsum.photos/seed/${session.serviceType}-c${ci}/600/600`;
 
-        if (item.useSpread && item.isLandscape && item.file) {
+        if (item.useSpread && item.isLandscape && fileToUpload) {
           // Canvas API 양면 분할 (가로형 사진 → 좌/우 2페이지)
-          addLog(`↔️ 양면 분할: 내지 ${ci + 1}`);
+          addLog(`↔️ 양면 분할: 내지 ${ci + 1} (itemId: ${item.id})`);
           try {
-            const [lb, rb]  = await splitImageHalves(item.file);
+            const [lb, rb]  = await splitImageHalves(fileToUpload);
             const leftFile  = new File([lb], 'spread-left.jpg',  { type: 'image/jpeg' });
             const rightFile = new File([rb], 'spread-right.jpg', { type: 'image/jpeg' });
             const leftUrl   = (await uploadFile(leftFile,  `내지 ${ci + 1}-L`)) || fallbackUrl;
             const rightUrl  = (await uploadFile(rightFile, `내지 ${ci + 1}-R`)) || fallbackUrl;
             contentPageData.push({ imageUrl: leftUrl,  text: item.text || '', title: item.title || '', date: item.date });
             contentPageData.push({ imageUrl: rightUrl, text: '',               title: '',               date: item.date });
-            addLog(`✅ 양면 분할 완료 → 2페이지 (${ci + 1}번 아이템)`);
+            addLog(`✅ 양면 분할 완료 → 2페이지 (내지 ${ci + 1})`);
           } catch (e) {
             addLog(`⚠️ 양면 분할 실패(${e.message}) — 원본 단일 처리`);
             console.dir({ spreadSplitError: e, ci });
-            const singleUrl = item.file
-              ? ((await uploadFile(item.file, `내지 ${ci + 1}`)) || fallbackUrl)
-              : (item.previewUrl?.startsWith('http') ? item.previewUrl : fallbackUrl);
+            const singleUrl = (await uploadFile(fileToUpload, `내지 ${ci + 1}`)) || fallbackUrl;
             contentPageData.push({ imageUrl: singleUrl, text: item.text || '', title: item.title || '', date: item.date });
           }
         } else {
-          // 일반 내지: 파일 있으면 업로드, 없으면 previewUrl(picsum) 또는 fallback 사용
+          // 일반 내지: contentFileMap → previewUrl(http) → 빈 슬롯이면 null → 아니면 fallback
           let imgUrl = null;
-          if (item.file) {
-            imgUrl = await uploadFile(item.file, `내지 ${ci + 1}`);
+          if (fileToUpload) {
+            imgUrl = await uploadFile(fileToUpload, `내지 ${ci + 1}`);
+            if (!imgUrl) {
+              addLog(`⚠️ 내지 ${ci + 1} 업로드 실패 — picsum fallback 적용`);
+              imgUrl = fallbackUrl;
+            }
+          } else if (item.previewUrl?.startsWith('http')) {
+            imgUrl = item.previewUrl; // 더미/AI 데이터 picsum URL (직접 참조)
+          } else if (!item.isBlankSlot) {
+            imgUrl = fallbackUrl; // 파일도 previewUrl도 없는 일반 아이템 → fallback
+            addLog(`📎 내지 ${ci + 1}: 파일 없음(isBlankSlot=${item.isBlankSlot}) → picsum fallback`);
           }
-          if (!imgUrl && item.previewUrl?.startsWith('http')) {
-            imgUrl = item.previewUrl; // 더미/AI 데이터의 picsum URL
-          }
-          if (!imgUrl && !item.isBlankSlot) {
-            // 파일도 previewUrl도 없지만 빈 슬롯이 아닌 경우 → picsum fallback
-            imgUrl = fallbackUrl;
-            addLog(`📎 내지 ${ci + 1} 이미지 없음 → picsum fallback 사용`);
-          }
-          // 빈 슬롯은 imgUrl = null 유지 (TPL_TEXT_ONLY로 전송됨)
+          // isBlankSlot = true 이면 imgUrl = null 유지 → TPL_TEXT_ONLY로 전송
           contentPageData.push({
             imageUrl: imgUrl,
             text:  item.text  || '',
@@ -703,7 +752,7 @@ export default function EditorPage() {
         }
       }
       setUploadingPhoto(false);
-      addLog(`✅ 내지 처리 완료 — 실제 페이지 ${contentPageData.length}개`);
+      addLog(`✅ 내지 처리 완료 — 실제 페이지 ${contentPageData.length}개 (이미지 있음: ${contentPageData.filter(p => p.imageUrl).length}개)`);
 
       // ── 판형 최소 페이지 충족 — pageMin + pageIncrement 수학적 준수 ──
       const specPageMin       = BOOK_SPECS[bookSpecUid]?.pageMin       || 24;

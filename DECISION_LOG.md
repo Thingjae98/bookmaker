@@ -5,6 +5,41 @@
 
 ---
 
+## ✅ 2026-04-04 — [해결완료] 내지 스프레드 전환에 따른 사진 데이터 인덱스 매핑 최종 동기화 및 업로드 버그 해결
+
+### 배경 / 문제
+
+**스프레드 UI 도입 후 실제 업로드 파일이 picsum fallback으로 대체되는 현상**
+- `item.file` 프로퍼티는 gallery state 객체에 저장되어 있으나, `setGallery`의 비동기 batching 과정 또는 `map/filter`로 생성된 새 배열에서 파일 참조가 끊어지는 경우 발생
+- `handleBlankSlotUpload`가 `await detectLandscape(file)` 이후 `updateGalleryItem(galleryIdx, {...})` 를 호출할 때 stale closure 위험 존재
+- `handleCreateBook`에서 `contentItems[ci].file`을 직접 참조했는데, 이 파일 참조가 `undefined`로 평가되어 `uploadFile` 건너뜀 → picsum fallback 적용
+
+### 의사결정
+
+**`stagedFilesRef` (useRef) 도입 — itemId → File 이중 보관 맵**
+- `useRef({})` 로 `stagedFilesRef` 생성: gallery state와 독립적으로 파일 객체 보관
+- `handleGalleryUpload`: 각 item ID 생성 직후 `stagedFilesRef.current[id] = file` 등록
+- `handleBlankSlotUpload`: `setGallery` 함수형 업데이터 내부에서 `prev[galleryIdx].id` 읽어 등록 → stale closure 위험 완전 제거
+- `removeGalleryItem` / `removeSpreadPair`: 아이템 제거 시 `delete stagedFilesRef.current[item.id]` 정리
+
+**`contentFileMap` — 절대 내지 인덱스 기준 스냅샷**
+- `handleCreateBook` 시작 시 `contentItems.forEach((item, ci) => ...)` 로 `contentFileMap[ci]` 빌드
+- 파일 취득 우선순위: `stagedFilesRef.current[item.id]` → `item.file` → 두 가지 모두 없으면 미등록
+- 이 맵이 "0부터 시작하는 전체 내지 절대 인덱스" 기준 파일 매핑의 단일 진실의 원천
+- `addLog`와 `console.log('[contentFileMap 스냅샷]')` 으로 업로드 전 맵 전체를 확인 가능
+
+**`uploadFile` 헬퍼 강화**
+- `file` 이 `File | Blob` 인지 타입 체크 추가 (`instanceof` 검사)
+- `console.log('[업로드 시도]', label, file.size, file.type)` 로 FormData append 직전 파일 유효성 출력
+- `form.append('file', file, file.name || 'photo.jpg')` — 파일명 명시적 전달 (Blob의 경우 name 없음 방어)
+
+### 결과
+- 실제 업로드 파일이 picsum fallback으로 대체되는 문제 해결
+- 절대 내지 인덱스 기반 파일 맵으로 스프레드 재정렬/삭제 후에도 파일 순서 보장
+- API 로그 + console.log로 업로드 전 파일 상태를 완전히 가시화
+
+---
+
 ## ✅ 2026-04-04 — [해결완료] 스프레드 UI 기반 데이터 인덱스 매핑 전면 재구축 + 최종화 에러 100% 해결
 
 ### 배경 / 문제

@@ -356,6 +356,7 @@ try {
 - [x] 스프레드 UI 데이터 인덱스 매핑 재구축 — 절대 페이지 인덱스(0~N) 기준 `contentPageData` 빌드, picsum fallback URL로 업로드 실패·빈 슬롯·패딩 페이지 100% 커버
 - [x] 내지 전송 400 에러 해결 — templateUid 강제 표준화(항상 TPL_WITH_PHOTO / TPL_TEXT_ONLY), `diaryText` 빈 문자열 폴백(단일 공백), 실패 페이지 `console.dir` 수준 로깅
 - [x] 최종화 에러 100% 해결 — 모든 내지 전송 성공 보장 + 최종화 실패 시 `console.dir(finalizeError)` 상세 로깅
+- [x] 사진 업로드 인덱스 매핑 최종 동기화 — `stagedFilesRef` (useRef, itemId→File) 도입으로 gallery state와 독립적으로 파일 이중 보관. `handleCreateBook` 시작 시 `contentFileMap[ci]` 스냅샷으로 절대 내지 인덱스 기준 파일 매핑. `uploadFile()` 헬퍼에 instanceof 타입 체크 + `console.log` 진단 로그 추가
 
 ### P1 — 면접 전 개선
 - [x] 이미지 파일 직접 업로드 (Drag & Drop + Photos API) — 에디터 내 구현 완료
