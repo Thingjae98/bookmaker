@@ -352,6 +352,10 @@ try {
 - [x] 페이지 규격 실시간 검증 도입 — `getPageConsumption(item)` 함수(Spread 2p 소모 반영) + `totalContentPages` useMemo + `isPageMinMet` + `isIncrementOk`로 버튼 활성화 조건 강화. 미충족 시 버튼 옆 빨간 안내 문구 표시
 - [x] 표지 듀얼 슬롯 UX 구현 — 좌측 패널: `[뒤표지 슬롯 | 앞표지 슬롯]` Spread 프레임으로 통합. 인라인 패널 우측 컬럼: 표지 역할 지정 시 현재 Spread 현황 실시간 표시 + 미완성 경고. 템플릿 선택기: "2장 필수" 안내 박스 상단 고정
 - [x] 2페이지 Spread 단위 내지 편집 시스템 — `spreadGroups` useMemo로 내지 쌍 그룹화, 좌측 패널 스프레드 카드 뷰, "+2페이지(1장) 추가" 버튼, 쌍 단위 삭제(`removeSpreadPair`), L/R 교체(`swapSpreadSlot`), 인라인 패널 스프레드 슬롯 인디케이터(미니 프리뷰 + 현재 슬롯 amber 강조 + L/R 교체 버튼), 빈 슬롯(isBlankSlot) → TPL_TEXT_ONLY 자동 적용
+- [x] 빈 슬롯 직접 편집 기능 — 스프레드 뷰에서 빈 슬롯 클릭 → 인라인 편집 패널 열림, `<label>+<input>` 업로드 플레이스홀더로 사진 직접 업로드, `handleBlankSlotUpload()` → `isBlankSlot: false` 전환
+- [x] 스프레드 UI 데이터 인덱스 매핑 재구축 — 절대 페이지 인덱스(0~N) 기준 `contentPageData` 빌드, picsum fallback URL로 업로드 실패·빈 슬롯·패딩 페이지 100% 커버
+- [x] 내지 전송 400 에러 해결 — templateUid 강제 표준화(항상 TPL_WITH_PHOTO / TPL_TEXT_ONLY), `diaryText` 빈 문자열 폴백(단일 공백), 실패 페이지 `console.dir` 수준 로깅
+- [x] 최종화 에러 100% 해결 — 모든 내지 전송 성공 보장 + 최종화 실패 시 `console.dir(finalizeError)` 상세 로깅
 
 ### P1 — 면접 전 개선
 - [x] 이미지 파일 직접 업로드 (Drag & Drop + Photos API) — 에디터 내 구현 완료

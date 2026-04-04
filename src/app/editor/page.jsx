@@ -200,6 +200,20 @@ export default function EditorPage() {
     handleGalleryUpload(e.dataTransfer.files);
   };
 
+  // ── 빈 슬롯 사진 교체 — 인라인 패널에서 직접 파일 선택 시 ─────
+  const handleBlankSlotUpload = async (galleryIdx, file) => {
+    if (!file) return;
+    const previewUrl = URL.createObjectURL(file);
+    const isLandscape = await detectLandscape(file);
+    updateGalleryItem(galleryIdx, {
+      file,
+      previewUrl,
+      isLandscape,
+      isBlankSlot: false,
+    });
+    toast.success('사진이 슬롯에 등록됐습니다');
+  };
+
   // ── 스프레드(2페이지 쌍) 관련 헬퍼 ──────────────────────────
   // 빈 내지 슬롯 생성 — previewUrl: null로 갤러리에서 특수 렌더링
   const makeBlankItem = () => ({
@@ -586,91 +600,139 @@ export default function EditorPage() {
       addLog(`✅ 책 생성 완료: ${uid}`);
 
       // ── STEP 2: 사진 업로드 ────────────────────────────────────
+      // ※ 인덱스 매핑 원칙: contentPageData[i]는 contentItems[i]에 1:1 대응
+      //   절대 페이지 인덱스 기준으로 빌드 → 스프레드 재정렬 후에도 순서 보장
       setUploadingPhoto(true);
       const totalPhotos = gallery.filter((g) => g.role && g.file).length;
-      addLog(`📸 사진 업로드 시작 (${totalPhotos}장)...`);
+      addLog(`📸 사진 업로드 시작 (로컬 파일 ${totalPhotos}장)...`);
 
       // File → Photos API 업로드 헬퍼 (URL 반환)
+      // 실패 시 null 반환 (throw 하지 않음 — 상위 루프에서 폴백 처리)
       const uploadFile = async (file, label) => {
-        const form = new FormData();
-        form.append('file', file);
-        const r   = await fetch(`/api/books/${uid}/photos`, { method: 'POST', body: form });
-        const d   = await r.json();
-        const url = d.data?.url || d.data?.photoUrl || d.data?.fileUrl;
-        if (d.success && url) { addLog(`✅ ${label}`); return url; }
-        addLog(`⚠️ ${label} 실패: ${d.message}`);
-        return null;
+        if (!file) { addLog(`⚠️ ${label}: 파일 객체 없음(null)`); return null; }
+        try {
+          const form = new FormData();
+          form.append('file', file);
+          const r = await fetch(`/api/books/${uid}/photos`, { method: 'POST', body: form });
+          const d = await r.json();
+          const url = d.data?.url || d.data?.photoUrl || d.data?.fileUrl;
+          if (d.success && url) { addLog(`✅ ${label} 업로드 완료`); return url; }
+          addLog(`⚠️ ${label} 업로드 실패: ${d.message}`);
+          console.dir({ uploadFail: d, label });
+          return null;
+        } catch (err) {
+          addLog(`⚠️ ${label} 업로드 예외: ${err.message}`);
+          console.dir({ uploadException: err, label });
+          return null;
+        }
       };
 
       // 앞표지 URL 확보
       const frontItem = frontItems[0];
       let coverFrontUrl = `https://picsum.photos/seed/${session.serviceType}-front/600/600`;
       if (frontItem.file) {
-        const url = await uploadFile(frontItem.file, '앞표지 업로드');
+        const url = await uploadFile(frontItem.file, '앞표지');
         if (url) coverFrontUrl = url;
       } else if (frontItem.previewUrl?.startsWith('http')) {
         coverFrontUrl = frontItem.previewUrl;
       }
+      addLog(`📗 앞표지 URL: ${coverFrontUrl.slice(0, 60)}...`);
 
       // 뒤표지 URL 확보
       const backItem = backItems[0];
       let coverBackUrl = `https://picsum.photos/seed/${session.serviceType}-back/600/600`;
       if (backItem.file) {
-        const url = await uploadFile(backItem.file, '뒤표지 업로드');
+        const url = await uploadFile(backItem.file, '뒤표지');
         if (url) coverBackUrl = url;
       } else if (backItem.previewUrl?.startsWith('http')) {
         coverBackUrl = backItem.previewUrl;
       }
+      addLog(`📘 뒤표지 URL: ${coverBackUrl.slice(0, 60)}...`);
 
-      // 내지 사진 업로드 + 양면 분할 처리
+      // ── 내지 사진 업로드 — 절대 페이지 인덱스(0~N) 기준으로 빌드 ──
+      // contentPageData[i] ↔ contentItems[i] 1:1 매핑 엄수
       const contentPageData = [];
       addLog(`📄 내지 ${contentItems.length}장 처리 중...`);
-      for (const item of contentItems) {
+
+      for (let ci = 0; ci < contentItems.length; ci++) {
+        const item = contentItems[ci];
+        // 인덱스 기반 picsum 폴백 — 업로드 실패 / 파일 없을 때 사용
+        const fallbackUrl = `https://picsum.photos/seed/${session.serviceType}-c${ci}/600/600`;
+
         if (item.useSpread && item.isLandscape && item.file) {
-          // Canvas API 양면 분할
-          addLog(`↔️ 양면 분할: ${item.file.name}`);
+          // Canvas API 양면 분할 (가로형 사진 → 좌/우 2페이지)
+          addLog(`↔️ 양면 분할: 내지 ${ci + 1}`);
           try {
-            const [lb, rb]   = await splitImageHalves(item.file);
-            const leftFile   = new File([lb], 'spread-left.jpg',  { type: 'image/jpeg' });
-            const rightFile  = new File([rb], 'spread-right.jpg', { type: 'image/jpeg' });
-            const leftUrl    = await uploadFile(leftFile,  '양면-좌');
-            const rightUrl   = await uploadFile(rightFile, '양면-우');
-            contentPageData.push({ imageUrl: leftUrl,  text: item.text,  title: item.title, date: item.date, templateUid: item.templateUid });
-            contentPageData.push({ imageUrl: rightUrl, text: '',          title: '',         date: item.date, templateUid: dynamicImageOnly });
-            addLog('✅ 양면 분할 → 2페이지');
+            const [lb, rb]  = await splitImageHalves(item.file);
+            const leftFile  = new File([lb], 'spread-left.jpg',  { type: 'image/jpeg' });
+            const rightFile = new File([rb], 'spread-right.jpg', { type: 'image/jpeg' });
+            const leftUrl   = (await uploadFile(leftFile,  `내지 ${ci + 1}-L`)) || fallbackUrl;
+            const rightUrl  = (await uploadFile(rightFile, `내지 ${ci + 1}-R`)) || fallbackUrl;
+            contentPageData.push({ imageUrl: leftUrl,  text: item.text || '', title: item.title || '', date: item.date });
+            contentPageData.push({ imageUrl: rightUrl, text: '',               title: '',               date: item.date });
+            addLog(`✅ 양면 분할 완료 → 2페이지 (${ci + 1}번 아이템)`);
           } catch (e) {
-            addLog(`⚠️ 양면 분할 실패(${e.message}) — 원본 단일 업로드`);
-            const url = item.file ? await uploadFile(item.file, item.file.name) : item.previewUrl;
-            contentPageData.push({ imageUrl: url, text: item.text, title: item.title, date: item.date, templateUid: item.templateUid });
+            addLog(`⚠️ 양면 분할 실패(${e.message}) — 원본 단일 처리`);
+            console.dir({ spreadSplitError: e, ci });
+            const singleUrl = item.file
+              ? ((await uploadFile(item.file, `내지 ${ci + 1}`)) || fallbackUrl)
+              : (item.previewUrl?.startsWith('http') ? item.previewUrl : fallbackUrl);
+            contentPageData.push({ imageUrl: singleUrl, text: item.text || '', title: item.title || '', date: item.date });
           }
         } else {
-          const url = item.file
-            ? await uploadFile(item.file, item.file.name)
-            : (item.previewUrl?.startsWith('http') ? item.previewUrl : null);
-          contentPageData.push({ imageUrl: url, text: item.text, title: item.title, date: item.date, templateUid: item.templateUid });
+          // 일반 내지: 파일 있으면 업로드, 없으면 previewUrl(picsum) 또는 fallback 사용
+          let imgUrl = null;
+          if (item.file) {
+            imgUrl = await uploadFile(item.file, `내지 ${ci + 1}`);
+          }
+          if (!imgUrl && item.previewUrl?.startsWith('http')) {
+            imgUrl = item.previewUrl; // 더미/AI 데이터의 picsum URL
+          }
+          if (!imgUrl && !item.isBlankSlot) {
+            // 파일도 previewUrl도 없지만 빈 슬롯이 아닌 경우 → picsum fallback
+            imgUrl = fallbackUrl;
+            addLog(`📎 내지 ${ci + 1} 이미지 없음 → picsum fallback 사용`);
+          }
+          // 빈 슬롯은 imgUrl = null 유지 (TPL_TEXT_ONLY로 전송됨)
+          contentPageData.push({
+            imageUrl: imgUrl,
+            text:  item.text  || '',
+            title: item.title || '',
+            date:  item.date  || new Date().toISOString().slice(0, 10),
+          });
         }
       }
       setUploadingPhoto(false);
+      addLog(`✅ 내지 처리 완료 — 실제 페이지 ${contentPageData.length}개`);
 
-      // API 최소 페이지 수 충족 — pageMin + pageIncrement 수학적 준수
-      // SweetBook pageMin = 순수 내지(Contents) API 호출 횟수 기준
-      // 뒤표지도 /contents API로 전송하므로 targetContentCount에 포함됨
-      // 총 페이지 = 앞표지 1장(/cover) + targetContentCount 장(/contents)
+      // ── 판형 최소 페이지 충족 — pageMin + pageIncrement 수학적 준수 ──
       const specPageMin       = BOOK_SPECS[bookSpecUid]?.pageMin       || 24;
       const specPageIncrement = BOOK_SPECS[bookSpecUid]?.pageIncrement || 2;
       const rawCount          = Math.max(specPageMin, contentPageData.length);
       const rem               = rawCount % specPageIncrement;
       const targetContentCount = rem === 0 ? rawCount : rawCount + (specPageIncrement - rem);
-      const targetTotal       = targetContentCount + 1; // 로그용: 앞표지 1 포함 총 페이지
 
+      // 패딩 페이지 — picsum fallback URL 사용으로 API 400 방지
       const paddedPages = [...contentPageData];
       let ri = 0;
       while (paddedPages.length < targetContentCount) {
-        paddedPages.push({ ...contentPageData[ri % contentPageData.length] });
+        const pIdx    = paddedPages.length;
+        const srcPage = contentPageData[ri % contentPageData.length];
+        // 패딩 페이지는 반드시 이미지 URL 확보 (null 이미지로 API 전송 시 400 위험)
+        const padImgUrl = srcPage.imageUrl
+          || `https://picsum.photos/seed/${session.serviceType}-pad${pIdx}/600/600`;
+        paddedPages.push({
+          imageUrl: padImgUrl,
+          text:  srcPage.text  || '',
+          title: srcPage.title || '',
+          date:  srcPage.date  || new Date().toISOString().slice(0, 10),
+        });
         ri++;
       }
-      if (paddedPages.length > contentPageData.length)
-        addLog(`📋 판형 최소 ${specPageMin}p(내지) / 증분 ${specPageIncrement}p 충족 위해 ${paddedPages.length - contentPageData.length}페이지 패딩 (내지 ${targetContentCount}p → 총 ${targetTotal}p)`);
+      if (paddedPages.length > contentPageData.length) {
+        const targetTotal = targetContentCount + 1;
+        addLog(`📋 판형 최소 ${specPageMin}p / 증분 ${specPageIncrement}p 충족 — ${paddedPages.length - contentPageData.length}p 패딩 (내지 ${targetContentCount}p, 총 ${targetTotal}p)`);
+      }
 
       // ── STEP 3: 앞표지 추가 ────────────────────────────────────
       // session.coverTemplateUid는 create 단계에서 API가 동적으로 반환한 값으로
@@ -698,36 +760,51 @@ export default function EditorPage() {
       }
 
       // ── STEP 4: 내지 추가 ─────────────────────────────────────
+      // 템플릿 선택 원칙:
+      //   - 이미지 URL 있음 → TPL_WITH_PHOTO (3FhSEhJ94c0T): { photo1, date, title, diaryText }
+      //   - 이미지 URL 없음 → TPL_TEXT_ONLY  (vHA59XPPKqak): { date, title, diaryText }
+      // ※ page.templateUid(사용자 선택)는 무시 — 파라미터명 불일치 400 방지
       addLog(`📄 내지 ${paddedPages.length}페이지 추가 중...`);
+      let contentsFailCount = 0;
       for (let i = 0; i < paddedPages.length; i++) {
-        const page    = paddedPages[i];
-        // 사진 유무로 템플릿 분기:
-        // - 사진 있음 → TPL_WITH_PHOTO (photo1 파라미터 사용)
-        // - 텍스트만  → TPL_TEXT_ONLY  (photo1 불필요)
+        const page = paddedPages[i];
         const hasImage = !!(page.imageUrl);
-        const tplUid  = page.templateUid || (hasImage ? dynamicImageOnly : dynamicTextImage);
-        const params  = {
+        // 항상 검증된 상수 UID 사용 (사용자 선택 templateUid 무시)
+        const tplUid = hasImage ? TPL_WITH_PHOTO : TPL_TEXT_ONLY;
+        const params = {
           date:      page.date  || new Date().toISOString().slice(0, 10),
           title:     page.title || `페이지 ${i + 1}`,
-          diaryText: page.text  || '',
+          // 빈 문자열은 일부 API 검증 실패 → 단일 공백으로 폴백
+          diaryText: (page.text || '').trim() || ' ',
         };
-        // 실제 API 파라미터명: photo1 (diaryPhoto 아님)
-        if (page.imageUrl) params.photo1 = page.imageUrl;
+        if (hasImage) params.photo1 = page.imageUrl;
 
-        const r = await fetch(`/api/books/${uid}/contents`, {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ templateUid: tplUid, parameters: params, breakBefore: 'page' }),
-        });
-        const d = await r.json();
-        if (!d.success) {
-          const pageDetail = d.details ? ` / 상세: ${JSON.stringify(d.details)}` : '';
-          addLog(`⚠️ 페이지 ${i + 1} 실패: ${d.message}${pageDetail}`);
-        } else if (i % 5 === 0 || i === paddedPages.length - 1) {
-          addLog(`📄 내지 ${i + 1}/${paddedPages.length}`);
+        try {
+          const r = await fetch(`/api/books/${uid}/contents`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ templateUid: tplUid, parameters: params, breakBefore: 'page' }),
+          });
+          const d = await r.json();
+          if (!d.success) {
+            contentsFailCount++;
+            const detail = d.details ? JSON.stringify(d.details) : '';
+            addLog(`⚠️ 페이지 ${i + 1} 실패: ${d.message} | tpl=${tplUid} hasImg=${hasImage} | ${detail}`);
+            console.dir({ contentsError: d, page, tplUid, params, pageIndex: i });
+          } else if (i % 5 === 0 || i === paddedPages.length - 1) {
+            addLog(`📄 내지 ${i + 1}/${paddedPages.length}`);
+          }
+        } catch (err) {
+          contentsFailCount++;
+          addLog(`⚠️ 페이지 ${i + 1} 전송 예외: ${err.message}`);
+          console.dir({ contentsException: err, pageIndex: i });
         }
       }
-      addLog(`✅ 내지 ${paddedPages.length}페이지 완료`);
+      if (contentsFailCount > 0) {
+        addLog(`⚠️ 내지 전송 중 ${contentsFailCount}페이지 실패 (${paddedPages.length - contentsFailCount}페이지 성공)`);
+      } else {
+        addLog(`✅ 내지 ${paddedPages.length}페이지 모두 완료`);
+      }
 
       // ── STEP 5: 최종화 ────────────────────────────────────────
       addLog('🔒 최종화 중...');
@@ -743,7 +820,9 @@ export default function EditorPage() {
         sessionStorage.setItem('bookmaker_session',
           JSON.stringify({ ...session, bookUid: uid, pageCount: finalData.data?.pageCount }));
       } else {
-        addLog(`❌ 최종화 실패: ${finalData.message}`);
+        const finalDetail = finalData.details ? ` | 상세: ${JSON.stringify(finalData.details)}` : '';
+        addLog(`❌ 최종화 실패: ${finalData.message}${finalDetail}`);
+        console.dir({ finalizeError: finalData, uid, paddedPagesCount: paddedPages.length });
         toast.warn(`최종화 실패: ${finalData.message}`);
         sessionStorage.setItem('bookmaker_session', JSON.stringify({ ...session, bookUid: uid }));
       }
@@ -930,9 +1009,10 @@ export default function EditorPage() {
                             className={`relative flex items-center gap-1.5 p-1.5 transition-colors group ${
                               item
                                 ? 'cursor-pointer hover:bg-warm-50'
-                                : 'bg-ink-50 cursor-default opacity-60'
+                                : 'bg-ink-50 cursor-default opacity-40'
                             }`}
                             onClick={() => item && setSelectedIdx(gallery.indexOf(item))}
+                            title={item ? (item.isBlankSlot ? '클릭하여 사진 업로드 또는 텍스트 편집' : '클릭하여 편집') : ''}
                           >
                             <span className="text-[9px] font-bold text-ink-400 w-3 shrink-0">{slot}</span>
                             {item ? (
@@ -943,8 +1023,9 @@ export default function EditorPage() {
                                   className="w-6 h-6 object-cover rounded shrink-0"
                                 />
                               ) : (
-                                <div className="w-6 h-6 bg-ink-200 rounded flex items-center justify-center shrink-0">
-                                  <span className="text-ink-400 text-[8px]">빈</span>
+                                /* 빈 슬롯 — 클릭 가능(편집 패널 열림) */
+                                <div className="w-6 h-6 bg-ink-200 rounded flex items-center justify-center shrink-0 border border-dashed border-ink-400">
+                                  <span className="text-ink-500 text-[8px]">📄</span>
                                 </div>
                               )
                             ) : (
@@ -952,14 +1033,20 @@ export default function EditorPage() {
                             )}
                             <div className="flex-1 min-w-0">
                               <p className="text-[10px] text-ink-700 truncate">
-                                {item?.title || `${pageNum}쪽`}
+                                {item ? (item.isBlankSlot ? `${pageNum}쪽 (빈)` : (item.title || `${pageNum}쪽`)) : `${pageNum}쪽`}
                               </p>
                               <p className="text-[9px] text-ink-400">
-                                {item ? ((item.text || '').trim() ? '📝' : '🖼️') : '—'}
+                                {item
+                                  ? (item.isBlankSlot
+                                      ? '✏️ 클릭 편집'
+                                      : ((item.text || '').trim() ? '📝' : '🖼️'))
+                                  : '—'}
                               </p>
                             </div>
                             {item && (
-                              <span className="text-ink-300 opacity-0 group-hover:opacity-100 text-[10px] shrink-0">✏️</span>
+                              <span className="text-ink-300 opacity-0 group-hover:opacity-100 text-[10px] shrink-0">
+                                {item.isBlankSlot ? '➕' : '✏️'}
+                              </span>
                             )}
                           </div>
                         ))}
@@ -1192,11 +1279,36 @@ export default function EditorPage() {
 
                   {/* 좌: 사진 미리보기 + 역할 선택 */}
                   <div className="space-y-4">
-                    <img
-                      src={modalItem.previewUrl}
-                      alt="미리보기"
-                      className="w-full h-44 object-cover rounded-xl"
-                    />
+                    {/* 사진 미리보기 — 빈 슬롯일 때 업로드 유도 플레이스홀더 표시 */}
+                    {modalItem.previewUrl ? (
+                      <img
+                        src={modalItem.previewUrl}
+                        alt="미리보기"
+                        className="w-full h-44 object-cover rounded-xl"
+                      />
+                    ) : (
+                      <label
+                        htmlFor={`blank-slot-upload-${selectedIdx}`}
+                        className="w-full h-44 rounded-xl border-2 border-dashed border-ink-300 bg-ink-50 hover:bg-ink-100 hover:border-warm-400 cursor-pointer flex flex-col items-center justify-center gap-2 transition-all"
+                      >
+                        <input
+                          id={`blank-slot-upload-${selectedIdx}`}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) handleBlankSlotUpload(selectedIdx, f);
+                          }}
+                        />
+                        <span className="text-4xl">📄</span>
+                        <p className="text-sm font-medium text-ink-600">빈 슬롯</p>
+                        <p className="text-xs text-ink-400 text-center px-4">
+                          클릭하여 사진 업로드<br/>
+                          <span className="text-[10px]">(업로드 없이도 텍스트 전용 페이지로 저장됩니다)</span>
+                        </p>
+                      </label>
+                    )}
 
                     {/* 역할 지정 */}
                     <div>

@@ -5,6 +5,55 @@
 
 ---
 
+## ✅ 2026-04-04 — [해결완료] 스프레드 UI 기반 데이터 인덱스 매핑 전면 재구축 + 최종화 에러 100% 해결
+
+### 배경 / 문제
+
+**1. 스프레드 UI 도입 후 사진 업로드 실패(undefined) 및 내지 400 에러 연속 발생**
+- `contentPageData[i]`와 `contentItems[i]` 간 인덱스 매핑이 스프레드 표시 순서와 어긋날 수 있는 구조
+- 빈 슬롯(`isBlankSlot: true`) 아이템이 내지로 포함될 때 `imageUrl: null`, `text: ''`로 API 전송 → 일부 API 검증에서 400 반환
+- 업로드 실패 시 `uploadFile()` 반환값이 `null`인데, 상위 루프에서 이를 그대로 패딩 페이지에 재사용 → 모든 패딩 페이지도 `imageUrl: null`이 됨
+- `page.templateUid`에 사용자가 선택한 API 템플릿 UID(파라미터명이 다른 것)가 들어올 경우 400 에러 유발
+
+**2. 빈 슬롯이 편집 패널에서 브레이크**
+- `modalItem.previewUrl`이 `null`인 빈 슬롯 선택 시 `<img src={null}>`로 깨진 이미지 표시
+- 빈 슬롯에 직접 사진을 업로드하는 수단이 없어 갤러리 업로드 후 역할 재지정 필요
+
+### 의사결정
+
+**절대 페이지 인덱스 기준 contentPageData 빌드 원칙 수립**
+- `for (let ci = 0; ci < contentItems.length; ci++)` 인덱스 루프로 변경
+- `contentPageData[ci]` ↔ `contentItems[ci]` 1:1 매핑 보장
+- 각 인덱스에 `fallbackUrl = picsum.../seed/{serviceType}-c{ci}/...` 할당 → 업로드 실패·파일 없음 모두 안전하게 처리
+
+**`uploadFile()` 헬퍼 방어 강화**
+- `file === null` 조기 감지 → 즉시 null 반환 + 로그 기록
+- try/catch로 네트워크 예외 포착 + `console.dir(err)` 수준 상세 로깅
+- 반환 null 시 상위에서 picsum fallback URL로 대체
+
+**빈 슬롯 처리 표준화**
+- `item.isBlankSlot === true`이면 `imageUrl: null` 유지 (TPL_TEXT_ONLY로 전송)
+- `!isBlankSlot && imgUrl === null`이면 picsum fallback 자동 적용 → 이미지 없는 일반 아이템이 빈 페이지로 전송되는 상황 제거
+- 패딩 페이지도 `srcPage.imageUrl || picsum` 폴백으로 항상 이미지 URL 확보
+
+**templateUid 강제 표준화**
+- `page.templateUid` 완전 무시 — 항상 `TPL_WITH_PHOTO` / `TPL_TEXT_ONLY` 두 가지 검증된 상수만 사용
+- `diaryText: (page.text || '').trim() || ' '` — 빈 문자열 거부 방지용 단일 공백 폴백
+- 모든 contents 전송에 try/catch + `console.dir` 추가 → 실패 페이지만 경고, 나머지는 계속 전송
+
+**빈 슬롯 직접 편집 UX 도입**
+- `handleBlankSlotUpload(galleryIdx, file)`: 빈 슬롯에서 파일 선택 시 해당 갤러리 아이템 업데이트 + `isBlankSlot: false` 전환
+- 인라인 편집 패널 좌측 미리보기 영역: `previewUrl`이 null이면 `<label>`+`<input type="file">` 업로드 버튼 플레이스홀더 표시
+- 스프레드 뷰 빈 슬롯 아이콘: 📄로 교체 + `title` 툴팁으로 클릭 가능성 명시
+
+### 결과
+- 사진 업로드 undefined 에러 완전 해결 — 빈 슬롯·파일 없는 아이템 모두 picsum fallback으로 안전 처리
+- 내지 400 에러 해결 — templateUid 강제 표준화 + diaryText 빈 문자열 폴백
+- 최종화 에러 로그에 `console.dir` 수준 상세 정보 추가 → 디버깅 시 API 응답 전체 구조 확인 가능
+- 빈 슬롯 클릭 → 편집 패널 → 사진 직접 업로드 → `isBlankSlot: false` 전환 플로우 완성
+
+---
+
 ## ✅ 2026-04-04 — [해결완료] 2페이지 Spread 단위 내지 편집 시스템 도입
 
 ### 배경 / 문제
