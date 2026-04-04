@@ -5,6 +5,62 @@
 
 ---
 
+## ✅ 2026-04-04 — 템플릿 동적 매핑 Verified-First 전략 및 더미 데이터 표지/내지 완벽 분리
+
+### 배경 / 문제
+
+**1. 템플릿 동적 매핑에서 미검증 UID 선택 → 전체 400 에러**
+
+`GET /api/templates?bookSpecUid=SQUAREBOOK_HC`는 서버 측에서 판형 필터링을 적용하여 50개 템플릿을 반환.
+클라이언트 `resolveTemplates()`의 `covers[0]`이 API 응답 순서에 따라 **미검증 UID(`4MY2fokVjkeY`)**를 선택.
+이 UID는 `POST /books/{uid}/cover` API에서 400 반환 → 전체 책 생성 실패.
+
+기존 필터링(`t.bookSpecUid === bookSpecUid`)은 API가 이미 필터링한 결과를 재필터링하는 것이므로 50/50 전부 통과 — 의미 없는 연산이었음.
+
+**2. 더미 데이터 표지/내지 논리적 오류 → pageMin 위반**
+
+`dummy.pages[0]`을 앞표지, `dummy.pages[23]`을 뒤표지로 빼내는 로직 때문에 순수 내지가 22장만 남아 `pageMin: 24` 위반.
+배열 길이(24)만 확인하면 발견할 수 없는 **데이터 소비 구조** 문제.
+
+### 해결
+
+**1. Verified-First 전략 (`resolveTemplates` 재설계)**
+
+```
+1순위: 검증된 폴백 UID가 API 목록에 존재하면 → 해당 UID 사용 (가장 안전)
+2순위: 검증 UID 미존재 → classifyTemplate 기반 자동 선택 (다른 판형용)
+3순위: 아무것도 없음 → 하드코딩 폴백 상수 (최후의 안전 장치)
+```
+
+- `uidSet = new Set(apiTemplates.map(t => t.templateUid))`로 O(1) 존재 확인
+- SQUAREBOOK_HC: `79yjMH3qRPly`(표지), `3FhSEhJ94c0T`(사진+텍스트), `vHA59XPPKqak`(텍스트) 우선 사용
+- `console.log`로 샘플 템플릿 객체의 키 목록 출력 — 향후 필드명 변경 감지
+
+**2. 더미 데이터 표지/내지 완전 분리**
+
+```js
+// Before: pages[0]과 pages[23]을 표지로 빼냄 → 내지 22장
+// After:
+export const babyDummy = {
+  frontCover: { image: PLACEHOLDER('baby-cover-front'), title: '...' },
+  backCover:  { image: PLACEHOLDER('baby-cover-back') },
+  pages: [ /* 순수 내지 24장 — 표지와 무관 */ ],
+};
+```
+
+- 6개 서비스 모두 `frontCover` / `backCover` 속성 추가
+- 에디터 `useEffect`에서 `dummy.frontCover` → role='front', `dummy.backCover` → role='back' 별도 생성
+- `dummy.pages` 24개 전체 → role='content' 할당 (표지에 빼앗기지 않음)
+- AI 동화 로드 시 `frontCover`/`backCover` 없으면 기존 방식 폴백 유지 (하위 호환)
+
+### 교훈
+
+- API 서버 필터링에 의존하더라도, 응답 **순서**에 의존하는 `[0]` 선택은 위험 — 검증 UID 존재 확인이 안전
+- 배열 `.length` 검증만으로는 **데이터 소비 구조**(누가 몇 장을 가져가는가)의 버그를 발견할 수 없음
+- 표지와 내지는 데이터 구조부터 완전 분리해야 pageMin 규격 준수가 보장됨
+
+---
+
 ## ✅ 2026-04-04 — 템플릿 동적 매핑 시 판형(bookSpecUid) 불일치 400 에러 해결
 
 ### 배경 / 문제

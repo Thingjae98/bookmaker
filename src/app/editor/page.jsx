@@ -43,34 +43,60 @@ const classifyTemplate = (t) => {
 
 // ─── API 기반 동적 템플릿 매핑 ─────────────────────────────────────
 // GET /api/templates?bookSpecUid=... 응답에서 역할·와이어프레임 타입별 최적 템플릿을 선택
-// ⚠️ 엄격 필터링: 현재 판형(bookSpecUid)과 정확히 일치하는 템플릿만 사용.
-//    다른 판형의 UID(예: 4MY2fokVjkeY)가 섞이면 contents/cover API에서 400 반환됨.
+//
+// 핵심 원칙: **검증된 폴백 UID 우선 사용 (Verified-First)**
+//   1. API 결과 내에 검증된 UID가 존재하면 → 해당 UID 사용 (가장 안전)
+//   2. 검증된 UID가 없으면 → classifyTemplate 기반 자동 선택 (다른 판형용)
+//   3. 아무것도 없으면 → 하드코딩 폴백 상수 (최후의 안전 장치)
+//
+// 배경: API가 bookSpecUid 쿼리로 서버 필터링을 하므로 응답 50개가 모두 해당 판형일 수 있음.
+//       하지만 covers[0]이 4MY2fokVjkeY 같은 미검증 UID를 선택하여 400 에러 유발.
+//       classifyTemplate 이름 기반 추론은 API 네이밍 변경에 취약 — 검증 UID 우선 전략으로 해결.
 const resolveTemplates = (apiTemplates, bookSpecUid) => {
-  // ── 엄격 판형 필터 ── bookSpecUid가 정확히 일치하는 템플릿만 허용
-  // t.bookSpecUid가 없거나(undefined/null) 불일치하면 전부 제외
-  const filtered = bookSpecUid
-    ? apiTemplates.filter((t) => {
-        // 단수 필드(bookSpecUid) 또는 복수 필드(bookSpecUids 배열) 모두 지원
-        if (t.bookSpecUid === bookSpecUid) return true;
-        if (Array.isArray(t.bookSpecUids) && t.bookSpecUids.includes(bookSpecUid)) return true;
-        return false;
-      })
-    : apiTemplates;
+  // ── 검증된 UID가 API 목록에 존재하는지 우선 확인 ──
+  const uidSet = new Set(apiTemplates.map((t) => t.templateUid));
+  const hasFallback = (uid) => uidSet.has(uid);
 
-  const covers   = filtered.filter((t) => classifyTemplate(t) === 'cover');
-  const contents = filtered.filter((t) => classifyTemplate(t) !== 'cover');
-
-  // 타입별 첫 번째 매칭
+  // 검증된 UID가 API 목록에 있으면 그대로 사용, 없으면 classifyTemplate 기반 탐색
+  const covers   = apiTemplates.filter((t) => classifyTemplate(t) === 'cover');
+  const contents = apiTemplates.filter((t) => classifyTemplate(t) !== 'cover');
   const findByType = (list, type) => list.find((t) => classifyTemplate(t) === type);
 
+  // 표지: 검증 UID 우선 → classify 기반 → 폴백 상수
+  const coverUid = hasFallback(COVER_TEMPLATE_FALLBACK)
+    ? COVER_TEMPLATE_FALLBACK
+    : (covers[0]?.templateUid || COVER_TEMPLATE_FALLBACK);
+
+  // 사진+텍스트: 검증 UID 우선
+  const photoTextUid = hasFallback(TPL_WITH_PHOTO_FALLBACK)
+    ? TPL_WITH_PHOTO_FALLBACK
+    : (findByType(contents, 'photo_text')?.templateUid || TPL_WITH_PHOTO_FALLBACK);
+
+  // 텍스트 전용: 검증 UID 우선
+  const textOnlyUid = hasFallback(TPL_TEXT_ONLY_FALLBACK)
+    ? TPL_TEXT_ONLY_FALLBACK
+    : (findByType(contents, 'text_only')?.templateUid || TPL_TEXT_ONLY_FALLBACK);
+
+  // 사진 전용 / 스프레드: photoText 겸용
+  const photoOnlyUid = hasFallback(TPL_WITH_PHOTO_FALLBACK)
+    ? TPL_WITH_PHOTO_FALLBACK
+    : (findByType(contents, 'photo_only')?.templateUid || photoTextUid);
+
+  // 진단 로그: API 템플릿 첫 객체의 필드명 출력 (디버깅용)
+  if (apiTemplates.length > 0) {
+    const sample = apiTemplates[0];
+    console.log('[resolveTemplates] 샘플 템플릿 객체 키:', Object.keys(sample));
+    console.log('[resolveTemplates] 샘플:', { uid: sample.templateUid, name: sample.name, kind: sample.templateKind, bookSpecUid: sample.bookSpecUid });
+  }
+
   return {
-    cover:      covers[0]?.templateUid   || COVER_TEMPLATE_FALLBACK,
-    photoText:  findByType(contents, 'photo_text')?.templateUid  || TPL_WITH_PHOTO_FALLBACK,
-    photoOnly:  findByType(contents, 'photo_only')?.templateUid  || TPL_WITH_PHOTO_FALLBACK,
-    textOnly:   findByType(contents, 'text_only')?.templateUid   || TPL_TEXT_ONLY_FALLBACK,
-    spread:     findByType(contents, 'photo_only')?.templateUid  || findByType(contents, 'photo_text')?.templateUid || TPL_WITH_PHOTO_FALLBACK,
-    source:     filtered.length > 0 ? 'API' : 'fallback',
-    totalFiltered: filtered.length,
+    cover:      coverUid,
+    photoText:  photoTextUid,
+    photoOnly:  photoOnlyUid,
+    textOnly:   textOnlyUid,
+    spread:     photoOnlyUid,
+    source:     apiTemplates.length > 0 ? (hasFallback(COVER_TEMPLATE_FALLBACK) ? 'API+검증' : 'API') : 'fallback',
+    totalFiltered: apiTemplates.length,
     totalRaw:      apiTemplates.length,
   };
 };
@@ -118,38 +144,72 @@ export default function EditorPage() {
     // AI 동화 페이지 or 더미 데이터 로드
     const aiRaw = sessionStorage.getItem('bookmaker_ai_pages');
     let initialPages = [];
+    let frontCoverData = null;
+    let backCoverData  = null;
     if (aiRaw) {
       initialPages = JSON.parse(aiRaw);
       sessionStorage.removeItem('bookmaker_ai_pages');
     } else if (data.useDummy) {
       const dummy = DUMMY_DATA[data.serviceType];
-      if (dummy) initialPages = dummy.pages;
+      if (dummy) {
+        // 표지와 내지 완전 분리 — pages에서 표지를 빼지 않음
+        frontCoverData = dummy.frontCover || null;
+        backCoverData  = dummy.backCover  || null;
+        initialPages   = dummy.pages;
+      }
     }
 
-    if (initialPages.length > 0) {
-      // pages 배열 → 갤러리 아이템으로 통합 변환
-      // 첫 번째 → 앞표지, 마지막 → 뒤표지, 나머지 → 내지
-      const items = initialPages.map((p, i) => ({
-        id:          `init-${i}-${Date.now()}`,
-        file:        null,
-        // image === null : text-only 의도 명시 → previewUrl = null 보존 (TPL_TEXT_ONLY 분기)
-        // image === ""   : 동일하게 null 처리
-        // image 미정의   : picsum fallback 적용
-        previewUrl:  (p.image === null || p.image === '')
-                       ? null
-                       : (p.image?.startsWith('http')
-                           ? p.image
-                           : `https://picsum.photos/seed/${data.serviceType}-${i}/600/600`),
-        role:        i === 0 ? 'front'
-                   : i === initialPages.length - 1 ? 'back'
-                   : 'content',
-        title:       p.title       || '',
-        text:        p.text        || p.teacherComment || '',
-        date:        p.date        || new Date().toISOString().slice(0, 10),
-        templateUid: null,   // null = 텍스트 유무 자동 분기
-        isLandscape: p.isLandscape || false, // 더미 파노라마 이미지 가로형 플래그
-        useSpread:   false,                  // spread는 사용자 업로드 시에만 활성화
-      }));
+    if (initialPages.length > 0 || frontCoverData || backCoverData) {
+      const ts = Date.now();
+      const items = [];
+
+      // 표지 생성 헬퍼
+      const makePageUrl = (p, fallbackSeed) =>
+        (p?.image === null || p?.image === '') ? null
+        : (p?.image?.startsWith('http') ? p.image : `https://picsum.photos/seed/${fallbackSeed}/600/600`);
+
+      // ── 앞표지 (frontCover에서 가져옴 — pages 배열과 무관) ──
+      if (frontCoverData) {
+        items.push({
+          id: `init-front-${ts}`, file: null,
+          previewUrl: makePageUrl(frontCoverData, `${data.serviceType}-cover-front`),
+          role: 'front', title: frontCoverData.title || '', text: '', date: new Date().toISOString().slice(0, 10),
+          templateUid: null, isLandscape: false, useSpread: false,
+        });
+      }
+
+      // ── 뒤표지 (backCover에서 가져옴 — pages 배열과 무관) ──
+      if (backCoverData) {
+        items.push({
+          id: `init-back-${ts}`, file: null,
+          previewUrl: makePageUrl(backCoverData, `${data.serviceType}-cover-back`),
+          role: 'back', title: backCoverData.title || '', text: '', date: new Date().toISOString().slice(0, 10),
+          templateUid: null, isLandscape: false, useSpread: false,
+        });
+      }
+
+      // ── 내지 24장 (pages 배열 전체 — 표지에 빼앗기지 않음) ──
+      initialPages.forEach((p, i) => {
+        items.push({
+          id:          `init-${i}-${ts}`,
+          file:        null,
+          previewUrl:  makePageUrl(p, `${data.serviceType}-${i}`),
+          role:        'content',
+          title:       p.title       || '',
+          text:        p.text        || p.teacherComment || '',
+          date:        p.date        || new Date().toISOString().slice(0, 10),
+          templateUid: null,
+          isLandscape: p.isLandscape || false,
+          useSpread:   false,
+        });
+      });
+
+      // AI 동화 로드 시 frontCover/backCover 없으면 기존 방식 폴백 (첫/끝 페이지 표지 지정)
+      if (!frontCoverData && !backCoverData && items.length > 0) {
+        items[0].role = 'front';
+        if (items.length > 1) items[items.length - 1].role = 'back';
+      }
+
       setGallery(items);
     }
   }, [router]);
@@ -398,9 +458,9 @@ export default function EditorPage() {
   // 1) 판형 일치 + 역할 일치 필터 + 이름 기준 중복 제거
   const getTemplatesForRole = (role) => {
     const all     = session?.allTemplates || [];
-    const specUid = session?.bookSpecUid;
+    // 판형 필터는 API 서버에서 이미 적용됨 (bookSpecUid 쿼리 파라미터)
+    // 클라이언트에서는 역할(cover/content)만 필터링
     const filtered = all.filter((t) => {
-      if (specUid && t.bookSpecUid && t.bookSpecUid !== specUid) return false;
       const kind = (t.templateKind || t.category || '').toLowerCase();
       return (role === 'front' || role === 'back')
         ? kind.includes('cover')
@@ -669,11 +729,8 @@ export default function EditorPage() {
         const apiTpls = tplData?.data || tplData?.items || [];
         if (Array.isArray(apiTpls) && apiTpls.length > 0) {
           tplMap = resolveTemplates(apiTpls, bookSpecUid);
-          addLog(`📐 템플릿 동적 매핑 (${tplMap.source}) — 전체 ${tplMap.totalRaw}개 중 판형 일치 ${tplMap.totalFiltered}개`);
-          addLog(`   표지: ${tplMap.cover} / 사진+텍스트: ${tplMap.photoText} / 사진: ${tplMap.photoOnly} / 텍스트: ${tplMap.textOnly}`);
-          if (tplMap.totalFiltered === 0) {
-            addLog(`⚠️ 판형(${bookSpecUid}) 일치 템플릿 0개 — 검증된 폴백 UID 사용`);
-          }
+          addLog(`📐 템플릿 매핑 (${tplMap.source}) — API ${tplMap.totalRaw}개 조회`);
+          addLog(`   표지: ${tplMap.cover} / 사진+텍스트: ${tplMap.photoText} / 텍스트: ${tplMap.textOnly}`);
         } else {
           addLog(`⚠️ 템플릿 API 응답 없음 — 검증된 폴백 UID 사용`);
         }

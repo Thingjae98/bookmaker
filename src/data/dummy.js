@@ -7,6 +7,7 @@
 //   image: PLACEHOLDER(seed)  + text: ""        → TPL_WITH_PHOTO  (3FhSEhJ94c0T) ← Full-bleed 사진
 //   image: null               + text: "텍스트"  → TPL_TEXT_ONLY   (vHA59XPPKqak) ← 텍스트 전용
 //
+// 표지(frontCover/backCover)는 pages 배열과 완전 분리 — pages에서 빼지 않으므로 순수 내지 24장 보장
 // 24페이지 구성: 12페이지 텍스트 有 + 12페이지 텍스트 無 (text: "")
 // isLandscape: true 로 표시된 항목은 파노라마(1200×600) 이미지 — 갤러리에서 가로형 배지 표시
 
@@ -28,6 +29,8 @@ export const babyDummy = {
     period:    '1년',
     message:   '사랑하는 하은아, 네가 세상에 나온 그 날부터 우리의 모든 것이 달라졌어. 건강하게 자라줘서 정말 고마워 ♥',
   },
+  frontCover: { image: PLACEHOLDER('baby-cover-front'), title: '하은이의 1년' },
+  backCover:  { image: PLACEHOLDER('baby-cover-back') },
   pages: [
     // ── 1~12p: 텍스트 있는 페이지 ──
     { date: '2025-01-15', title: '하은이가 태어난 날', text: '오늘 우리 가족에 작은 천사가 찾아왔어요. 새벽 2시 32분, 3.2kg의 건강한 울음 소리. 아빠는 눈물을 참지 못했고, 엄마는 너무 지쳐서 잠들었지만 손을 꼭 쥔 채였어요. 하은아, 이 순간 우리는 완전한 가족이 됐단다.', image: PLACEHOLDER('baby-born') },
@@ -71,6 +74,8 @@ export const kindergartenDummy = {
     semester:    '1학기',
     teacherName: '박선생님',
   },
+  frontCover: { image: PLACEHOLDER('kinder-cover-front'), title: '해바라기반 1학기' },
+  backCover:  { image: PLACEHOLDER('kinder-cover-back') },
   pages: [
     // ── 1~12p: 텍스트 있는 페이지 ──
     { date: '2025-03-03', title: '입학 첫날', teacherComment: '긴장한 듯 보였지만 점심도 잘 먹고 첫날을 잘 보냈어요!', text: '긴장한 듯 보였지만 점심도 잘 먹고 첫날을 훌륭하게 마쳤어요. 새 친구들과 금방 친해지는 서준이가 대견합니다.', image: PLACEHOLDER('kinder-first-day') },
@@ -113,6 +118,8 @@ export const fairytaleDummy = {
     theme:       '우주 탐험',
     moralLesson: '용기와 도전',
   },
+  frontCover: { image: PLACEHOLDER('fairy-cover-front'), title: '하은이의 우주 탐험' },
+  backCover:  { image: PLACEHOLDER('fairy-cover-back') },
   pages: [
     // ── 1~12p: 이야기 텍스트 있는 페이지 ──
     { date: '2025-04-01', title: '별빛 아이 하은이', text: '어느 날 밤, 하은이의 방 창문으로 작은 별빛이 쏟아져 들어왔어요. "하은아, 함께 우주를 탐험하지 않을래?" 별빛이 속삭였어요. 하은이는 용기를 내어 침대에서 일어났답니다.', image: PLACEHOLDER('fairy-starlight') },
@@ -157,6 +164,8 @@ export const travelDummy = {
     endDate:     '2025-05-05',
     companions:  '가족 4명',
   },
+  frontCover: { image: PLACEHOLDER('jeju-cover-front'), title: '2025 제주도 4박 5일' },
+  backCover:  { image: PLACEHOLDER('jeju-cover-back') },
   pages: [
     // ── 1~12p: 텍스트 있는 페이지 ──
     { date: '2025-05-01', title: '제주 도착, 봄볕이 반긴다', text: '비행기에서 내리자마자 코끝에 닿는 바닷바람. 제주의 공기는 서울과 확실히 달랐어요. 아이들이 달려나가며 "바다!"를 외치는 소리에 지난 몇 달의 피로가 한 번에 사라지는 것 같았습니다.', image: PLACEHOLDER('jeju-arrive') },
@@ -201,6 +210,8 @@ export const selfpublishDummy = {
     genre:           '에세이',
     bookDescription: '계절이 바뀌듯 감정도 바뀐다. 봄의 설렘, 여름의 지침, 가을의 쓸쓸함, 겨울의 고요함을 담았다.',
   },
+  frontCover: { image: PLACEHOLDER('essay-cover-front'), title: '일상의 온도' },
+  backCover:  { image: PLACEHOLDER('essay-cover-back') },
   pages: [
     // ── 1p: 텍스트 전용 (image: null) ──
     { date: '2025-01-01', title: '아침의 의식', text: '매일 같은 시간에 울리는 알람 소리. 하지만 오늘 아침은 조금 달랐다. 창밖으로 들어오는 햇살이 유난히 따뜻했다. 커피 한 잔을 내리며 하루를 시작하는 이 작은 의식이, 사실은 나에게 가장 소중한 시간이다. 아무도 방해하지 않는 이 새벽의 고요함 속에서만 나는 진짜 나와 이야기할 수 있다.', image: null },
@@ -266,6 +277,8 @@ export const petDummy = {
     adoptDate:    '2024-06-01',
     ownerMessage: '뽀삐야, 네가 우리 가족이 된 그날부터 집이 달라졌어. 매일 꼬리 흔드는 너 덕분에 나도 같이 행복해진단다. 사랑해.',
   },
+  frontCover: { image: PLACEHOLDER('pet-cover-front'), title: '뽀삐의 1년' },
+  backCover:  { image: PLACEHOLDER('pet-cover-back') },
   pages: [
     // ── 1~12p: 텍스트 있는 페이지 ──
     { date: '2024-06-01', title: '우리 집에 온 날', text: '오늘 뽀삐가 우리 가족이 됐어요! 작은 박스 안에서 올려다보던 그 눈빛. 무서운 건지 신기한 건지 모를 표정으로 집 안을 두리번거리다가, 소파 밑으로 쏙 들어가더니 나오질 않았어요. 괜찮아, 천천히 적응하자.', image: PLACEHOLDER('pet-adopt-day') },
