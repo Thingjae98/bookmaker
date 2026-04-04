@@ -5,6 +5,50 @@
 
 ---
 
+## ✅ 2026-04-04 — [해결완료] 표지 Spread 통합 및 페이지 규격 검증 시스템 도입
+
+### 배경 / 문제
+
+**1. 뒤표지가 내지(contents) 마지막 장으로 처리되는 구조적 불일치**
+- 기존 코드: `POST /books/{uid}/contents`를 반복 호출하다 맨 마지막에 뒤표지 이미지를 내지 API로 전송 (STEP 4-b)
+- 인쇄 물리 규격상 앞/뒤 표지는 Spread 1장(양면 인쇄)으로 관리됨 — 별개 내지 페이지가 아님
+- 이 구조로 인해 pageMin 계산에 뒤표지 1장이 포함되어 실제 내지 수가 1 적게 계산되는 부작용 발생
+
+**2. 내지 페이지 수 검증이 UI 수준에서 강제되지 않음**
+- 버튼 활성화 조건: `contentItems.length >= MIN_CONTENT (8)` — 실제 API pageMin(24)보다 훨씬 낮은 상수
+- 사용자가 8장만 구성하고 [책 생성] 클릭 → 코드가 자동 패딩하지만 사용자는 그 사실을 모름
+- 양면(Spread) 분할 아이템이 2페이지를 소모한다는 사실이 페이지 카운트에 미반영
+
+**3. 페이지 수가 증분 단위(pageIncrement) 배수가 아닌 경우 처리 없음**
+- API 규격: SQUAREBOOK_HC는 24, 26, 28...의 2p 단위로만 최종화 가능
+- 기존 핸들러에서 수학적 반올림은 있었지만, UI에서 사용자에게 명시적 안내 없음
+
+### 의사결정
+
+**표지 로직 통합 (Spread 방식)**
+- STEP 4-b(뒤표지를 마지막 contents로 전송) 완전 제거
+- STEP 3(표지 추가) 단일 `POST /books/{uid}/cover` 호출 내에 앞표지(`coverPhoto`)와 뒤표지(`backPhoto`) URL을 함께 전달
+- 인쇄 규격과 API 사용 방식이 1:1 대응 — 데이터 정합성 및 유지보수성 향상
+
+**`getPageConsumption(item)` 함수 신설**
+- 아이템 단위로 페이지 소모량 계산: `useSpread && isLandscape`이면 2, 아니면 1
+- 컴포넌트 외부 순수 함수로 정의 → useMemo deps에서 안정적 참조
+- `totalContentPages = contentItems.reduce(sum + getPageConsumption(item), 0)` 로 실제 소모 페이지 합산
+
+**페이지 규격 실시간 검증 강화**
+- `specPageMinUI / specPageIncUI`: `BOOK_SPECS[session?.bookSpecUid]` 기반 동적 계산 (session null 시 24/2 기본값)
+- `isPageMinMet = totalContentPages >= specPageMinUI`
+- `isIncrementOk = totalContentPages > 0 && totalContentPages % specPageIncUI === 0`
+- `isReady = front 1장 && back 1장 && isPageMinMet && isIncrementOk`
+- 버튼 비활성 시 전용 빨간 안내 박스: "최소 N페이지가 필요합니다" / "N페이지 단위로 추가해 주세요"
+
+### 결과
+- 표지 API 호출 구조가 SweetBook 인쇄 규격과 정확히 일치 → 모호한 뒤표지 처리 제거
+- 사용자가 [책 생성] 버튼을 클릭하기 전에 페이지 수 부족·단위 불일치를 즉시 인지 가능
+- Spread 분할 아이템의 2페이지 소모가 카운트에 정확히 반영 → 예상치 못한 최종화 실패 방지
+
+---
+
 ## ✅ 2026-04-03 — [해결완료] 프로페셔널 에디터 UX 도입 — 인라인 속성 패널 + 동적 페이지 카운트
 
 ### 배경 / 문제

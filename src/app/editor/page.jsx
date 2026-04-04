@@ -22,8 +22,13 @@ const TPL_TEXT_ONLY  = 'vHA59XPPKqak'; // 내지(텍스트): { date, title, diar
 const TPL_TEXT_IMAGE = TPL_WITH_PHOTO;
 const TPL_IMAGE_ONLY = TPL_WITH_PHOTO;
 
+// ─── 페이지 소모량 계산 ────────────────────────────────────────────
+// 기본 1페이지, 양면(Spread) 분할 옵션(useSpread + isLandscape) 적용 시 2페이지 소모
+const getPageConsumption = (item) =>
+  (item.useSpread && item.isLandscape) ? 2 : 1;
+
 // ─── 유효성 임계값 ─────────────────────────────────────────────
-const MIN_CONTENT = 8;   // [최종 생성] 버튼 활성화 최소 내지 수 (UI)
+const MIN_CONTENT = 8;   // 구성 미리보기 배지 색상 하한값 (버튼 활성화는 specPageMinUI 기준)
 
 export default function EditorPage() {
   const router = useRouter();
@@ -196,10 +201,21 @@ export default function EditorPage() {
   };
 
   // ── 검증 (파생 상태) ─────────────────────────────────────────
-  const frontItems   = useMemo(() => gallery.filter((g) => g.role === 'front'),   [gallery]);
-  const backItems    = useMemo(() => gallery.filter((g) => g.role === 'back'),    [gallery]);
-  const contentItems = useMemo(() => gallery.filter((g) => g.role === 'content'), [gallery]);
-  const isReady      = frontItems.length === 1 && backItems.length === 1 && contentItems.length >= MIN_CONTENT;
+  const frontItems        = useMemo(() => gallery.filter((g) => g.role === 'front'),   [gallery]);
+  const backItems         = useMemo(() => gallery.filter((g) => g.role === 'back'),    [gallery]);
+  const contentItems      = useMemo(() => gallery.filter((g) => g.role === 'content'), [gallery]);
+  // 양면 분할 아이템은 2페이지 소모 — getPageConsumption()으로 합산
+  const totalContentPages = useMemo(
+    () => contentItems.reduce((sum, item) => sum + getPageConsumption(item), 0),
+    [contentItems]
+  );
+  // 판형 규격 실시간 검증 (session null이면 SQUAREBOOK_HC 기본값 24p, 2p 단위)
+  const specPageMinUI = BOOK_SPECS[session?.bookSpecUid]?.pageMin       || 24;
+  const specPageIncUI = BOOK_SPECS[session?.bookSpecUid]?.pageIncrement || 2;
+  const isPageMinMet  = totalContentPages >= specPageMinUI;
+  // 0페이지는 isPageMinMet가 false이므로 별도 처리 불필요; 정확히 specPageIncUI 배수인지 확인
+  const isIncrementOk = totalContentPages > 0 && totalContentPages % specPageIncUI === 0;
+  const isReady       = frontItems.length === 1 && backItems.length === 1 && isPageMinMet && isIncrementOk;
 
   // ── 모달 템플릿 선택 헬퍼 ──────────────────────────────────────
 
@@ -429,7 +445,13 @@ export default function EditorPage() {
   // ── 책 생성 API — 선 구성 후 순차 처리 (트랜잭션 방식) ───────
   const handleCreateBook = async () => {
     if (!isReady) {
-      toast.warn(`앞표지·뒤표지 각 1장, 내지 ${MIN_CONTENT}장 이상이 필요합니다.`);
+      if (frontItems.length !== 1 || backItems.length !== 1) {
+        toast.warn('앞표지·뒤표지 각 1장 지정이 필요합니다.');
+      } else if (!isPageMinMet) {
+        toast.warn(`내지 최소 ${specPageMinUI}페이지가 필요합니다 (현재 ${totalContentPages}p).`);
+      } else {
+        toast.warn(`내지 ${specPageIncUI}페이지 단위로 추가해 주세요 (현재 ${totalContentPages}p).`);
+      }
       return;
     }
 
@@ -563,21 +585,25 @@ export default function EditorPage() {
       // session.coverTemplateUid는 create 단계에서 API가 동적으로 반환한 값으로
       // 검증되지 않은 UID(예: 4MY2fokVjkeY)가 들어올 수 있음 → 항상 검증된 상수 사용
       const coverTplUid = dynamicCoverTpl;
-      addLog(`🎨 앞표지 추가 중... (템플릿: ${coverTplUid})`);
+      // 앞/뒤 통합 표지 — 인쇄 규격상 표지는 Spread 1장으로 관리되므로 단일 cover API 호출에 양쪽 URL 전달
+      addLog(`🎨 표지 추가 중... (앞+뒤 통합 Spread, 템플릿: ${coverTplUid})`);
       const dateRange = fd.period || fd.semester
         ? `${fd.year || new Date().getFullYear()}년 ${fd.semester || fd.period}`
         : String(new Date().getFullYear());
       const coverRes  = await fetch(`/api/books/${uid}/cover`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ templateUid: coverTplUid, parameters: { coverPhoto: coverFrontUrl, title, dateRange } }),
+        body:    JSON.stringify({
+          templateUid: coverTplUid,
+          parameters:  { coverPhoto: coverFrontUrl, backPhoto: coverBackUrl, title, dateRange },
+        }),
       });
       const coverData = await coverRes.json();
       if (coverData.success) {
-        addLog('✅ 앞표지 추가 완료');
+        addLog('✅ 표지 추가 완료 (앞+뒤 통합)');
       } else {
         const coverDetail = coverData.details ? ` / 상세: ${JSON.stringify(coverData.details)}` : '';
-        addLog(`⚠️ 앞표지 실패: ${coverData.message}${coverDetail}`);
+        addLog(`⚠️ 표지 실패: ${coverData.message}${coverDetail}`);
       }
 
       // ── STEP 4: 내지 추가 ─────────────────────────────────────
@@ -611,25 +637,6 @@ export default function EditorPage() {
         }
       }
       addLog(`✅ 내지 ${paddedPages.length}페이지 완료`);
-
-      // ── STEP 4-b: 뒤표지 (마지막 contents 페이지) ────────────
-      addLog('🎨 뒤표지 추가 중...');
-      const backRes  = await fetch(`/api/books/${uid}/contents`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          templateUid:  dynamicImageOnly,
-          parameters:   { date: new Date().toISOString().slice(0, 10), title: '뒤표지', diaryText: '', photo1: coverBackUrl },
-          breakBefore:  'page',
-        }),
-      });
-      const backData = await backRes.json();
-      if (backData.success) {
-        addLog('✅ 뒤표지 추가 완료');
-      } else {
-        const backDetail = backData.details ? ` / 상세: ${JSON.stringify(backData.details)}` : '';
-        addLog(`⚠️ 뒤표지 실패: ${backData.message}${backDetail}`);
-      }
 
       // ── STEP 5: 최종화 ────────────────────────────────────────
       addLog('🔒 최종화 중...');
@@ -671,8 +678,6 @@ export default function EditorPage() {
   const modalItem    = selectedIdx !== null ? gallery[selectedIdx] : null;
   const hasFrontElse = gallery.some((g, i) => g.role === 'front' && i !== selectedIdx);
   const hasBackElse  = gallery.some((g, i) => g.role === 'back'  && i !== selectedIdx);
-  // 선택된 판형의 실제 pageMin (내지 최소 수, 표지 제외)
-  const specPageMin  = BOOK_SPECS[session?.bookSpecUid]?.pageMin || 24;
 
   return (
     <div className="min-h-screen pb-20">
@@ -739,13 +744,13 @@ export default function EditorPage() {
                 <div className="flex items-center justify-between mb-1">
                   <p className="text-xs font-bold text-ink-500">내지</p>
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                    contentItems.length >= specPageMin
+                    isPageMinMet && isIncrementOk
                       ? 'bg-green-100 text-green-700'
-                      : contentItems.length >= MIN_CONTENT
-                      ? 'bg-blue-100 text-blue-700'
-                      : 'bg-yellow-100 text-yellow-700'
+                      : isPageMinMet
+                      ? 'bg-yellow-100 text-yellow-700'
+                      : 'bg-orange-100 text-orange-700'
                   }`}>
-                    현재 {contentItems.length} / 최소 {specPageMin}장
+                    {totalContentPages}p / 최소 {specPageMinUI}p ({specPageIncUI}p 단위)
                   </span>
                 </div>
                 <div className="space-y-1 max-h-64 overflow-y-auto pr-1">
@@ -816,8 +821,11 @@ export default function EditorPage() {
                   <ul className="space-y-0.5">
                     {frontItems.length !== 1 && <li>• 앞표지 1장 지정 필요</li>}
                     {backItems.length !== 1  && <li>• 뒤표지 1장 지정 필요</li>}
-                    {contentItems.length < MIN_CONTENT && (
-                      <li>• 내지 최소 {MIN_CONTENT}장 필요 (현재 {contentItems.length}장, {MIN_CONTENT - contentItems.length}장 부족)</li>
+                    {!isPageMinMet && (
+                      <li>• 내지 최소 {specPageMinUI}페이지 필요 (현재 {totalContentPages}p, {specPageMinUI - totalContentPages}p 부족)</li>
+                    )}
+                    {isPageMinMet && !isIncrementOk && (
+                      <li>• {specPageIncUI}페이지 단위로 추가해 주세요 (현재 {totalContentPages}p)</li>
                     )}
                   </ul>
                 )}
@@ -845,11 +853,11 @@ export default function EditorPage() {
                     {backItems.length  > 0 && <span className="bg-blue-100  text-blue-700  px-2 py-0.5 rounded-full">뒤표지 ✓</span>}
                     {contentItems.length > 0 && (
                       <span className={`px-2 py-0.5 rounded-full ${
-                        contentItems.length >= MIN_CONTENT
+                        isPageMinMet && isIncrementOk
                           ? 'bg-warm-100 text-warm-700'
                           : 'bg-yellow-100 text-yellow-700'
                       }`}>
-                        내지 {contentItems.length}장
+                        내지 {totalContentPages}p
                       </span>
                     )}
                   </div>
@@ -1163,9 +1171,21 @@ export default function EditorPage() {
                     {bookCreated
                       ? `BookUID: ${bookUid} — 아래 버튼으로 다음 단계로 이동하세요`
                       : isReady
-                      ? `앞표지 1장 · 내지 ${contentItems.length}장(최소 ${specPageMin}장 자동 패딩) · 뒤표지 1장 — 구성 완료`
-                      : `앞표지·뒤표지 각 1장, 내지 ${MIN_CONTENT}장 이상 지정 후 생성 가능`}
+                      ? `앞표지 1장 · 내지 ${totalContentPages}p(${specPageMinUI}p 이상, ${specPageIncUI}p 단위) · 뒤표지 1장 — 구성 완료`
+                      : !isPageMinMet
+                      ? `내지 최소 ${specPageMinUI}페이지 필요 (현재 ${totalContentPages}p)`
+                      : !isIncrementOk
+                      ? `내지 ${specPageIncUI}페이지 단위로 구성해 주세요 (현재 ${totalContentPages}p)`
+                      : '앞표지·뒤표지 각 1장 지정 필요'}
                   </p>
+                  {/* 페이지 규격 검증 힌트 — 앞/뒤표지는 지정됐지만 페이지 수 미충족일 때 빨간 안내 */}
+                  {!isReady && !bookCreated && frontItems.length === 1 && backItems.length === 1 && (
+                    <p className="text-xs text-red-600 mt-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                      {!isPageMinMet
+                        ? `최소 ${specPageMinUI}페이지가 필요합니다 (현재 ${totalContentPages}p, ${specPageMinUI - totalContentPages}p 부족)`
+                        : `${specPageIncUI}페이지 단위로 추가해 주세요 (현재 ${totalContentPages}p)`}
+                    </p>
+                  )}
                 </div>
 
                 <div className="flex gap-3">

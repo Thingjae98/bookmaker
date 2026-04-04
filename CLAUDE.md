@@ -327,6 +327,8 @@ try {
 - [x] 내지 카운트 동적 연동 — MIN_CONTENT 하드코딩 제거, specPageMin(판형 API 기준) 3색 배지 표시
 - [x] 템플릿 썸네일 경로 수정 — SweetBook API `thumbnails` 객체(layout→baseLayerOdd→baseLayerEven) 우선 탐색, `onError` 2단 폴백 구조 적용
 - [x] 표지 썸네일 역할별 CSS 크롭 — SweetBook 표지 템플릿은 양면(Spread) 이미지 1장으로 제공됨. 앞표지 선택 시 `right-0 w-[200%]`(우측 절반), 뒤표지 선택 시 `left-0 w-[200%]`(좌측 절반), 내지는 크롭 없이 전체 표시
+- [x] 표지 Spread 통합 완료 — 앞/뒤표지를 단일 `POST /books/{uid}/cover` 호출(coverPhoto + backPhoto)로 통합. 뒤표지를 내지 마지막 장으로 처리하던 STEP 4-b 방식 제거
+- [x] 페이지 규격 실시간 검증 도입 — `getPageConsumption(item)` 함수(Spread 2p 소모 반영) + `totalContentPages` useMemo + `isPageMinMet` + `isIncrementOk`로 버튼 활성화 조건 강화. 미충족 시 버튼 옆 빨간 안내 문구 표시
 
 ### P1 — 면접 전 개선
 - [x] 이미지 파일 직접 업로드 (Drag & Drop + Photos API) — 에디터 내 구현 완료
