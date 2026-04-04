@@ -214,6 +214,13 @@ Authorization: Bearer {SWEETBOOK_API_KEY}
 - **삭제 버튼**: 내지 아이템일 때 "스프레드 삭제 (2p)" 레이블로 `removeSpreadPair()` 호출; 표지 아이템은 기존 "이 사진 삭제" 유지
 - 빈 슬롯은 갤러리 그리드에서 회색 📄 자리표시자 렌더링; API 전송 시 `TPL_TEXT_ONLY` 자동 적용
 
+### ✅ 해결된 버그 (2026-04-04 추가)
+
+#### 버그 E — Photos API `uploadFile` URL 필드명 불일치 → **해결**
+- 증상: `⚠️ 내지 N 업로드 실패: undefined` — `d.message`가 undefined = `d.success=true`이지만 URL 추출 실패
+- 원인: `d.data?.url || d.data?.photoUrl || d.data?.fileUrl` 3개 필드명이 SweetBook 실제 응답 필드명과 불일치
+- 해결: 14개 필드명(`downloadUrl`, `originalUrl`, `imageUrl`, `cdnUrl`, `publicUrl`, `uploadedUrl`, `uploadUrl`, `originalFileUrl`, `fileDownloadUrl`, 중첩 `photo.url` 등) 순차 탐색 + `d.data`가 문자열 URL인 경우 직접 반환 + 성공/실패 분기 명확화 + 응답 전체 `addLog` 출력
+
 ### ✅ 해결된 버그 (2026-04-03)
 
 #### 버그 A — `sweetFetch` ok() 래핑 누락 → **해결**

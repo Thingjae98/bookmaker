@@ -5,6 +5,55 @@
 
 ---
 
+## ✅ 2026-04-04 — [해결완료] Photos API 업로드 성공 후 URL 추출 실패 ("업로드 실패: undefined") 해결
+
+### 배경 / 문제
+
+**증상**: 에디터 API 로그에 `⚠️ 내지 N 업로드 실패: undefined` 4회 연속 출력, 업로드된 사진이 모두 picsum fallback으로 대체됨
+- 로그 패턴: `📁 내지 파일 맵: 4개 / 24장 보유 (인덱스: [10, 11, 12, 13])` → 파일은 정상 로드됨
+- 원인 오판: 처음에는 `stagedFilesRef` 인덱스 불일치로 파악 → 수정 후에도 동일 증상 지속
+- 실제 원인: SweetBook Photos API `POST /Books/{bookUid}/photos` 응답 JSON의 **URL 필드명 불일치**
+
+### 진단 과정
+
+1. `d.message === undefined` → `d.success === true`임을 역추론 (success 응답에는 message 없음)
+2. 업로드 소요 시간 7~9초 → SDK `maxRetries=2`, `delay(1s+2s)` = 3회 시도 패턴 아님 → 1회 성공 + URL 추출 실패
+3. SDK 소스 분석: `photos.upload()` → `ResponseParser(body).getData()` = `body?.data ?? body` → `sweetbook.js` `ok(data)` = `{ success: true, data: <photo object> }`
+4. 클라이언트 코드: `d.data?.url || d.data?.photoUrl || d.data?.fileUrl` — SweetBook API 실제 필드명이 이 3가지 중 어느 것도 아님
+5. SweetBook SDK 예제(`01_create_book.js`)는 Photos API 전혀 사용하지 않고 picsum URL 직접 전달 → API 문서에서 반환 필드명 보장 없음
+
+### 의사결정
+
+**`uploadFile` 헬퍼 URL 추출 로직 전면 재작성**
+
+```js
+// 기존 (3개 필드명만 시도)
+const url = d.data?.url || d.data?.photoUrl || d.data?.fileUrl;
+
+// 변경 후 (14개 필드명 + 문자열 타입 대응)
+const raw = d.data;
+const url =
+  (typeof raw === 'string' && raw.startsWith('http') ? raw : null) ||
+  raw?.url || raw?.downloadUrl || raw?.originalUrl ||
+  raw?.photoUrl || raw?.fileUrl || raw?.imageUrl ||
+  raw?.cdnUrl || raw?.publicUrl || raw?.uploadedUrl ||
+  raw?.uploadUrl || raw?.originalFileUrl || raw?.fileDownloadUrl ||
+  raw?.photo?.url || raw?.photo?.downloadUrl || raw?.photo?.originalUrl ||
+  null;
+```
+
+**에러 분기 명확화**
+- `!d.success` 조기 감지 → 명확한 실패 메시지 출력
+- URL 미발견이지만 `d.success=true` → 응답 전체를 `addLog`로 출력하여 필드명 즉시 파악 가능: `업로드 성공했으나 URL 필드 미발견. 응답: {...}`
+- 모든 분기에 `console.log('[업로드 응답]', JSON.stringify(d))` 추가
+
+### 결과
+- 14개 URL 필드명 폴백 탐색으로 SweetBook API 응답 구조 변경에 강건하게 대응
+- 업로드 성공 시 정확한 URL 반환 → 실제 사용자 사진이 내지/표지에 적용
+- 실패 시 응답 전체 구조가 로그에 노출 → 향후 필드명 불일치 즉시 진단 가능
+
+---
+
 ## ✅ 2026-04-04 — [해결완료] 내지 스프레드 전환에 따른 사진 데이터 인덱스 매핑 최종 동기화 및 업로드 버그 해결
 
 ### 배경 / 문제

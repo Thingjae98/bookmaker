@@ -668,10 +668,50 @@ export default function EditorPage() {
           form.append('file', file, file.name || 'photo.jpg');
           const r = await fetch(`/api/books/${uid}/photos`, { method: 'POST', body: form });
           const d = await r.json();
-          const url = d.data?.url || d.data?.photoUrl || d.data?.fileUrl;
-          if (d.success && url) { addLog(`✅ ${label} 업로드 완료`); return url; }
-          addLog(`⚠️ ${label} 업로드 실패: ${d.message}`);
-          console.dir({ uploadFail: d, label });
+
+          // 응답 구조 전체 로그 (URL 필드명 진단용)
+          console.log(`[업로드 응답] ${label}:`, JSON.stringify(d));
+          addLog(`[응답] ${label}: success=${d.success} | data=${JSON.stringify(d.data)?.slice(0, 120)}`);
+
+          if (!d.success) {
+            addLog(`⚠️ ${label} 업로드 실패: ${d.message || '서버 오류'}`);
+            console.dir({ uploadFail: d, label });
+            return null;
+          }
+
+          // SweetBook Photos API 실제 URL 필드명 — 모든 가능한 경우 탐색
+          const raw = d.data;
+          const url =
+            // d.data 자체가 URL 문자열인 경우
+            (typeof raw === 'string' && raw.startsWith('http') ? raw : null) ||
+            // 일반적인 URL 필드명들
+            raw?.url ||
+            raw?.downloadUrl ||
+            raw?.originalUrl ||
+            raw?.photoUrl ||
+            raw?.fileUrl ||
+            raw?.imageUrl ||
+            raw?.cdnUrl ||
+            raw?.publicUrl ||
+            raw?.uploadedUrl ||
+            raw?.uploadUrl ||
+            raw?.originalFileUrl ||
+            raw?.fileDownloadUrl ||
+            // 중첩 photo 객체 내 URL
+            raw?.photo?.url ||
+            raw?.photo?.downloadUrl ||
+            raw?.photo?.originalUrl ||
+            // fileName 기반 URL 조합 (마지막 수단)
+            null;
+
+          if (url) {
+            addLog(`✅ ${label} 업로드 완료 → ${url.slice(0, 60)}`);
+            return url;
+          }
+
+          // URL을 찾지 못했지만 success=true — photoUid 등 다른 필드 존재 가능
+          addLog(`⚠️ ${label} 업로드 성공했으나 URL 필드 미발견. 응답: ${JSON.stringify(raw)?.slice(0, 200)}`);
+          console.warn(`[URL 필드 없음] ${label}:`, raw);
           return null;
         } catch (err) {
           addLog(`⚠️ ${label} 업로드 예외: ${err.message}`);
