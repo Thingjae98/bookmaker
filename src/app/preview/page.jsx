@@ -96,16 +96,30 @@ export default function PreviewPage() {
       right: { imageUrl: previewData.coverFront?.url, title: previewData.coverFront?.title || '앞표지', isCover: true, label: '앞표지' },
     });
 
-    // 내지 스프레드: 2페이지씩 묶기
+    // 내지 스프레드: PUR 제본 규칙 적용
+    // PUR 제본(SQUAREBOOK_HC 등)은 첫 내지(pageNum=1)가 오른쪽(Right) 면에 배치됨
+    // → 첫 스프레드: { left: null(표지 뒤면), right: page1 }
+    // → 이후: [page2, page3], [page4, page5], ...
     const pages = previewData.pages || [];
-    for (let i = 0; i < pages.length; i += 2) {
+    if (pages.length > 0) {
+      // 첫 내지 스프레드: 왼쪽 빈 면(표지 뒷면) + 오른쪽 첫 내지
       result.push({
         type: 'content',
-        left:  pages[i] || null,
-        right: pages[i + 1] || null,
-        pageNumL: i + 1,
-        pageNumR: i + 2,
+        left:  null,           // PUR 제본: 표지 뒷면 (인쇄되지 않는 빈 면)
+        right: pages[0],
+        pageNumL: null,
+        pageNumR: 1,
       });
+      // 나머지 내지: 2페이지씩 정상 묶기 (page[1]부터)
+      for (let i = 1; i < pages.length; i += 2) {
+        result.push({
+          type: 'content',
+          left:  pages[i] || null,
+          right: pages[i + 1] || null,
+          pageNumL: i + 1,
+          pageNumR: i + 2 <= pages.length ? i + 2 : null,
+        });
+      }
     }
 
     return result;
@@ -191,7 +205,13 @@ export default function PreviewPage() {
               </span>
               {!isCover && (
                 <span className="text-[10px] text-ink-400">
-                  {spread.pageNumL}–{spread.pageNumR}쪽
+                  {spread.pageNumL && spread.pageNumR
+                    ? `${spread.pageNumL}–${spread.pageNumR}쪽`
+                    : spread.pageNumR
+                      ? `${spread.pageNumR}쪽`
+                      : spread.pageNumL
+                        ? `${spread.pageNumL}쪽`
+                        : ''}
                 </span>
               )}
             </div>
@@ -460,8 +480,8 @@ function SpreadPage({ page, side, isCover, label, pageNum }) {
 
   if (!page) {
     return (
-      <div className="aspect-[3/4] bg-ink-50 flex items-center justify-center">
-        <span className="text-ink-300 text-xs">빈 페이지</span>
+      <div className="aspect-[3/4] bg-cream flex items-center justify-center">
+        {/* PUR 제본 빈 면 또는 마지막 홀수 페이지 — 인쇄되지 않는 빈 면 */}
       </div>
     );
   }

@@ -1032,14 +1032,16 @@ export default function EditorPage() {
             coverParams[key] = coverFrontUrl; // 기본: 앞표지 URL
           }
         } else if (def.binding === 'text') {
-          // text 바인딩: 적절한 값 매핑
-          if (key === 'title' || key === 'spineTitle') coverParams[key] = title;
-          else if (key === 'dateRange' || key === 'periodText') coverParams[key] = dateRange;
-          else if (key === 'subtitle') coverParams[key] = service.subtitle || '';
-          else if (key === 'childName') coverParams[key] = fd.childName || fd.babyName || name;
-          else if (key === 'schoolName') coverParams[key] = fd.className || '';
-          else if (key === 'volumeLabel') coverParams[key] = fd.semester || fd.period || '';
-          else coverParams[key] = title; // 기본 폴백
+          // text 바인딩: sessionStorage(Create 페이지) 데이터 자동 매핑
+          // spineTitle/bookTitle/title 계열 → 책 제목 자동 바인딩 (사용자 이중 입력 방지)
+          const kl = key.toLowerCase();
+          if (kl === 'title' || kl === 'spinetitle' || kl === 'booktitle' || kl === 'maintitle') coverParams[key] = title;
+          else if (kl === 'daterange' || kl === 'periodtext' || kl === 'period') coverParams[key] = dateRange;
+          else if (kl === 'subtitle' || kl === 'subtext') coverParams[key] = fd.subtitle || service.subtitle || '';
+          else if (kl === 'childname' || kl === 'authorname' || kl === 'name') coverParams[key] = fd.childName || fd.babyName || fd.authorName || name;
+          else if (kl === 'schoolname' || kl === 'classname') coverParams[key] = fd.className || '';
+          else if (kl === 'volumelabel' || kl === 'volume') coverParams[key] = fd.semester || fd.period || '';
+          else coverParams[key] = title; // 기본 폴백: 책 제목
         }
       });
       // definitions가 비어있으면 레거시 폴백 파라미터 사용
@@ -1047,6 +1049,7 @@ export default function EditorPage() {
         coverParams.coverPhoto = coverFrontUrl;
         coverParams.backPhoto  = coverBackUrl;
         coverParams.title      = title;
+        coverParams.spineTitle = title; // 책등 제목 자동 바인딩
         coverParams.dateRange  = dateRange;
       }
       addLog(`📋 표지 파라미터: ${Object.keys(coverParams).join(', ')}`);
