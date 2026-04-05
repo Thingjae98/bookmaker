@@ -168,6 +168,7 @@ export const RECOMMENDED_THEMES = {
 
 // 테마 한글 표시명 (UI 라벨용)
 export const THEME_LABELS = {
+  '기본':        '기본',
   '일기장A':     '일기장 A',
   '알림장B':     '알림장 B',
   '기본포토북':   '기본 포토북',

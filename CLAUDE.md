@@ -175,12 +175,13 @@ Authorization: Bearer {SWEETBOOK_API_KEY}
 - 환경변수: `GEMINI_API_KEY` (Google AI Studio에서 무료 발급)
 - Gemini는 텍스트만 생성. 이미지는 사용자 직접 업로드 또는 picsum 자동 배정
 
-### 테마(Theme) 기반 템플릿 시스템 (2026-04-04 도입)
+### 테마(Theme) 기반 템플릿 시스템 (2026-04-04 도입, 04-05 파싱 버그 수정)
 - 템플릿은 **테마 단위**로 그룹화하여 사용 — 개별 페이지에 임의 템플릿을 섞지 않음
-- 테마명 = 템플릿 이름(`templateName`)의 첫 번째 `_` 앞 접두사 (예: `구글포토북A_표지` → `구글포토북A`)
-- 각 테마: `{ cover, inner_text, inner_photo, inner_blank }` 4개 역할 슬롯
+- 테마명 파싱: `KNOWN_THEME_PREFIXES` 화이트리스트에 있는 접두사만 테마명으로 인식 (예: `알림장B_내지_fill` → `알림장B`)
+- **주의**: `내지`, `표지`, `빈내지` 등은 역할 명칭이지 테마 이름이 아님 → `'기본'` 테마로 귀속
+- 각 테마: `{ cover, inner_text, inner_photo, inner_blank }` 4개 역할 슬롯 — **역할별 UID 유일성 강제** (`usedUids` Set으로 중복 차단)
 - `RECOMMENDED_THEMES` (`constants.js`): 서비스별 기본 추천 테마 (사용자 변경 가능)
-- `THEME_LABELS` (`constants.js`): 테마명 → UI 표시용 한글 라벨
+- `THEME_LABELS` (`constants.js`): 테마명 → UI 표시용 한글 라벨 (`'기본'` 포함)
 - **handleCreateBook**: `themeToTplMap(themeGroups[selectedTheme])` 으로 현재 테마의 UID 일괄 적용
 - **에디터 UI**: 개별 페이지 템플릿 선택 → **테마 스위처(Theme Switcher)** 카드 그리드로 대체
 - 테마 슬롯 누락 시 검증된 폴백 UID 자동 적용 (아래 표 참조)

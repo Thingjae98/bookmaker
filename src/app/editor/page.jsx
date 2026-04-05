@@ -22,37 +22,64 @@ const COVER_TEMPLATE = COVER_TEMPLATE_FALLBACK;
 const TPL_WITH_PHOTO = TPL_WITH_PHOTO_FALLBACK;
 const TPL_TEXT_ONLY  = TPL_TEXT_ONLY_FALLBACK;
 
+// ─── 알려진 테마 접두사 집합 (파싱 시 화이트리스트) ─────────────────
+// THEME_LABELS 키 + RECOMMENDED_THEMES 값 합집합
+const KNOWN_THEME_PREFIXES = new Set([
+  ...Object.keys(THEME_LABELS),
+  ...Object.values(RECOMMENDED_THEMES),
+]);
+
 // ─── 템플릿 역할 분류 (모듈 레벨) ────────────────────────────────────
 // API 템플릿 이름에서 역할(cover, inner_text, inner_photo, inner_blank)을 추론
 const classifyTemplateRole = (t) => {
   const name = (t.name || t.templateName || '').toLowerCase();
   const kind = (t.templateKind || t.category || '').toLowerCase();
   if (kind.includes('cover') || name.includes('표지')) return 'cover';
+  if (kind.includes('divider') || name.includes('간지')) return 'divider';
+  if (kind.includes('publish') || name.includes('발행면')) return 'publish';
   if (name.includes('빈') || name.includes('blank') || name.includes('empty')) return 'inner_blank';
-  // fill = 사진 꽉 차게(사진 전용), 텍스트 미포함
-  if (name.includes('_fill') || name.includes('풀블리드') || name.includes('full'))
+  // fill / gallery / photo = 사진 전용 (텍스트 없이 사진만)
+  if (name.includes('_fill') || name.includes('풀블리드') || name.includes('full') ||
+      name.includes('gallery') || name.includes('_photo'))
     return 'inner_photo';
-  // 텍스트 전용 (사진 없이 글만)
+  // 텍스트 전용 (사진 없이 글만) — 'b' 접미사 패턴(내지b)도 포함
   if ((name.includes('텍스트') || name.includes('text')) &&
       !(name.includes('사진') || name.includes('photo') || name.includes('이미지')))
-    return 'inner_blank'; // 텍스트 전용은 blank 취급 (사진 슬롯 없음)
+    return 'inner_blank';
   // 나머지 내지 = 사진+텍스트 (기본)
   return 'inner_text';
 };
 
+// ─── 테마명 파싱 ──────────────────────────────────────────────────
+// 템플릿 이름에서 알려진 테마 접두사를 추출. 매칭 실패 시 '기본' 반환.
+// 예: '알림장B_내지_fill' → '알림장B', '구글포토북A_표지' → '구글포토북A'
+//     '내지_gallery' → '기본' (내지는 테마가 아님), '표지' → '기본'
+const parseThemeName = (rawName) => {
+  // 1) 언더스코어로 분할 후 앞부분이 알려진 테마인지 확인
+  const idx = rawName.indexOf('_');
+  if (idx > 0) {
+    const prefix = rawName.substring(0, idx);
+    if (KNOWN_THEME_PREFIXES.has(prefix)) return prefix;
+  }
+  // 2) 전체 이름 자체가 알려진 테마인지 확인 (언더스코어 없는 경우)
+  if (KNOWN_THEME_PREFIXES.has(rawName)) return rawName;
+  // 3) 매칭 실패 → 기본 테마
+  return '기본';
+};
+
 // ─── 테마 그룹화 ──────────────────────────────────────────────────
 // API 템플릿 배열 → 테마(Theme) 단위로 그룹화
-// 테마명 = templateName의 첫 번째 언더스코어(_) 앞 접두사
 // 각 테마: { name, label, cover, inner_text, inner_photo, inner_blank, templates[] }
 const buildThemeGroups = (apiTemplates) => {
-  const themes = {}; // name → { ... }
+  const themes = {};
 
   apiTemplates.forEach((t) => {
     const rawName = t.name || t.templateName || t.templateUid || '';
-    // 테마명 파싱: '구글포토북A_내지_fill' → '구글포토북A'
-    const parts = rawName.split('_');
-    const themeName = parts.length > 1 ? parts[0] : rawName;
+    const themeName = parseThemeName(rawName);
     const role = classifyTemplateRole(t);
+
+    // 간지(divider) / 발행면(publish)은 테마 슬롯에 포함하지 않음
+    if (role === 'divider' || role === 'publish') return;
 
     if (!themes[themeName]) {
       themes[themeName] = {
@@ -67,17 +94,32 @@ const buildThemeGroups = (apiTemplates) => {
     }
     themes[themeName].templates.push(t);
 
-    // 역할별 첫 번째 템플릿만 할당 (중복 방지)
-    if (role === 'cover'       && !themes[themeName].cover)       themes[themeName].cover       = t.templateUid;
-    if (role === 'inner_text'  && !themes[themeName].inner_text)  themes[themeName].inner_text  = t.templateUid;
-    if (role === 'inner_photo' && !themes[themeName].inner_photo) themes[themeName].inner_photo = t.templateUid;
-    if (role === 'inner_blank' && !themes[themeName].inner_blank) themes[themeName].inner_blank = t.templateUid;
+    // 역할별 첫 번째 템플릿만 할당 (UID 중복 방지: 이미 다른 역할에 사용 중인 UID 재사용 금지)
+    const uid = t.templateUid;
+    const usedUids = new Set([themes[themeName].cover, themes[themeName].inner_text,
+      themes[themeName].inner_photo, themes[themeName].inner_blank].filter(Boolean));
+
+    if (role === 'cover'       && !themes[themeName].cover       && !usedUids.has(uid)) themes[themeName].cover       = uid;
+    if (role === 'inner_text'  && !themes[themeName].inner_text  && !usedUids.has(uid)) themes[themeName].inner_text  = uid;
+    if (role === 'inner_photo' && !themes[themeName].inner_photo && !usedUids.has(uid)) themes[themeName].inner_photo = uid;
+    if (role === 'inner_blank' && !themes[themeName].inner_blank && !usedUids.has(uid)) themes[themeName].inner_blank = uid;
   });
 
-  // inner_photo 누락 시 inner_text로 폴백, inner_blank 누락 시 inner_text로 폴백
+  // 폴백: 누락 슬롯은 검증된 하드코딩 UID 사용 (다른 슬롯 UID를 재사용하지 않음)
   Object.values(themes).forEach((th) => {
-    if (!th.inner_photo) th.inner_photo = th.inner_text;
-    if (!th.inner_blank) th.inner_blank = th.inner_text;
+    if (!th.cover)       th.cover       = COVER_TEMPLATE_FALLBACK;
+    if (!th.inner_text)  th.inner_text  = TPL_WITH_PHOTO_FALLBACK;
+    if (!th.inner_photo) th.inner_photo = th.inner_text !== TPL_WITH_PHOTO_FALLBACK
+      ? TPL_WITH_PHOTO_FALLBACK : th.inner_text;
+    if (!th.inner_blank) th.inner_blank = TPL_TEXT_ONLY_FALLBACK;
+    // 최종 안전망: inner_text와 inner_blank가 같은 UID면 inner_blank를 폴백으로 강제 분리
+    if (th.inner_text === th.inner_blank) {
+      th.inner_blank = TPL_TEXT_ONLY_FALLBACK;
+    }
+    // inner_text와 inner_photo가 같으면 inner_photo를 폴백으로 분리
+    if (th.inner_text === th.inner_photo && th.inner_text !== TPL_WITH_PHOTO_FALLBACK) {
+      th.inner_photo = TPL_WITH_PHOTO_FALLBACK;
+    }
   });
 
   return themes;
@@ -1731,7 +1773,11 @@ export default function EditorPage() {
               </div>
             ) : (
               /* 책 생성 액션 패널 */
-              <div className="bg-white rounded-2xl border border-ink-100 p-6">
+              <div className="bg-white rounded-2xl border border-ink-100 p-6 space-y-6">
+
+                {/* ── 테마 스위처 (항상 노출) ── */}
+                {!bookCreated && renderThemeSwitcher()}
+
                 <div className="mb-4">
                   <h3 className="font-display font-bold text-ink-900">
                     {bookCreated ? '✅ 책이 생성되었습니다!' : '최종 생성 및 주문'}
