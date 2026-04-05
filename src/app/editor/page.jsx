@@ -1076,24 +1076,12 @@ export default function EditorPage() {
       }
 
       // ── STEP 4: 내지 추가 — parameters.definitions 기반 안전 바인딩 ──
-      // 갤러리 바인딩 헬퍼: 템플릿의 definitions에서 rowGallery/collageGallery 바인딩 키를 찾음
-      const findGalleryBinding = (defs) => {
-        if (!defs) return null;
-        for (const [key, def] of Object.entries(defs)) {
-          if (def.binding === 'rowGallery' || def.binding === 'collageGallery') {
-            return { key, type: def.binding };
-          }
-        }
-        return null;
-      };
-
+      // 절대 규칙: UI 페이지 1개 = POST /contents 1회 호출 (1:1 매핑)
+      // 갤러리 바인딩(rowGallery/collageGallery)은 현재 페이지 스코프 내 사진만 배열로 전달
       addLog(`📄 내지 ${paddedPages.length}페이지 추가 중...`);
       let contentsFailCount = 0;
-      const consumed = new Set(); // 갤러리 배치에서 이미 소비된 페이지 인덱스
 
       for (let i = 0; i < paddedPages.length; i++) {
-        if (consumed.has(i)) continue; // 이전 갤러리 배치에서 소비됨 → 건너뜀
-
         const page = paddedPages[i];
         const hasImage = !!(page.imageUrl);
         const hasText  = !!(page.text || '').trim();
@@ -1112,9 +1100,6 @@ export default function EditorPage() {
         const contentDefs = tplMap.contentTpls[tplUid] || {};
         const params = {};
         if (Object.keys(contentDefs).length > 0) {
-          // 갤러리 바인딩 감지 — 다중 사진 배열 배치
-          const galleryInfo = findGalleryBinding(contentDefs);
-
           Object.entries(contentDefs).forEach(([key, def]) => {
             if (def.binding === 'file') {
               params[key] = hasImage ? page.imageUrl : `https://picsum.photos/seed/${session.serviceType}-p${i}/600/600`;
@@ -1128,30 +1113,10 @@ export default function EditorPage() {
               else if (key === 'bookTitle') params[key] = title;
               else params[key] = ' '; // required text 필드 빈값 방지
             } else if (def.binding === 'rowGallery' || def.binding === 'collageGallery') {
-              // 갤러리 바인딩: 현재 페이지 + 후속 이미지 전용 페이지를 배열로 수집
-              const maxPhotos = def.binding === 'collageGallery' ? 9 : 50; // collage 1-9, row 무제한(안전 상한 50)
-              const photoUrls = [];
-              if (hasImage) photoUrls.push(page.imageUrl);
-
-              // 후속 페이지에서 이미지만 있는(텍스트 없는) 페이지를 배치로 수집
-              for (let j = i + 1; j < paddedPages.length && photoUrls.length < maxPhotos; j++) {
-                if (consumed.has(j)) continue;
-                const nextPage = paddedPages[j];
-                const nextHasImage = !!(nextPage.imageUrl);
-                const nextHasText  = !!(nextPage.text || '').trim();
-                // 이미지만 있고 텍스트 없는 페이지 → 갤러리 배치에 포함
-                if (nextHasImage && !nextHasText && !nextPage.isSpreadPage) {
-                  photoUrls.push(nextPage.imageUrl);
-                  consumed.add(j);
-                } else {
-                  break; // 텍스트가 있거나 이미지 없는 페이지 → 배치 중단
-                }
-              }
-
-              params[key] = photoUrls.length > 0 ? photoUrls : [];
-              if (photoUrls.length > 1) {
-                addLog(`🖼️ 갤러리 배치: 페이지 ${i + 1}에 ${photoUrls.length}장 묶음 (${def.binding})`);
-              }
+              // 갤러리 바인딩: 현재 페이지 스코프 내 사진만 배열로 전달
+              // page.images가 있으면 다중 사진 배열, 없으면 단일 사진을 배열로 감쌈
+              const images = page.images || (hasImage ? [page.imageUrl] : []);
+              params[key] = images;
             }
           });
         } else {

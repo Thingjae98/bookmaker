@@ -395,7 +395,7 @@ try {
 
 ### P0 — API 스펙 Gap 수정 (마감: 4/8 화 23:59, 순서대로 진행)
 - [x] **1순위: Idempotency 적용** — fetchWithRetry에 Idempotency-Key 헤더 자동 주입 + 409 Conflict 안전 처리, 주문/책 생성에 `crypto.randomUUID()` 기반 고유 referenceId 적용 (`/concepts/idempotency/`)
-- [x] **2순위: Gallery 배열 바인딩** — rowGallery/collageGallery binding 감지 시 후속 이미지 전용 페이지를 배열로 수집 (collage 최대 9장, row 최대 50장), consumed Set으로 중복 전송 방지 (`/concepts/gallery/`)
+- [x] **2순위: Gallery 배열 바인딩** — rowGallery/collageGallery binding 감지 시 현재 페이지 스코프 내 사진만 배열로 전달 (1 UI 페이지 = 1 API 호출 원칙 엄수, 페이지 병합 금지) (`/concepts/gallery/`)
 - [x] **3순위: Special Page Rules** — PUR 제본 첫 내지 Right 배치 규칙 미리보기 반영, 첫 스프레드 `{ left: null, right: page1 }` 구조 + 표지 spineTitle 자동 바인딩 (`/concepts/special-page-rules/`)
 - [x] **4순위: breakBefore 동적 제어** — 하드코딩 `'page'` 제거, 템플릿 메타데이터(layoutRules.breakBefore) 우선 → templateKind 기반 폴백(content→'none', divider/publish→'page') (`/concepts/dynamic-layout/`)
 - [ ] `npm run build` 최종 성공 확인
