@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { SERVICE_TYPES, BOOK_SPECS, BOOK_SPEC_LABELS } from '@/lib/constants';
 import { DUMMY_DATA } from '@/data/dummy';
 import StepIndicator from '@/components/StepIndicator';
+import { toast } from '@/lib/toast';
 
 export default function CreatePage() {
   const router = useRouter();
@@ -13,11 +14,15 @@ export default function CreatePage() {
   const serviceType = params.serviceType;
   const service = SERVICE_TYPES[serviceType];
 
+  // ── sessionStorage 기반 폼 임시 저장(Draft) 키 ──────────────
+  const DRAFT_KEY = `bookmaker_draft_${serviceType}`;
+
   const [formData, setFormData] = useState({});
   const [selectedSpec, setSelectedSpec] = useState('');
   const [useDummy, setUseDummy] = useState(false);
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiError, setAiError] = useState(null);
+  const [draftRestored, setDraftRestored] = useState(false);
 
   // API에서 불러온 판형 목록 (GET /book-specs)
   const [bookSpecs, setBookSpecs] = useState([]);
@@ -25,6 +30,42 @@ export default function CreatePage() {
 
   // API에서 받아온 전체 템플릿 raw 데이터 — 에디터 모달 템플릿 선택에서 사용
   const [allTemplates, setAllTemplates] = useState([]);
+
+  // ── 마운트 시 Draft 복원 ────────────────────────────────────
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(DRAFT_KEY);
+      if (raw) {
+        const draft = JSON.parse(raw);
+        if (draft.formData && Object.keys(draft.formData).length > 0) {
+          setFormData(draft.formData);
+        }
+        if (draft.selectedSpec) {
+          setSelectedSpec(draft.selectedSpec);
+        }
+        if (draft.useDummy) {
+          setUseDummy(true);
+        }
+        setDraftRestored(true);
+        toast.info('이전에 입력한 내용이 복원되었습니다');
+        console.log(`[Draft 복원] ${serviceType}:`, draft);
+      }
+    } catch (err) {
+      console.warn('[Draft 복원 실패]', err);
+    }
+  }, [DRAFT_KEY, serviceType]);
+
+  // ── 폼 변경 시 Draft 자동 저장 ──────────────────────────────
+  useEffect(() => {
+    // 초기 빈 상태에서는 저장하지 않음 (마운트 직후 빈 formData 덮어쓰기 방지)
+    if (Object.keys(formData).length === 0 && !useDummy) return;
+    try {
+      const draft = { formData, selectedSpec, useDummy };
+      sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    } catch (err) {
+      console.warn('[Draft 저장 실패]', err);
+    }
+  }, [formData, selectedSpec, useDummy, DRAFT_KEY]);
 
   // 1단계: 마운트 시 GET /book-specs 호출
   useEffect(() => {
@@ -35,19 +76,19 @@ export default function CreatePage() {
         const data = await res.json();
         if (data.success && Array.isArray(data.data)) {
           setBookSpecs(data.data);
-          // 추천 판형 자동 선택 (API 데이터 기준)
-          if (service) {
-            const recommended = data.data.find(s => s.bookSpecUid === service.recommendedSpec);
-            setSelectedSpec(recommended ? recommended.bookSpecUid : data.data[0]?.bookSpecUid || service.recommendedSpec);
-          }
+          // Draft에서 복원된 selectedSpec이 없을 때만 추천 판형 자동 선택
+          setSelectedSpec((prev) => {
+            if (prev) return prev; // Draft 복원된 값 유지
+            const recommended = data.data.find(s => s.bookSpecUid === service?.recommendedSpec);
+            return recommended ? recommended.bookSpecUid : data.data[0]?.bookSpecUid || service?.recommendedSpec || '';
+          });
         } else {
-          // API 실패 시 constants 폴백
           setBookSpecs(Object.values(BOOK_SPECS).map(s => ({ bookSpecUid: s.uid, name: s.name, ...s })));
-          if (service) setSelectedSpec(service.recommendedSpec);
+          setSelectedSpec((prev) => prev || (service?.recommendedSpec || ''));
         }
       } catch {
         setBookSpecs(Object.values(BOOK_SPECS).map(s => ({ bookSpecUid: s.uid, name: s.name, ...s })));
-        if (service) setSelectedSpec(service.recommendedSpec);
+        setSelectedSpec((prev) => prev || (service?.recommendedSpec || ''));
       } finally {
         setSpecsLoading(false);
       }
@@ -135,6 +176,7 @@ export default function CreatePage() {
         aiTitle: data.data.title,
       };
       sessionStorage.setItem('bookmaker_session', JSON.stringify(sessionData));
+      sessionStorage.removeItem(DRAFT_KEY);
       router.push('/editor');
     } catch (err) {
       setAiError(err.message);
@@ -165,6 +207,8 @@ export default function CreatePage() {
       useDummy,
     };
     sessionStorage.setItem('bookmaker_session', JSON.stringify(sessionData));
+    // 에디터로 이동 시 Draft 삭제 (에디터에서 뒤로 오면 session에서 복원)
+    sessionStorage.removeItem(DRAFT_KEY);
     router.push('/editor');
   };
 
@@ -184,16 +228,33 @@ export default function CreatePage() {
           <p className="text-ink-400">{service.subtitle}</p>
         </div>
 
-        {/* 더미 데이터 버튼 */}
+        {/* 더미 데이터 버튼 + Draft 초기화 */}
         <div className="mb-8 p-4 bg-warm-50 rounded-xl border border-warm-200/50 opacity-0 animate-fade-up delay-100">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-ink-800">🧪 테스트 데이터로 빠르게 체험</p>
               <p className="text-xs text-ink-400 mt-0.5">더미 데이터를 자동으로 채워줍니다</p>
             </div>
-            <button onClick={fillDummy} className="px-4 py-2 bg-warm-600 text-white text-sm rounded-lg hover:bg-warm-800 transition-colors">
-              더미 데이터 채우기
-            </button>
+            <div className="flex items-center gap-2">
+              {draftRestored && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFormData({});
+                    setUseDummy(false);
+                    setDraftRestored(false);
+                    sessionStorage.removeItem(DRAFT_KEY);
+                    toast.info('입력 내용이 초기화되었습니다');
+                  }}
+                  className="px-3 py-2 text-xs text-ink-500 border border-ink-200 rounded-lg hover:bg-ink-50 transition-colors"
+                >
+                  초기화
+                </button>
+              )}
+              <button onClick={fillDummy} className="px-4 py-2 bg-warm-600 text-white text-sm rounded-lg hover:bg-warm-800 transition-colors">
+                더미 데이터 채우기
+              </button>
+            </div>
           </div>
         </div>
 

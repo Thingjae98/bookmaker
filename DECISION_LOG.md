@@ -5,6 +5,31 @@
 
 ---
 
+## ✅ 2026-04-05 — Create 페이지 폼 데이터 임시 저장(Draft) 기능 도입
+
+### 배경 / 문제
+
+Create 페이지에서 폼을 입력한 뒤 에디터로 이동하고, 에디터에서 "뒤로 가기"를 눌러 Create 페이지로 돌아오면 **이전에 입력했던 책 제목, 내용, 판형 선택 등 모든 폼 데이터가 증발**하는 심각한 UX 문제가 있었음.
+
+- React 클라이언트 컴포넌트는 라우트 이동 시 state가 완전 초기화됨
+- `sessionStorage('bookmaker_session')`은 에디터 전용 세션으로, Create 폼 복원용이 아님
+
+### 의사결정
+
+1. **서비스별 Draft 키**: `bookmaker_draft_${serviceType}` — 서비스 타입별로 독립 저장
+2. **마운트 시 Draft 복원**: `useEffect`에서 sessionStorage 읽기 → formData, selectedSpec, useDummy 복원 → 토스트 알림
+3. **실시간 자동 저장**: `useEffect([formData, selectedSpec, useDummy])`로 폼 변경 시마다 Draft 자동 갱신
+4. **Draft 삭제 타이밍**: 에디터로 정상 이동(`handleSubmit`, AI 생성 성공) 시 `removeItem()` — 이후 뒤로 가면 session에서 복원
+5. **Draft 복원 시 판형 덮어쓰기 방지**: book-specs API 로딩 시 `setSelectedSpec((prev) => prev || ...)` 함수형 업데이트로 기존 값 보존
+6. **초기화 버튼**: Draft 복원 시 "초기화" 버튼 표시 — 클릭 시 formData 리셋 + Draft 삭제
+
+### 결과
+- 에디터 → 뒤로 가기 → Create 페이지: 이전 입력 100% 복원
+- 브라우저 탭 유지 중 새로고침해도 폼 데이터 유지
+- 에디터로 정상 진입 시 Draft 자동 정리 (불필요한 잔여 데이터 방지)
+
+---
+
 ## ✅ 2026-04-05 — 업로드 응답 fileName에 의한 404 렌더링 크래시 해결
 
 ### 배경 / 문제

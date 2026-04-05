@@ -213,6 +213,42 @@ export default function EditorPage() {
           const defaultCat = catNames.includes(recommended) ? recommended : (catNames[0] || null);
           setSelectedCategory(defaultCat);
           console.log('[카테고리 초기화]', { 추천: recommended, 선택: defaultCat, 전체: catNames.length, 목록: catNames });
+
+          // ── 템플릿 데이터 구조 디버깅 로그 ──────────────────────
+          // 각 카테고리별 템플릿의 parameters/binding 구조를 상세 출력
+          Object.entries(groups).forEach(([catName, catGroup]) => {
+            console.group(`[템플릿 구조] 카테고리: ${catName} (${catGroup.label})`);
+            console.log('요약:', {
+              covers: catGroup.covers.length,
+              withPhoto: catGroup.withPhoto.length,
+              textOnly: catGroup.textOnly.length,
+              blank: catGroup.blank.length,
+              total: catGroup.all.length,
+            });
+            // 표지 템플릿 상세
+            catGroup.covers.forEach((t) => {
+              const defs = t.parameters?.definitions || {};
+              const bindings = Object.entries(defs).map(([k, d]) => `${k}:${d.binding}`);
+              console.log(`  [cover] ${t.templateUid} | theme=${t.theme} | bindings=[${bindings.join(', ')}]`);
+            });
+            // 내지(사진+글) 템플릿 상세
+            catGroup.withPhoto.forEach((t) => {
+              const defs = t.parameters?.definitions || {};
+              const bindings = Object.entries(defs).map(([k, d]) => `${k}:${d.binding}`);
+              console.log(`  [withPhoto] ${t.templateUid} | theme=${t.theme} | bindings=[${bindings.join(', ')}]`);
+            });
+            // 내지(텍스트 전용) 템플릿 상세
+            catGroup.textOnly.forEach((t) => {
+              const defs = t.parameters?.definitions || {};
+              const bindings = Object.entries(defs).map(([k, d]) => `${k}:${d.binding}`);
+              console.log(`  [textOnly] ${t.templateUid} | theme=${t.theme} | bindings=[${bindings.join(', ')}]`);
+            });
+            // 빈 내지
+            catGroup.blank.forEach((t) => {
+              console.log(`  [blank] ${t.templateUid} | theme=${t.theme} | params=${JSON.stringify(t.parameters)}`);
+            });
+            console.groupEnd();
+          });
         } catch (err) {
           console.error('[카테고리 초기화 실패]', err);
           const groups = buildCategoryGroups(allTpls);
