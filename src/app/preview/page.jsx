@@ -5,12 +5,23 @@
 // 실제 책을 펼쳐 넘기는 듯한 스프레드 페이징(Spread Paging) 뷰
 // [< 이전] [다음 >] 버튼으로 2페이지(스프레드)씩 이동
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { SERVICE_TYPES, BOOK_SPECS, BOOK_SPEC_LABELS } from '@/lib/constants';
 import { DUMMY_DATA } from '@/data/dummy';
 import StepIndicator from '@/components/StepIndicator';
+
+// ── 이미지 소스 안전 변환 ─────────────────────────────────────────
+// File/Blob → createObjectURL, string → 그대로, 그 외 → null
+const resolveImageUrl = (src) => {
+  if (!src) return null;
+  if (typeof src === 'string') return src;
+  if (src instanceof File || src instanceof Blob) {
+    try { return URL.createObjectURL(src); } catch { return null; }
+  }
+  return null;
+};
 
 export default function PreviewPage() {
   const router = useRouter();
@@ -409,7 +420,39 @@ export default function PreviewPage() {
 }
 
 // ── 스프레드 내 단일 페이지 렌더링 ────────────────────────────────
+// File/Blob 이미지를 안전하게 createObjectURL로 변환 + 언마운트 시 revoke
 function SpreadPage({ page, side, isCover, label, pageNum }) {
+  const [imgSrc, setImgSrc] = useState(null);
+  const [imgError, setImgError] = useState(false);
+  const objectUrlRef = useRef(null);
+
+  // 이미지 URL 해석 + createObjectURL 메모리 관리
+  useEffect(() => {
+    // 이전 objectURL 해제
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
+    }
+    setImgError(false);
+
+    const raw = page?.imageUrl;
+    const resolved = resolveImageUrl(raw);
+
+    // File/Blob에서 생성된 objectURL이면 추적 (언마운트 시 해제 대상)
+    if (resolved && raw && (raw instanceof File || raw instanceof Blob)) {
+      objectUrlRef.current = resolved;
+    }
+
+    setImgSrc(resolved);
+
+    return () => {
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current);
+        objectUrlRef.current = null;
+      }
+    };
+  }, [page?.imageUrl]);
+
   if (!page) {
     return (
       <div className="aspect-[3/4] bg-ink-50 flex items-center justify-center">
@@ -418,21 +461,29 @@ function SpreadPage({ page, side, isCover, label, pageNum }) {
     );
   }
 
-  const hasImage = !!page.imageUrl;
+  const hasImage = !!imgSrc && !imgError;
   const hasText = !!(page.text || '').trim();
   const isTextOnly = !hasImage && hasText;
 
   return (
     <div className={`relative aspect-[3/4] overflow-hidden ${side === 'left' ? 'border-r-0' : 'border-l-0'}`}>
       {/* 이미지가 있는 페이지 */}
-      {hasImage && (
+      {imgSrc && !imgError && (
         <img
-          src={page.imageUrl}
+          src={imgSrc}
           alt={page.title || ''}
           className="w-full h-full object-cover"
           loading="lazy"
-          onError={(e) => { e.target.style.display = 'none'; }}
+          onError={() => setImgError(true)}
         />
+      )}
+
+      {/* 이미지 로드 실패 시 Fallback — 텍스트 오버레이 유지를 위해 배경만 교체 */}
+      {imgError && (
+        <div className="w-full h-full bg-gray-200 flex flex-col items-center justify-center">
+          <span className="text-gray-400 text-2xl mb-1">🖼️</span>
+          <span className="text-gray-400 text-[10px]">이미지를 불러올 수 없습니다</span>
+        </div>
       )}
 
       {/* 텍스트 전용 페이지 */}
@@ -448,8 +499,8 @@ function SpreadPage({ page, side, isCover, label, pageNum }) {
         </div>
       )}
 
-      {/* 이미지+텍스트 오버레이 */}
-      {hasImage && hasText && (
+      {/* 이미지+텍스트 오버레이 (이미지 에러 시에도 텍스트는 표시) */}
+      {(hasImage || imgError) && hasText && (
         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent px-4 py-4">
           {page.title && (
             <p className="text-white font-bold text-xs leading-tight mb-1">{page.title}</p>
@@ -473,7 +524,7 @@ function SpreadPage({ page, side, isCover, label, pageNum }) {
       )}
 
       {/* 표지 타이틀 */}
-      {isCover && hasImage && (
+      {isCover && (hasImage || imgError) && (
         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-4 py-4">
           <p className="text-white font-display font-bold text-base leading-tight">{page.title}</p>
         </div>
@@ -487,7 +538,7 @@ function SpreadPage({ page, side, isCover, label, pageNum }) {
       )}
 
       {/* 이미지도 텍스트도 없는 빈 페이지 */}
-      {!hasImage && !hasText && (
+      {!imgSrc && !imgError && !hasText && (
         <div className="w-full h-full bg-ink-50 flex items-center justify-center">
           <span className="text-ink-300 text-[10px]">{page.title || '빈 페이지'}</span>
         </div>

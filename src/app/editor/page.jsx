@@ -174,7 +174,7 @@ export default function EditorPage() {
   // ── 인라인 편집 패널 자동 스크롤 ref ──────────────────────────
   const editPanelRef = useRef(null);
 
-  // ── API 상태 ──────────────���───────────────────────��──────────
+  // ── API 상태 ────────────────────────────────────────────────────
   const [loading, setLoading]           = useState(false);
   const [bookCreated, setBookCreated]   = useState(false);
   const [bookUid, setBookUid]           = useState(null);

@@ -229,6 +229,13 @@ Authorization: Bearer {SWEETBOOK_API_KEY}
 - **삭제 버튼**: 내지 아이템일 때 "스프레드 삭제 (2p)" 레이블로 `removeSpreadPair()` 호출; 표지 아이템은 기존 "이 사진 삭제" 유지
 - 빈 슬롯은 갤러리 그리드에서 회색 📄 자리표시자 렌더링; API 전송 시 `TPL_TEXT_ONLY` 자동 적용
 
+### ✅ 해결된 버그 (2026-04-05 추가)
+
+#### 버그 F — 미리보기 화면 File 객체 렌더링 크래시 (White Screen) → **해결**
+- 증상: 사용자가 직접 업로드한 사진이 포함된 페이지에서 React 렌더링 크래시 → 해당 페이지 이후 전부 하얀 화면
+- 원인: `page.imageUrl`에 URL 문자열이 아닌 `File` 객체가 들어왔는데, `<img src={page.imageUrl}>`에 직접 주입 → 브라우저 렌더링 실패
+- 해결: `resolveImageUrl()` 헬퍼 — string→그대로, File/Blob→`URL.createObjectURL()`, 그 외→null. `SpreadPage` 컴포넌트에 `useEffect`로 objectURL 생성/해제 라이프사이클 관리. `imgError` state로 로드 실패 시 회색 Fallback UI 표시. 이미지 에러 시에도 텍스트 오버레이는 안전하게 유지
+
 ### ✅ 해결된 버그 (2026-04-04 추가)
 
 #### 버그 E — Photos API `uploadFile` URL 필드명 불일치 → **해결**
