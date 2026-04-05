@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { SERVICE_TYPES, BOOK_SPECS, BOOK_SPEC_LABELS } from '@/lib/constants';
@@ -15,7 +15,7 @@ export default function CreatePage() {
   const service = SERVICE_TYPES[serviceType];
 
   // ── sessionStorage 기반 폼 임시 저장(Draft) 키 ──────────────
-  const DRAFT_KEY = `bookmaker_draft_${serviceType}`;
+  const DRAFT_KEY = `BOOK_DRAFT_${serviceType}`;
 
   const [formData, setFormData] = useState({});
   const [selectedSpec, setSelectedSpec] = useState('');
@@ -24,6 +24,9 @@ export default function CreatePage() {
   const [aiError, setAiError] = useState(null);
   const [draftRestored, setDraftRestored] = useState(false);
 
+  // Draft 복원된 판형 UID를 ref로 보관 — API 로딩 완료 후 덮어쓰기 방지용
+  const restoredSpecRef = useRef(null);
+
   // API에서 불러온 판형 목록 (GET /book-specs)
   const [bookSpecs, setBookSpecs] = useState([]);
   const [specsLoading, setSpecsLoading] = useState(true);
@@ -31,7 +34,7 @@ export default function CreatePage() {
   // API에서 받아온 전체 템플릿 raw 데이터 — 에디터 모달 템플릿 선택에서 사용
   const [allTemplates, setAllTemplates] = useState([]);
 
-  // ── 마운트 시 Draft 복원 ────────────────────────────────────
+  // ── 마운트 시 Draft 복원 (1회) ──────────────────────────────
   useEffect(() => {
     try {
       const raw = sessionStorage.getItem(DRAFT_KEY);
@@ -42,6 +45,8 @@ export default function CreatePage() {
         }
         if (draft.selectedSpec) {
           setSelectedSpec(draft.selectedSpec);
+          // ref에 복원된 specUid 기록 — API 로딩에서 이 값이 있으면 절대 덮어쓰지 않음
+          restoredSpecRef.current = draft.selectedSpec;
         }
         if (draft.useDummy) {
           setUseDummy(true);
@@ -55,17 +60,27 @@ export default function CreatePage() {
     }
   }, [DRAFT_KEY, serviceType]);
 
-  // ── 폼 변경 시 Draft 자동 저장 ──────────────────────────────
-  useEffect(() => {
-    // 초기 빈 상태에서는 저장하지 않음 (마운트 직후 빈 formData 덮어쓰기 방지)
-    if (Object.keys(formData).length === 0 && !useDummy) return;
-    try {
-      const draft = { formData, selectedSpec, useDummy };
-      sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
-    } catch (err) {
-      console.warn('[Draft 저장 실패]', err);
-    }
+  // ── 폼 변경 시 Draft 자동 저장 (500ms Debounce) ─────────────
+  const debounceRef = useRef(null);
+  const saveDraft = useCallback(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      // 초기 빈 상태에서는 저장하지 않음
+      if (Object.keys(formData).length === 0 && !useDummy && !selectedSpec) return;
+      try {
+        const draft = { formData, selectedSpec, useDummy };
+        sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+        console.log('[Draft 저장]', DRAFT_KEY);
+      } catch (err) {
+        console.warn('[Draft 저장 실패]', err);
+      }
+    }, 500);
   }, [formData, selectedSpec, useDummy, DRAFT_KEY]);
+
+  useEffect(() => {
+    saveDraft();
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [saveDraft]);
 
   // 1단계: 마운트 시 GET /book-specs 호출
   useEffect(() => {
@@ -76,19 +91,33 @@ export default function CreatePage() {
         const data = await res.json();
         if (data.success && Array.isArray(data.data)) {
           setBookSpecs(data.data);
-          // Draft에서 복원된 selectedSpec이 없을 때만 추천 판형 자동 선택
-          setSelectedSpec((prev) => {
-            if (prev) return prev; // Draft 복원된 값 유지
+          // ⚠️ 핵심: Draft에서 복원된 specUid가 있으면 API 기본값으로 절대 덮어쓰지 않음
+          if (restoredSpecRef.current) {
+            console.log('[bookSpecs] Draft 복원된 판형 유지:', restoredSpecRef.current);
+            // 복원된 spec이 API 목록에 존재하는지 검증
+            const exists = data.data.some(s => s.bookSpecUid === restoredSpecRef.current);
+            if (!exists) {
+              console.warn('[bookSpecs] Draft 복원 판형이 API 목록에 없음 — 추천 판형으로 보정');
+              const recommended = data.data.find(s => s.bookSpecUid === service?.recommendedSpec);
+              setSelectedSpec(recommended ? recommended.bookSpecUid : data.data[0]?.bookSpecUid || '');
+            }
+            // exists=true면 이미 setSelectedSpec 완료 상태이므로 건드리지 않음
+          } else {
+            // Draft 복원 없음 — 추천 판형 자동 선택
             const recommended = data.data.find(s => s.bookSpecUid === service?.recommendedSpec);
-            return recommended ? recommended.bookSpecUid : data.data[0]?.bookSpecUid || service?.recommendedSpec || '';
-          });
+            setSelectedSpec(recommended ? recommended.bookSpecUid : data.data[0]?.bookSpecUid || service?.recommendedSpec || '');
+          }
         } else {
           setBookSpecs(Object.values(BOOK_SPECS).map(s => ({ bookSpecUid: s.uid, name: s.name, ...s })));
-          setSelectedSpec((prev) => prev || (service?.recommendedSpec || ''));
+          if (!restoredSpecRef.current) {
+            setSelectedSpec(service?.recommendedSpec || '');
+          }
         }
       } catch {
         setBookSpecs(Object.values(BOOK_SPECS).map(s => ({ bookSpecUid: s.uid, name: s.name, ...s })));
-        setSelectedSpec((prev) => prev || (service?.recommendedSpec || ''));
+        if (!restoredSpecRef.current) {
+          setSelectedSpec(service?.recommendedSpec || '');
+        }
       } finally {
         setSpecsLoading(false);
       }
