@@ -1,5 +1,6 @@
 // src/lib/fetchWithRetry.js
 // 5xx 서버 에러 및 네트워크 장애 시 자동 재시도하는 fetch 래퍼
+// POST/PUT 요청에 Idempotency-Key 자동 주입 + 409 Conflict 안전 처리
 // 사용법: import { fetchWithRetry } from '@/lib/fetchWithRetry';
 //         const res = await fetchWithRetry('/api/books', { method: 'POST', ... });
 
@@ -14,9 +15,34 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export async function fetchWithRetry(url, options = {}, maxRetries = 3) {
   let lastError;
 
+  // POST/PUT 요청에 Idempotency-Key 헤더 자동 주입
+  // SweetBook API는 동일 요청 30초 내 재전송 시 409 Conflict 반환 (Redis 분산 락)
+  const method = (options.method || 'GET').toUpperCase();
+  if ((method === 'POST' || method === 'PUT') && options.headers) {
+    const headers = options.headers instanceof Headers
+      ? options.headers
+      : new Headers(options.headers);
+    if (!headers.has('Idempotency-Key')) {
+      headers.set('Idempotency-Key', crypto.randomUUID());
+      options = { ...options, headers: Object.fromEntries(headers.entries()) };
+    }
+  } else if ((method === 'POST' || method === 'PUT') && !options.headers) {
+    options = {
+      ...options,
+      headers: { 'Idempotency-Key': crypto.randomUUID() },
+    };
+  }
+
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
       const res = await fetch(url, options);
+
+      // 409 Conflict — SweetBook 중복 요청 감지 (DUPLICATE_REQUEST)
+      // 이전 요청이 이미 처리 중이므로 재시도하지 않고 그대로 반환
+      if (res.status === 409) {
+        console.warn(`[fetchWithRetry] 409 Conflict (${url}) — 이미 처리 중인 요청입니다. 재시도를 중단합니다.`);
+        return res;
+      }
 
       // 5xx 서버 에러 또는 429(Too Many Requests)일 때만 재시도
       // 400·401·403·404 등 4xx 클라이언트 에러는 재시도해도 동일하게 실패하므로 즉시 반환

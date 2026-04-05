@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { SERVICE_TYPES } from '@/lib/constants';
+import { fetchWithRetry } from '@/lib/fetchWithRetry';
 import StepIndicator from '@/components/StepIndicator';
 
 export default function OrderPage() {
@@ -56,7 +57,7 @@ export default function OrderPage() {
     setError(null);
 
     try {
-      const res = await fetch('/api/orders', {
+      const res = await fetchWithRetry('/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -69,9 +70,15 @@ export default function OrderPage() {
             address2: shipping.address2,
             memo: shipping.memo,
           },
-          externalRef: `bookmaker-order-${Date.now()}`,
+          externalRef: `bookmaker-order-${crypto.randomUUID()}`,
         }),
       });
+
+      // 409 Conflict — 이미 처리 중인 주문 (이중 결제 방지)
+      if (res.status === 409) {
+        setError('이미 처리 중인 주문 요청입니다. 잠시 후 주문 내역에서 확인해 주세요.');
+        return;
+      }
 
       const data = await res.json();
 

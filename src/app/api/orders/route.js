@@ -38,9 +38,11 @@ export async function POST(request) {
     return NextResponse.json(result, { status: 201 });
   } catch (err) {
     console.error('POST /api/orders 상세 에러:', err.response?.data || err.message || err);
+    // 409 Conflict — SweetBook 중복 요청 (DUPLICATE_REQUEST) 그대로 전달
+    const status = err.statusCode || 500;
     return NextResponse.json(
-      { success: false, message: err.message },
-      { status: err.statusCode || 500 }
+      { success: false, message: status === 409 ? '이미 처리 중인 주문 요청입니다. 잠시 후 다시 시도해주세요.' : err.message },
+      { status }
     );
   }
 }
