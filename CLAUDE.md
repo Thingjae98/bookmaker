@@ -175,6 +175,16 @@ Authorization: Bearer {SWEETBOOK_API_KEY}
 - 환경변수: `GEMINI_API_KEY` (Google AI Studio에서 무료 발급)
 - Gemini는 텍스트만 생성. 이미지는 사용자 직접 업로드 또는 picsum 자동 배정
 
+### 테마(Theme) 기반 템플릿 시스템 (2026-04-04 도입)
+- 템플릿은 **테마 단위**로 그룹화하여 사용 — 개별 페이지에 임의 템플릿을 섞지 않음
+- 테마명 = 템플릿 이름(`templateName`)의 첫 번째 `_` 앞 접두사 (예: `구글포토북A_표지` → `구글포토북A`)
+- 각 테마: `{ cover, inner_text, inner_photo, inner_blank }` 4개 역할 슬롯
+- `RECOMMENDED_THEMES` (`constants.js`): 서비스별 기본 추천 테마 (사용자 변경 가능)
+- `THEME_LABELS` (`constants.js`): 테마명 → UI 표시용 한글 라벨
+- **handleCreateBook**: `themeToTplMap(themeGroups[selectedTheme])` 으로 현재 테마의 UID 일괄 적용
+- **에디터 UI**: 개별 페이지 템플릿 선택 → **테마 스위처(Theme Switcher)** 카드 그리드로 대체
+- 테마 슬롯 누락 시 검증된 폴백 UID 자동 적용 (아래 표 참조)
+
 ### 사용 가능한 템플릿 UID (SQUAREBOOK_HC 기준, 실제 API 검증 완료)
 
 | 용도 | UID | 필수 파라미터 |

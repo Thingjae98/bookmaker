@@ -5,6 +5,45 @@
 
 ---
 
+## ✅ 2026-04-04 — 테마(Theme) 기반 템플릿 시스템 대개편
+
+### 배경 / 문제
+
+**기존 아키텍처의 구조적 결함**
+- SweetBook API의 템플릿은 '테마명_역할' 네이밍 규칙(예: `구글포토북A_표지`, `구글포토북A_내지_fill`)으로 디자인 세트가 묶여 있음
+- 기존 코드는 이 구조를 무시하고 개별 페이지마다 임의의 템플릿을 선택할 수 있게 허용 → 한 권의 책에 서로 다른 테마의 표지·내지가 뒤섞이는 디자인 불일치 발생
+- `resolveTemplates()` 함수는 covers[0] / contents[0] 등 배열 순서 의존 → API 응답 순서에 따라 결과가 달라지는 비결정적 동작
+- 개별 페이지 템플릿 선택 UI(`renderTemplateSelector`)는 50개 이상의 템플릿을 카테고리별로 나열 → 사용자 인지 부하 과다
+
+### 의사결정
+
+**1. 테마(Theme) 단위 그룹화**
+- `buildThemeGroups()`: 템플릿 이름의 첫 번째 `_` 앞 접두사를 테마명으로 파싱
+- 각 테마는 `{ cover, inner_text, inner_photo, inner_blank }` 4개 역할 슬롯을 가짐
+- 역할 분류: `classifyTemplateRole()` — 표지/빈페이지/사진전용/사진+텍스트 자동 판별
+
+**2. 서비스별 추천 테마 매핑**
+- `RECOMMENDED_THEMES` 상수로 6개 서비스 → 기본 테마 1:1 매핑
+- 사용자는 테마 스위처에서 다른 테마로 자유롭게 변경 가능 (강제 아님)
+
+**3. 전체 테마 변경(Theme Switcher) UI**
+- 개별 페이지 템플릿 선택기 폐기 → 테마 카드 그리드로 대체
+- 추천 테마에 뱃지 표시, 현재 적용 중인 테마 상단 강조
+- 선택 즉시 `selectedTheme` 상태 변경 → `handleCreateBook`에서 해당 테마의 UID 일괄 적용
+
+**4. `themeToTplMap()` — 테마 → tplMap 변환**
+- 기존 `handleCreateBook`의 `resolveTemplates()` + API 재조회 로직 제거
+- `themeToTplMap(themeGroups[selectedTheme])` 한 줄로 대체
+- 테마 누락·슬롯 누락 시 검증된 폴백 UID(`79yjMH3qRPly` 등) 자동 적용
+
+### 결과
+- 한 권의 책 = 한 테마의 디자인 세트 → 시각적 일관성 보장
+- API 응답 순서 의존성 완전 제거
+- 에디터 UI 단순화 (50개 개별 선택 → 7~8개 테마 카드)
+- 서비스별 추천 테마로 신규 사용자 진입 장벽 최소화
+
+---
+
 ## ✅ 2026-04-04 — 템플릿 선택 UX 정제 및 책 넘김(Spread Paging) 미리보기 구현
 
 ### 배경 / 문제
