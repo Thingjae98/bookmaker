@@ -153,31 +153,6 @@ export const BOOK_SPEC_LABELS = {
   PHOTOBOOK_A5_SC: 'A5 소프트커버 포토북 (148×210mm)',
 };
 
-// ─── 서비스별 추천 테마 매핑 ─────────────────────────────────────────
-// 테마명은 API 템플릿 이름(templateName)의 언더스코어(_) 앞 접두사로 결정됨
-// 예: '일기장A_표지', '일기장A_내지_fill' → 테마: '일기장A'
-// 이 매핑은 기본값(Default)이며, 사용자가 에디터에서 다른 테마로 자유롭게 전환 가능
-export const RECOMMENDED_THEMES = {
-  baby:         '일기장A',
-  kindergarten: '알림장B',
-  fairytale:    '기본포토북',
-  travel:       '구글포토북A',
-  selfpublish:  '심플',
-  pet:          '구글포토북B',
-};
-
-// 테마 한글 표시명 (UI 라벨용)
-export const THEME_LABELS = {
-  '기본':        '기본',
-  '일기장A':     '일기장 A',
-  '알림장B':     '알림장 B',
-  '기본포토북':   '기본 포토북',
-  '구글포토북A':  '구글 포토북 A',
-  '구글포토북B':  '구글 포토북 B',
-  '심플':        '심플',
-  '졸업앨범':     '졸업 앨범',
-};
-
 // 주문 상태 매핑
 export const ORDER_STATUS = {
   20: { key: 'PAID', label: '결제완료', color: 'blue' },

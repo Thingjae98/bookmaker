@@ -5,6 +5,44 @@
 
 ---
 
+## ✅ 2026-04-05 — 공식 API 명세 기반 카테고리(Category) 중심 템플릿 아키텍처 대개편
+
+### 배경 / 문제
+
+**기존 문자열 파싱 기반 테마 시스템의 근본적 한계**
+1. `templateName.split('_')[0]`으로 테마명 추출 → API 이름 규칙이 불규칙해 `내지`, `표지` 등 역할명이 테마명으로 오분류
+2. `classifyTemplateRole()`이 templateName 문자열 패턴으로 cover/inner_text/inner_photo/inner_blank 추론 → API가 이미 `templateKind`와 `parameters.definitions`를 정확히 제공하는데 이를 무시
+3. `KNOWN_THEME_PREFIXES` 화이트리스트 관리 필요 → API에 새 테마 추가 시 코드 수정 필수
+4. 같은 UID가 inner_text/inner_blank에 중복 할당 → 400 에러 원인
+
+**API 실제 구조 발견**
+- API `theme` 필드가 공식 카테고리 그룹명을 직접 제공 (일기장A, 알림장B, 구글포토북C 등)
+- `templateKind`가 cover/content/divider/publish를 정확히 분류
+- `parameters.definitions[key].binding`이 file/text/rowGallery/collageGallery로 파라미터 타입을 명시
+
+### 의사결정
+
+**1. Top-Down 아키��처: API 필드만 신뢰**
+- `buildCategoryGroups()`: API `theme` 필드로 1차 그룹화, `templateKind`로 2차 분류, `binding`으로 3차 세분화
+- 문자열 파싱 함수 전부 삭제: `classifyTemplateRole`, `parseThemeName`, `KNOWN_THEME_PREFIXES`
+
+**2. Parameters 기반 안전 바인딩**
+- 표지/내지 전송 시 `parameters.definitions`를 순회하여 binding 타입에 맞는 값을 자동 매핑
+- file → 이미지 URL, text → 문맥에 맞는 문자열, rowGallery → 이미지 배열
+- definitions가 없는 레거시 케이스는 하드코딩 폴백 유지
+
+**3. Category Switcher UI**
+- Theme Switcher → Category Switcher로 전환
+- API `theme` 필드값을 그대로 카테고리명으로 사용 (별도 라벨 매핑 유지)
+
+### 결과
+- 문자열 파싱 코드 120줄 삭제 → API 필드 기반 코드 90줄로 대체
+- 새 테마/카테고리 추가 시 코드 수정 불필요 (API 응답 자동 반영)
+- templateKind 교차 사용 원천 차단 (cover → POST /cover, content → POST /contents)
+- parameters.definitions 기반 파라미터 빌드로 400 에��� 원인 근본 해소
+
+---
+
 ## ✅ 2026-04-05 — 테마 문자열 파싱 버그(Theme Split) 수정 및 역할별 템플릿 중복 할당 방어 로직 추가
 
 ### 배경 / 문제

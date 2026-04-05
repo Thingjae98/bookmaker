@@ -7,7 +7,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { SERVICE_TYPES, BOOK_SPECS, BOOK_SPEC_LABELS, RECOMMENDED_THEMES, THEME_LABELS } from '@/lib/constants';
+import { SERVICE_TYPES, BOOK_SPECS, BOOK_SPEC_LABELS } from '@/lib/constants';
 import { DUMMY_DATA } from '@/data/dummy';
 import StepIndicator from '@/components/StepIndicator';
 import { toast } from '@/lib/toast';
@@ -22,126 +22,123 @@ const COVER_TEMPLATE = COVER_TEMPLATE_FALLBACK;
 const TPL_WITH_PHOTO = TPL_WITH_PHOTO_FALLBACK;
 const TPL_TEXT_ONLY  = TPL_TEXT_ONLY_FALLBACK;
 
-// ─── 알려진 테마 접두사 집합 (파싱 시 화이트리스트) ─────────────────
-// THEME_LABELS 키 + RECOMMENDED_THEMES 값 합집합
-const KNOWN_THEME_PREFIXES = new Set([
-  ...Object.keys(THEME_LABELS),
-  ...Object.values(RECOMMENDED_THEMES),
-]);
+// ─── API 카테고리(theme 필드) 기반 템플릿 그룹화 ──────────────────────
+// SweetBook API 템플릿 응답의 공식 필드만 사용:
+//   - theme: API가 제공하는 테마 그룹명 (일기장A, 알림장B, 구글포토북A 등)
+//   - templateKind: cover | content | divider | publish
+//   - parameters.definitions[key].binding: file | text | rowGallery | collageGallery
+// 문자열 파싱(split('_')) 기반 추론은 전면 폐기.
 
-// ─── 템플릿 역할 분류 (모듈 레벨) ────────────────────────────────────
-// API 템플릿 이름에서 역할(cover, inner_text, inner_photo, inner_blank)을 추론
-const classifyTemplateRole = (t) => {
-  const name = (t.name || t.templateName || '').toLowerCase();
-  const kind = (t.templateKind || t.category || '').toLowerCase();
-  if (kind.includes('cover') || name.includes('표지')) return 'cover';
-  if (kind.includes('divider') || name.includes('간지')) return 'divider';
-  if (kind.includes('publish') || name.includes('발행면')) return 'publish';
-  if (name.includes('빈') || name.includes('blank') || name.includes('empty')) return 'inner_blank';
-  // fill / gallery / photo = 사진 전용 (텍스트 없이 사진만)
-  if (name.includes('_fill') || name.includes('풀블리드') || name.includes('full') ||
-      name.includes('gallery') || name.includes('_photo'))
-    return 'inner_photo';
-  // 텍스트 전용 (사진 없이 글만) — 'b' 접미사 패턴(내지b)도 포함
-  if ((name.includes('텍스트') || name.includes('text')) &&
-      !(name.includes('사진') || name.includes('photo') || name.includes('이미지')))
-    return 'inner_blank';
-  // 나머지 내지 = 사진+텍스트 (기본)
-  return 'inner_text';
+// 서비스 타입 → 추천 카테고리(theme) 매핑
+const SERVICE_CATEGORY_MAP = {
+  baby:         '일기장A',
+  kindergarten: '알림장B',
+  fairytale:    '일기장B',
+  travel:       '구글포토북A',
+  selfpublish:  '구글포토북B',
+  pet:          '구글포토북C',
 };
 
-// ─── 테마명 파싱 ──────────────────────────────────────────────────
-// 템플릿 이름에서 알려진 테마 접두사를 추출. 매칭 실패 시 '기본' 반환.
-// 예: '알림장B_내지_fill' → '알림장B', '구글포토북A_표지' → '구글포토북A'
-//     '내지_gallery' → '기본' (내지는 테마가 아님), '표지' → '기본'
-const parseThemeName = (rawName) => {
-  // 1) 언더스코어로 분할 후 앞부분이 알려진 테마인지 확인
-  const idx = rawName.indexOf('_');
-  if (idx > 0) {
-    const prefix = rawName.substring(0, idx);
-    if (KNOWN_THEME_PREFIXES.has(prefix)) return prefix;
-  }
-  // 2) 전체 이름 자체가 알려진 테마인지 확인 (언더스코어 없는 경우)
-  if (KNOWN_THEME_PREFIXES.has(rawName)) return rawName;
-  // 3) 매칭 실패 → 기본 테마
-  return '기본';
+// 카테고리(theme)별 한글 라벨
+const CATEGORY_LABELS = {
+  '일기장A':     '일기장 A',
+  '일기장B':     '일기장 B',
+  '알림장A':     '알림장 A',
+  '알림장B':     '알림장 B',
+  '알림장C':     '알림장 C',
+  '구글포토북A':  '구글 포토북 A',
+  '구글포토북B':  '구글 포토북 B',
+  '구글포토북C':  '구글 포토북 C',
+  '공용':        '공용',
 };
 
-// ─── 테마 그룹화 ──────────────────────────────────────────────────
-// API 템플릿 배열 → 테마(Theme) 단위로 그룹화
-// 각 테마: { name, label, cover, inner_text, inner_photo, inner_blank, templates[] }
-const buildThemeGroups = (apiTemplates) => {
-  const themes = {};
+// parameters.definitions에서 file binding 유무로 세부 역할 판별
+const hasFileBinding = (t) => {
+  const defs = t.parameters?.definitions;
+  if (!defs) return false;
+  return Object.values(defs).some((d) => d.binding === 'file');
+};
+
+// 카테고리 그룹 빌드: API 응답 → { [theme]: { covers[], withPhoto[], textOnly[], blank[], all[] } }
+const buildCategoryGroups = (apiTemplates) => {
+  const groups = {};
 
   apiTemplates.forEach((t) => {
-    const rawName = t.name || t.templateName || t.templateUid || '';
-    const themeName = parseThemeName(rawName);
-    const role = classifyTemplateRole(t);
+    const kind = (t.templateKind || '').toLowerCase();
+    // divider / publish 제외 — 책 구조에 직접 사용하지 않음
+    if (kind === 'divider' || kind === 'publish') return;
 
-    // 간지(divider) / 발행면(publish)은 테마 슬롯에 포함하지 않음
-    if (role === 'divider' || role === 'publish') return;
+    const cat = t.theme || '공용';  // API theme 필드 사용 (null → 공용)
 
-    if (!themes[themeName]) {
-      themes[themeName] = {
-        name:        themeName,
-        label:       THEME_LABELS[themeName] || themeName,
-        cover:       null,
-        inner_text:  null,
-        inner_photo: null,
-        inner_blank: null,
-        templates:   [],
+    if (!groups[cat]) {
+      groups[cat] = {
+        name:      cat,
+        label:     CATEGORY_LABELS[cat] || cat,
+        covers:    [],   // templateKind=cover
+        withPhoto: [],   // templateKind=content + file binding 있음
+        textOnly:  [],   // templateKind=content + file binding 없음
+        blank:     [],   // templateKind=content + parameters 자체 없음 (빈 내지)
+        all:       [],   // 전체 (cover+content)
       };
     }
-    themes[themeName].templates.push(t);
+    groups[cat].all.push(t);
 
-    // 역할별 첫 번째 템플릿만 할당 (UID 중복 방지: 이미 다른 역할에 사용 중인 UID 재사용 금지)
-    const uid = t.templateUid;
-    const usedUids = new Set([themes[themeName].cover, themes[themeName].inner_text,
-      themes[themeName].inner_photo, themes[themeName].inner_blank].filter(Boolean));
-
-    if (role === 'cover'       && !themes[themeName].cover       && !usedUids.has(uid)) themes[themeName].cover       = uid;
-    if (role === 'inner_text'  && !themes[themeName].inner_text  && !usedUids.has(uid)) themes[themeName].inner_text  = uid;
-    if (role === 'inner_photo' && !themes[themeName].inner_photo && !usedUids.has(uid)) themes[themeName].inner_photo = uid;
-    if (role === 'inner_blank' && !themes[themeName].inner_blank && !usedUids.has(uid)) themes[themeName].inner_blank = uid;
-  });
-
-  // 폴백: 누락 슬롯은 검증된 하드코딩 UID 사용 (다른 슬롯 UID를 재사용하지 않음)
-  Object.values(themes).forEach((th) => {
-    if (!th.cover)       th.cover       = COVER_TEMPLATE_FALLBACK;
-    if (!th.inner_text)  th.inner_text  = TPL_WITH_PHOTO_FALLBACK;
-    if (!th.inner_photo) th.inner_photo = th.inner_text !== TPL_WITH_PHOTO_FALLBACK
-      ? TPL_WITH_PHOTO_FALLBACK : th.inner_text;
-    if (!th.inner_blank) th.inner_blank = TPL_TEXT_ONLY_FALLBACK;
-    // 최종 안전망: inner_text와 inner_blank가 같은 UID면 inner_blank를 폴백으로 강제 분리
-    if (th.inner_text === th.inner_blank) {
-      th.inner_blank = TPL_TEXT_ONLY_FALLBACK;
-    }
-    // inner_text와 inner_photo가 같으면 inner_photo를 폴백으로 분리
-    if (th.inner_text === th.inner_photo && th.inner_text !== TPL_WITH_PHOTO_FALLBACK) {
-      th.inner_photo = TPL_WITH_PHOTO_FALLBACK;
+    if (kind === 'cover') {
+      groups[cat].covers.push(t);
+    } else {
+      // content → parameters 유무로 세부 분류
+      const defs = t.parameters?.definitions;
+      if (!defs || Object.keys(defs).length === 0) {
+        groups[cat].blank.push(t);
+      } else if (hasFileBinding(t)) {
+        groups[cat].withPhoto.push(t);
+      } else {
+        groups[cat].textOnly.push(t);
+      }
     }
   });
 
-  return themes;
+  return groups;
 };
 
-// ─── 테마에서 tplMap 추출 ───────────────────────────────────────────
-// handleCreateBook에서 사용하는 { cover, photoText, photoOnly, textOnly, spread } 형태
-const themeToTplMap = (theme) => {
-  if (!theme) {
+// 카테고리 그룹 → handleCreateBook용 tplMap 변환
+// { cover, photoText, photoOnly, textOnly, spread, source, coverParams, contentParamsMap }
+const categoryToTplMap = (catGroup) => {
+  if (!catGroup) {
     return {
-      cover: COVER_TEMPLATE_FALLBACK, photoText: TPL_WITH_PHOTO_FALLBACK,
-      photoOnly: TPL_WITH_PHOTO_FALLBACK, textOnly: TPL_TEXT_ONLY_FALLBACK,
-      spread: TPL_WITH_PHOTO_FALLBACK, source: 'fallback',
+      cover: COVER_TEMPLATE_FALLBACK,
+      photoText: TPL_WITH_PHOTO_FALLBACK,
+      photoOnly: TPL_WITH_PHOTO_FALLBACK,
+      textOnly:  TPL_TEXT_ONLY_FALLBACK,
+      spread:    TPL_WITH_PHOTO_FALLBACK,
+      source:    'fallback',
+      coverTpl:  null,
+      contentTpls: {},
     };
   }
+  const cover     = catGroup.covers[0]?.templateUid    || COVER_TEMPLATE_FALLBACK;
+  const photoText = catGroup.withPhoto[0]?.templateUid || TPL_WITH_PHOTO_FALLBACK;
+  // withPhoto에 2번째가 있으면 photoOnly로 사용, 없으면 photoText 공유
+  const photoOnly = (catGroup.withPhoto[1] || catGroup.withPhoto[0])?.templateUid || TPL_WITH_PHOTO_FALLBACK;
+  const textOnly  = catGroup.textOnly[0]?.templateUid  || TPL_TEXT_ONLY_FALLBACK;
+
+  // UID 유일성 안전망: textOnly가 photoText와 같으면 폴백
+  const finalTextOnly = (textOnly === photoText) ? TPL_TEXT_ONLY_FALLBACK : textOnly;
+
+  // 개별 템플릿의 parameter definitions 맵 (UID → definitions)
+  const contentTpls = {};
+  catGroup.all.forEach((t) => {
+    if (t.parameters?.definitions) {
+      contentTpls[t.templateUid] = t.parameters.definitions;
+    }
+  });
+
   return {
-    cover:     theme.cover       || COVER_TEMPLATE_FALLBACK,
-    photoText: theme.inner_text  || TPL_WITH_PHOTO_FALLBACK,
-    photoOnly: theme.inner_photo || TPL_WITH_PHOTO_FALLBACK,
-    textOnly:  theme.inner_blank || TPL_TEXT_ONLY_FALLBACK,
-    spread:    theme.inner_photo || TPL_WITH_PHOTO_FALLBACK,
-    source:    'theme:' + theme.name,
+    cover, photoText, photoOnly, textOnly: finalTextOnly,
+    spread: photoOnly,
+    source: 'category:' + catGroup.name,
+    coverTpl: catGroup.covers[0] || null,
+    contentTpls,
   };
 };
 
@@ -157,9 +154,9 @@ export default function EditorPage() {
   const router = useRouter();
   const [session, setSession]       = useState(null);
 
-  // ── 테마 state ──────────────────────────────────────────────
-  const [themeGroups, setThemeGroups]       = useState({});    // { 테마명: ThemeObj }
-  const [selectedTheme, setSelectedTheme]   = useState(null);  // 현재 선택된 테마명(문자열)
+  // ── 카테고리(Category) state ────────────────────────────────
+  const [categoryGroups, setCategoryGroups]     = useState({});    // { theme명: CatGroup }
+  const [selectedCategory, setSelectedCategory] = useState(null);  // 현재 선택된 카테고리명
 
   // ── 갤러리 state ─────────────────────────────────────────────
   // item shape: { id, file, previewUrl, role, title, text, date, templateUid, isLandscape, useSpread }
@@ -190,16 +187,36 @@ export default function EditorPage() {
     setSession(data);
 
     // ── 테마 초기화: allTemplates → 테마 그룹 빌드 + 추천 테마 선택 ──
+    // ── 카테고리 초기화: 템플릿 상세 조회 → 카테고리 그룹 빌드 ──
     const allTpls = data.allTemplates || [];
     if (allTpls.length > 0) {
-      const groups = buildThemeGroups(allTpls);
-      setThemeGroups(groups);
-      // 추천 테마 기본 선택 (없으면 첫 번째 테마)
-      const recommended = RECOMMENDED_THEMES[data.serviceType];
-      const themeNames = Object.keys(groups);
-      const defaultTheme = themeNames.includes(recommended) ? recommended : (themeNames[0] || null);
-      setSelectedTheme(defaultTheme);
-      console.log('[테마 초기화]', { 추천: recommended, 선택: defaultTheme, 전체: themeNames.length, 테마목록: themeNames });
+      (async () => {
+        try {
+          // 각 템플릿의 parameters.definitions를 비동기 상세 조회로 보강
+          const detailed = await Promise.all(
+            allTpls.map(async (t) => {
+              if (t.parameters?.definitions) return t;
+              try {
+                const res = await fetch(`/api/templates/${t.templateUid}`);
+                const d = await res.json();
+                return { ...t, parameters: (d?.data || d)?.parameters || null };
+              } catch { return t; }
+            })
+          );
+          const groups = buildCategoryGroups(detailed);
+          setCategoryGroups(groups);
+          const recommended = SERVICE_CATEGORY_MAP[data.serviceType];
+          const catNames = Object.keys(groups);
+          const defaultCat = catNames.includes(recommended) ? recommended : (catNames[0] || null);
+          setSelectedCategory(defaultCat);
+          console.log('[카테고리 초기화]', { 추천: recommended, 선택: defaultCat, 전체: catNames.length, 목록: catNames });
+        } catch (err) {
+          console.error('[카테고리 초기화 실패]', err);
+          const groups = buildCategoryGroups(allTpls);
+          setCategoryGroups(groups);
+          setSelectedCategory(Object.keys(groups)[0] || null);
+        }
+      })();
     }
 
     // AI 동화 페이지 or 더미 데이터 로드
@@ -514,29 +531,28 @@ export default function EditorPage() {
     return groups;
   }, [contentItems]);
 
-  // ── 테마 스위처 (Theme Switcher) ─────────────────────────────────
-  // 개별 페이지 템플릿 대신 테마 단위로 일괄 전환
-  const themeNames = useMemo(() => Object.keys(themeGroups), [themeGroups]);
-  const recommendedTheme = session?.serviceType ? RECOMMENDED_THEMES[session.serviceType] : null;
+  // ── 카테고리 스위처 (Category Switcher) ─────────────────────────
+  const catNames = useMemo(() => Object.keys(categoryGroups), [categoryGroups]);
+  const recommendedCat = session?.serviceType ? SERVICE_CATEGORY_MAP[session.serviceType] : null;
+  const activeCatGroup = categoryGroups[selectedCategory] || null;
 
-  // 현재 선택된 테마의 역할별 슬롯 요약
-  const activeThemeObj = themeGroups[selectedTheme] || null;
-  const activeSlotSummary = useMemo(() => {
-    if (!activeThemeObj) return null;
-    const slots = [];
-    if (activeThemeObj.cover)       slots.push('표지');
-    if (activeThemeObj.inner_text)  slots.push('사진+글');
-    if (activeThemeObj.inner_photo) slots.push('사진 전용');
-    if (activeThemeObj.inner_blank) slots.push('텍스트 전용');
-    return slots.join(' · ');
-  }, [activeThemeObj]);
+  // 현재 카테고리의 슬롯 요약
+  const activeCatSummary = useMemo(() => {
+    if (!activeCatGroup) return null;
+    const parts = [];
+    if (activeCatGroup.covers.length)    parts.push(`표지 ${activeCatGroup.covers.length}`);
+    if (activeCatGroup.withPhoto.length) parts.push(`사진+글 ${activeCatGroup.withPhoto.length}`);
+    if (activeCatGroup.textOnly.length)  parts.push(`텍스트 ${activeCatGroup.textOnly.length}`);
+    if (activeCatGroup.blank.length)     parts.push(`빈내지 ${activeCatGroup.blank.length}`);
+    return parts.join(' · ');
+  }, [activeCatGroup]);
 
-  // 테마 카드 렌더 함수
-  const renderThemeSwitcher = () => {
-    if (themeNames.length === 0) {
+  // 카테고리 선택 UI 렌더
+  const renderCategorySwitcher = () => {
+    if (catNames.length === 0) {
       return (
         <div className="text-center py-4">
-          <p className="text-xs text-ink-400">테마 정보를 불러오는 중...</p>
+          <p className="text-xs text-ink-400">카테고리를 불러오는 중...</p>
         </div>
       );
     }
@@ -544,90 +560,73 @@ export default function EditorPage() {
     return (
       <div>
         <p className="text-xs font-medium text-ink-700 mb-2">
-          디자인 테마
+          디자인 카테고리
           <span className="ml-1.5 font-normal text-ink-400">
-            ({themeNames.length}개 · 모든 페이지에 일괄 적용)
+            ({catNames.length}개 · 표지+내지 일괄 적용)
           </span>
         </p>
 
-        {/* 현재 적용 중인 테마 표시 */}
-        {activeThemeObj && (
+        {/* 현재 카테고리 표시 */}
+        {activeCatGroup && (
           <div className="flex items-center gap-2 mb-3 bg-warm-50 border border-warm-200 rounded-xl px-3 py-2">
             <span className="text-warm-600 text-sm">🎨</span>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-bold text-warm-800 truncate">
-                {activeThemeObj.label}
-                {selectedTheme === recommendedTheme && (
+                {activeCatGroup.label}
+                {selectedCategory === recommendedCat && (
                   <span className="ml-1.5 text-[10px] font-normal bg-warm-200 text-warm-700 px-1.5 py-0.5 rounded-full">추천</span>
                 )}
               </p>
-              {activeSlotSummary && (
-                <p className="text-[11px] text-warm-600 mt-0.5">{activeSlotSummary}</p>
+              {activeCatSummary && (
+                <p className="text-[11px] text-warm-600 mt-0.5">{activeCatSummary}</p>
               )}
             </div>
             <span className="shrink-0 text-warm-600 font-bold text-sm">적용 중</span>
           </div>
         )}
 
-        {/* 테마 카드 그리드 */}
+        {/* 카테고리 카드 그리드 */}
         <div className="grid grid-cols-2 gap-2 max-h-[320px] overflow-y-auto pr-1">
-          {themeNames.map((name) => {
-            const theme = themeGroups[name];
-            const isActive = name === selectedTheme;
-            const isRecommended = name === recommendedTheme;
-            // 대표 썸네일: 표지 템플릿의 이미지 우선
-            const coverTpl = theme.templates.find((t) => classifyTemplateRole(t) === 'cover');
-            const anyTpl = coverTpl || theme.templates[0];
-            const thumbUrl = anyTpl
-              ? (anyTpl.thumbnails?.layout || anyTpl.thumbnails?.baseLayerOdd || anyTpl.thumbnails?.baseLayerEven || anyTpl.thumbnailUrl || anyTpl.previewUrl || null)
-              : null;
+          {catNames.map((name) => {
+            const cat = categoryGroups[name];
+            const isActive = name === selectedCategory;
+            const isRec = name === recommendedCat;
+            // 대표 썸네일: 표지 템플릿 이미지 우선
+            const thumbTpl = cat.covers[0] || cat.all[0];
+            const thumbUrl = thumbTpl?.thumbnails?.layout || thumbTpl?.thumbnails?.baseLayerOdd || null;
 
             return (
               <button
                 key={name}
                 type="button"
-                onClick={() => setSelectedTheme(name)}
+                onClick={() => setSelectedCategory(name)}
                 className={`p-2.5 rounded-xl border-2 text-left transition-all ${
                   isActive
                     ? 'border-warm-600 bg-warm-50 ring-1 ring-warm-300'
                     : 'border-ink-100 hover:border-ink-300 bg-white'
                 }`}
               >
-                {/* 썸네일 */}
                 <div className="w-full h-[56px] rounded-lg mb-2 overflow-hidden bg-ink-100 relative">
                   {thumbUrl ? (
-                    <img
-                      src={thumbUrl}
-                      alt={theme.label}
-                      className="w-full h-full object-cover"
-                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                    />
+                    <img src={thumbUrl} alt={cat.label} className="w-full h-full object-cover"
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-ink-100 to-ink-200">
                       <span className="text-ink-400 text-lg">🎨</span>
                     </div>
                   )}
-                  {/* 뱃지 오버레이 */}
-                  {isRecommended && !isActive && (
-                    <span className="absolute top-1 right-1 text-[9px] bg-warm-500 text-white px-1.5 py-0.5 rounded-full font-medium shadow-sm">
-                      추천
-                    </span>
+                  {isRec && !isActive && (
+                    <span className="absolute top-1 right-1 text-[9px] bg-warm-500 text-white px-1.5 py-0.5 rounded-full font-medium shadow-sm">추천</span>
                   )}
                   {isActive && (
-                    <span className="absolute top-1 right-1 text-[9px] bg-warm-600 text-white px-1.5 py-0.5 rounded-full font-bold shadow-sm">
-                      ✓ 적용
-                    </span>
+                    <span className="absolute top-1 right-1 text-[9px] bg-warm-600 text-white px-1.5 py-0.5 rounded-full font-bold shadow-sm">✓ 적용</span>
                   )}
                 </div>
-
-                {/* 테마명 */}
-                <p className={`text-[12px] font-semibold leading-tight truncate ${
-                  isActive ? 'text-warm-800' : 'text-ink-700'
-                }`}>
-                  {theme.label}
+                <p className={`text-[12px] font-semibold leading-tight truncate ${isActive ? 'text-warm-800' : 'text-ink-700'}`}>
+                  {cat.label}
                 </p>
                 <p className="text-[10px] text-ink-400 mt-0.5">
-                  {theme.templates.length}개 템플릿
+                  {cat.all.length}개 템플릿
                 </p>
               </button>
             );
@@ -668,10 +667,10 @@ export default function EditorPage() {
         addLog(`⚠️ bookSpecUid 보정: "${rawSpecUid || '(없음)'}" → "${bookSpecUid}"`);
       addLog(`📐 판형: ${BOOK_SPEC_LABELS[bookSpecUid] || bookSpecUid}`);
 
-      // ── 테마 기반 템플릿 매핑 ──────────────────────────────────────
-      // 선택된 테마의 역할별 UID를 tplMap으로 변환 (폴백: 검증된 하드코딩 UID)
-      const tplMap = themeToTplMap(themeGroups[selectedTheme] || null);
-      addLog(`🎨 테마: ${selectedTheme || '(없음)'} (${tplMap.source})`);
+      // ── 카테고리 기반 템플릿 매핑 ────────────────────────────────────
+      // 선택된 카테고리의 templateKind + parameters 기반 UID 매핑
+      const tplMap = categoryToTplMap(categoryGroups[selectedCategory] || null);
+      addLog(`🎨 카테고리: ${selectedCategory || '(없음)'} (${tplMap.source})`);
       addLog(`   표지: ${tplMap.cover} / 사진+텍스트: ${tplMap.photoText} / 텍스트: ${tplMap.textOnly}`);
 
       // ── STEP 1: 책 생성 ────────────────────────────────────────
@@ -895,61 +894,109 @@ export default function EditorPage() {
         addLog(`📋 판형 최소 ${specPageMin}p / 증분 ${specPageIncrement}p 충족 — ${paddedPages.length - contentPageData.length}p 패딩 (내지 ${targetContentCount}p, 총 ${targetTotal}p)`);
       }
 
-      // ── STEP 3: 앞표지 추가 ────────────────────────────────────
-      // session.coverTemplateUid는 create 단계에서 API가 동적으로 반환한 값으로
-      // 검증되지 않은 UID(예: 4MY2fokVjkeY)가 들어올 수 있음 → 항상 검증된 상수 사용
+      // ── STEP 3: 앞표지 추가 — parameters.definitions 기반 안전 바인딩 ──
       const coverTplUid = tplMap.cover;
-      // 앞/뒤 통합 표지 — 인쇄 규격상 표지는 Spread 1장으로 관리되므로 단일 cover API 호출에 양쪽 URL 전달
-      addLog(`🎨 표지 추가 중... (앞+뒤 통합 Spread, 템플릿: ${coverTplUid})`);
+      // templateKind 검증: 표지에 반드시 cover 템플릿만 사용
+      const coverTplObj = tplMap.coverTpl;
+      if (coverTplObj && coverTplObj.templateKind !== 'cover') {
+        addLog(`❌ 표지 templateKind 불일치: ${coverTplObj.templateKind} (cover 필요)`);
+      }
+      addLog(`🎨 표지 추가 중... (템플릿: ${coverTplUid})`);
+      // 표지 파라미터를 definitions 기반으로 빌드
+      const coverDefs = tplMap.contentTpls[coverTplUid] || {};
       const dateRange = fd.period || fd.semester
         ? `${fd.year || new Date().getFullYear()}년 ${fd.semester || fd.period}`
         : String(new Date().getFullYear());
+      const coverParams = {};
+      Object.entries(coverDefs).forEach(([key, def]) => {
+        if (def.binding === 'file') {
+          // file 바인딩: 사진 URL 매핑 (이름 기반 추론)
+          if (key.toLowerCase().includes('front') || key === 'coverPhoto') {
+            coverParams[key] = coverFrontUrl;
+          } else if (key.toLowerCase().includes('back')) {
+            coverParams[key] = coverBackUrl;
+          } else {
+            coverParams[key] = coverFrontUrl; // 기본: 앞표지 URL
+          }
+        } else if (def.binding === 'text') {
+          // text 바인딩: 적절한 값 매핑
+          if (key === 'title' || key === 'spineTitle') coverParams[key] = title;
+          else if (key === 'dateRange' || key === 'periodText') coverParams[key] = dateRange;
+          else if (key === 'subtitle') coverParams[key] = service.subtitle || '';
+          else if (key === 'childName') coverParams[key] = fd.childName || fd.babyName || name;
+          else if (key === 'schoolName') coverParams[key] = fd.className || '';
+          else if (key === 'volumeLabel') coverParams[key] = fd.semester || fd.period || '';
+          else coverParams[key] = title; // 기본 폴백
+        }
+      });
+      // definitions가 비어있으면 레거시 폴백 파라미터 사용
+      if (Object.keys(coverParams).length === 0) {
+        coverParams.coverPhoto = coverFrontUrl;
+        coverParams.backPhoto  = coverBackUrl;
+        coverParams.title      = title;
+        coverParams.dateRange  = dateRange;
+      }
+      addLog(`📋 표지 파라미터: ${Object.keys(coverParams).join(', ')}`);
+
       const coverRes  = await fetch(`/api/books/${uid}/cover`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          templateUid: coverTplUid,
-          parameters:  { coverPhoto: coverFrontUrl, backPhoto: coverBackUrl, title, dateRange },
-        }),
+        body:    JSON.stringify({ templateUid: coverTplUid, parameters: coverParams }),
       });
       const coverData = await coverRes.json();
       if (coverData.success) {
-        addLog('✅ 표지 추가 완료 (앞+뒤 통합)');
+        addLog('✅ 표지 추가 완료');
       } else {
         const coverDetail = coverData.details ? ` / 상세: ${JSON.stringify(coverData.details)}` : '';
         addLog(`⚠️ 표지 실패: ${coverData.message}${coverDetail}`);
       }
 
-      // ── STEP 4: 내지 추가 ─────────────────────────────────────
-      // 템플릿 동적 선택 원칙 (API 매핑 기반):
-      //   - 이미지+텍스트 있음  → tplMap.photoText (사진+텍스트 레이아웃)
-      //   - 이미지만 있음       → tplMap.photoOnly (사진 전용 레이아웃, 없으면 photoText 폴백)
-      //   - 텍스트만 있음       → tplMap.textOnly  (텍스트 전용 레이아웃)
-      //   - 양면(Spread) 페이지 → tplMap.spread    (사진 전용 우선)
+      // ── STEP 4: 내지 추가 — parameters.definitions 기반 안전 바인딩 ──
       addLog(`📄 내지 ${paddedPages.length}페이지 추가 중...`);
       let contentsFailCount = 0;
       for (let i = 0; i < paddedPages.length; i++) {
         const page = paddedPages[i];
         const hasImage = !!(page.imageUrl);
         const hasText  = !!(page.text || '').trim();
-        // 동적 템플릿 선택: 페이지 데이터 조합에 따른 최적 매핑
+        // templateKind 검증: 내지에 content 템플릿만 사용
         let tplUid;
         if (page.isSpreadPage) {
-          tplUid = tplMap.spread;  // 양면 분할 페이지 → 사진 전용 우선
+          tplUid = tplMap.spread;
         } else if (hasImage && hasText) {
-          tplUid = tplMap.photoText;  // 사진 + 텍스트
+          tplUid = tplMap.photoText;
         } else if (hasImage && !hasText) {
-          tplUid = tplMap.photoOnly;  // 사진만 (Full-bleed)
+          tplUid = tplMap.photoOnly;
         } else {
-          tplUid = tplMap.textOnly;   // 텍스트만 또는 빈 페이지
+          tplUid = tplMap.textOnly;
         }
-        const params = {
-          date:      page.date  || new Date().toISOString().slice(0, 10),
-          title:     page.title || `페이지 ${i + 1}`,
-          // 빈 문자열은 일부 API 검증 실패 → 단일 공백으로 폴백
-          diaryText: (page.text || '').trim() || ' ',
-        };
-        if (hasImage) params.photo1 = page.imageUrl;
+        // definitions 기반 파라미터 빌드
+        const contentDefs = tplMap.contentTpls[tplUid] || {};
+        const params = {};
+        if (Object.keys(contentDefs).length > 0) {
+          Object.entries(contentDefs).forEach(([key, def]) => {
+            if (def.binding === 'file') {
+              params[key] = hasImage ? page.imageUrl : `https://picsum.photos/seed/${session.serviceType}-p${i}/600/600`;
+            } else if (def.binding === 'text') {
+              if (key === 'date' || key === 'dayLabel' || key === 'dateLabel') params[key] = page.date || new Date().toISOString().slice(0, 10);
+              else if (key === 'title') params[key] = page.title || `페이지 ${i + 1}`;
+              else if (key === 'diaryText') params[key] = (page.text || '').trim() || ' ';
+              else if (key === 'monthNum' || key === 'month') params[key] = String(new Date(page.date || Date.now()).getMonth() + 1);
+              else if (key === 'dayNum') params[key] = String(new Date(page.date || Date.now()).getDate());
+              else if (key === 'year') params[key] = String(new Date(page.date || Date.now()).getFullYear());
+              else if (key === 'bookTitle') params[key] = title;
+              else params[key] = ' '; // required text 필드 빈값 방지
+            } else if (def.binding === 'rowGallery' || def.binding === 'collageGallery') {
+              // 갤러리 바인딩: 이미지 URL 배열 또는 빈 배열
+              params[key] = hasImage ? [page.imageUrl] : [];
+            }
+          });
+        } else {
+          // definitions 없는 레거시 폴백
+          params.date      = page.date  || new Date().toISOString().slice(0, 10);
+          params.title     = page.title || `페이지 ${i + 1}`;
+          params.diaryText = (page.text || '').trim() || ' ';
+          if (hasImage) params.photo1 = page.imageUrl;
+        }
 
         try {
           const r = await fetch(`/api/books/${uid}/contents`, {
@@ -1527,7 +1574,7 @@ export default function EditorPage() {
                     </div>
 
                     {/* 표지 전용 — 테마 스위처 */}
-                    {(modalItem.role === 'front' || modalItem.role === 'back') && renderThemeSwitcher()}
+                    {(modalItem.role === 'front' || modalItem.role === 'back') && renderCategorySwitcher()}
                   </div>
 
                   {/* 우: 내지 전용 편집 컨트롤 */}
@@ -1635,7 +1682,7 @@ export default function EditorPage() {
                       </div>
 
                       {/* 디자인 테마 선택 */}
-                      {renderThemeSwitcher()}
+                      {renderCategorySwitcher()}
 
                       {/* 양면(Spread) 분할 옵션 */}
                       {modalItem.isLandscape && (
@@ -1776,7 +1823,7 @@ export default function EditorPage() {
               <div className="bg-white rounded-2xl border border-ink-100 p-6 space-y-6">
 
                 {/* ── 테마 스위처 (항상 노출) ── */}
-                {!bookCreated && renderThemeSwitcher()}
+                {!bookCreated && renderCategorySwitcher()}
 
                 <div className="mb-4">
                   <h3 className="font-display font-bold text-ink-900">

@@ -175,16 +175,16 @@ Authorization: Bearer {SWEETBOOK_API_KEY}
 - 환경변수: `GEMINI_API_KEY` (Google AI Studio에서 무료 발급)
 - Gemini는 텍스트만 생성. 이미지는 사용자 직접 업로드 또는 picsum 자동 배정
 
-### 테마(Theme) 기반 템플릿 시스템 (2026-04-04 도입, 04-05 파싱 버그 수정)
-- 템플릿은 **테마 단위**로 그룹화하여 사용 — 개별 페이지에 임의 템플릿을 섞지 않음
-- 테마명 파싱: `KNOWN_THEME_PREFIXES` 화이트리스트에 있는 접두사만 테마명으로 인식 (예: `알림장B_내지_fill` → `알림장B`)
-- **주의**: `내지`, `표지`, `빈내지` 등은 역할 명칭이지 테마 이름이 아님 → `'기본'` 테마로 귀속
-- 각 테마: `{ cover, inner_text, inner_photo, inner_blank }` 4개 역할 슬롯 — **역할별 UID 유일성 강제** (`usedUids` Set으로 중복 차단)
-- `RECOMMENDED_THEMES` (`constants.js`): 서비스별 기본 추천 테마 (사용자 변경 가능)
-- `THEME_LABELS` (`constants.js`): 테마명 → UI 표시용 한글 라벨 (`'기본'` 포함)
-- **handleCreateBook**: `themeToTplMap(themeGroups[selectedTheme])` 으로 현재 테마의 UID 일괄 적용
-- **에디터 UI**: 개별 페이지 템플릿 선택 → **테마 스위처(Theme Switcher)** 카드 그리드로 대체
-- 테마 슬롯 누락 시 검증된 폴백 UID 자동 적용 (아래 표 참조)
+### 카테고리(Category) 기반 템플릿 시스템 (2026-04-05 전면 개편)
+> **절대 규칙**: 템플릿은 반드시 API의 `theme` 필드(카테고리)와 `templateKind`를 기준으로 필터링 및 할당한다. `templateName.split('_')` 등 문자열 파싱 기반 추론은 사용 금지.
+- API `theme` 필드 = 카테고리 그룹명 (일기장A, 알림장B, 구글포토북A 등). `category` 필드는 현재 null — 사용하지 않음.
+- `templateKind`: `cover`(표지) / `content`(내지) / `divider`(간지) / `publish`(발행면). **cover → POST /cover, content → POST /contents** 교차 사용 절대 금지.
+- `parameters.definitions[key].binding`: `file`(이미지 URL), `text`(문자열), `rowGallery`/`collageGallery`(이미지 배열)
+- **에디터 그룹화**: `buildCategoryGroups()` — theme별로 `{ covers[], withPhoto[], textOnly[], blank[] }` 분류
+- **서비스 추천**: `SERVICE_CATEGORY_MAP` — baby→일기장A, kindergarten→알림장B, travel→구글포토북A 등
+- **handleCreateBook**: `categoryToTplMap(categoryGroups[selectedCategory])` + definitions 기반 파라미터 자동 빌드
+- **에디터 UI**: Category Switcher 카드 그리드 — 추천 배지, 대표 썸네일, 카테고리 전환
+- 아키텍처 상세: `ARCHITECTURE_GUIDE.md` 참조
 
 ### 사용 가능한 템플릿 UID (SQUAREBOOK_HC 기준, 실제 API 검증 완료)
 
