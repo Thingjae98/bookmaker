@@ -128,10 +128,23 @@ POST /books/{uid}/contents  → templateKind === 'content' 인 템플릿만 허�
 
 ### Category Switcher (카테고리 스위처)
 
-- 위치: 에디터 하단 액션 패널 (사진 미선택 시) + 인라인 편집 패널
+- **위치**: 좌측 사이드바 "📖 구성 미리보기" 패널 최상단 (표지 스프레드 위) — 1회만 렌더링
 - 카드 그리드: 각 카테고리의 대표 썸네일 + 라벨 + 템플릿 수
 - 추천 배지: 서비스 타입에 맞는 카테고리에 "추천" 뱃지 표시
 - 선택 효과: 선택된 카테고리에 warm 색상 테두리 + "적용" 뱃지
+- 구성 요약: 현재 카테고리의 `표지 N · 사진+글 N · 텍스트 N · 빈내지 N` 요약 표시
+
+### Layout Thumbnails (세부 레이아웃 선택)
+
+- **위치**: 우측 인라인 편집 패널 — 사진 선택 시 해당 페이지의 역할(표지/내지)에 맞는 템플릿 썸네일 표시
+- `renderLayoutThumbnails(item, idx)`: 선택된 카테고리의 covers/withPhoto/textOnly/blank 템플릿을 3열 카드 그리드로 표시
+- 카드 클릭 시 해당 페이지의 `templateUid`만 개별 변경 (전역 카테고리와 독립)
+- 세부 라벨: 사진+글 / 텍스트 / 빈 내지 / 표지
+
+### 자동 스크롤
+
+- `editPanelRef` + `useEffect([selectedIdx])` → `scrollIntoView({ behavior: 'smooth', block: 'nearest' })`
+- 좌측 사이드바·갤러리 어디에서 클릭하든 편집 패널이 뷰포트로 자동 이동
 
 ### 데이터 흐름
 
@@ -139,6 +152,7 @@ POST /books/{uid}/contents  → templateKind === 'content' 인 템플릿만 허�
 1. create 페이지: GET /templates?bookSpecUid=... → sessionStorage에 allTemplates 저장
 2. editor 마운트: allTemplates → 각 템플릿 상세 조회 (parameters 보강)
 3. buildCategoryGroups(): theme + templateKind 기반 그룹화
-4. Category Switcher: 사용자 카테고리 선택
-5. handleCreateBook: categoryToTplMap() → 선택 카테고리의 UID + parameters.definitions 기반 바인딩
+4. Category Switcher (좌측 사이드바): 사용자 카테고리 선택
+5. Layout Thumbnails (우측 편집 패널): 페이지별 세부 레이아웃 선택
+6. handleCreateBook: categoryToTplMap() → 선택 카테고리의 UID + parameters.definitions 기반 바인딩
 ```

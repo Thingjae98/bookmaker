@@ -171,7 +171,10 @@ export default function EditorPage() {
   // 키: 갤러리 아이템의 고유 id (문자열), 값: File | Blob 객체
   const stagedFilesRef = useRef({});
 
-  // ── API 상태 ─────────────────────────────────────────────────
+  // ── 인라인 편집 패널 자동 스크롤 ref ──────────────────────────
+  const editPanelRef = useRef(null);
+
+  // ── API 상태 ──────────────���───────────────────────��──────────
   const [loading, setLoading]           = useState(false);
   const [bookCreated, setBookCreated]   = useState(false);
   const [bookUid, setBookUid]           = useState(null);
@@ -531,6 +534,13 @@ export default function EditorPage() {
     return groups;
   }, [contentItems]);
 
+  // ── 사진 클릭 시 인라인 편집 패널로 자동 스크롤 ──────────────
+  useEffect(() => {
+    if (selectedIdx !== null && editPanelRef.current) {
+      editPanelRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [selectedIdx]);
+
   // ── 카테고리 스위처 (Category Switcher) ─────────────────────────
   const catNames = useMemo(() => Object.keys(categoryGroups), [categoryGroups]);
   const recommendedCat = session?.serviceType ? SERVICE_CATEGORY_MAP[session.serviceType] : null;
@@ -628,6 +638,73 @@ export default function EditorPage() {
                 <p className="text-[10px] text-ink-400 mt-0.5">
                   {cat.all.length}개 템플릿
                 </p>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  // ── 페이지별 레이아웃(템플릿) 썸네일 선택 UI ──────────────────
+  // 선택된 카테고리 내 content 템플릿들의 썸네일을 보여줌
+  const renderLayoutThumbnails = (item, idx) => {
+    if (!activeCatGroup) return null;
+    // 내지일 때: withPhoto + textOnly + blank 표시
+    const isCover = item?.role === 'front' || item?.role === 'back';
+    const templates = isCover
+      ? activeCatGroup.covers
+      : [...activeCatGroup.withPhoto, ...activeCatGroup.textOnly, ...activeCatGroup.blank];
+
+    if (templates.length === 0) return null;
+
+    const currentTplUid = item?.templateUid;
+
+    return (
+      <div>
+        <p className="text-xs font-medium text-ink-700 mb-2">
+          {isCover ? '표지' : '내지'} 레이아웃 선택
+          <span className="ml-1.5 font-normal text-ink-400">
+            ({activeCatGroup.label} · {templates.length}종)
+          </span>
+        </p>
+        <div className="grid grid-cols-3 gap-2">
+          {templates.map((tpl) => {
+            const thumbUrl = tpl.thumbnails?.layout || tpl.thumbnails?.baseLayerOdd || tpl.thumbnails?.baseLayerEven || null;
+            const isActive = currentTplUid === tpl.templateUid;
+            // 세부 분류 라벨
+            const hasFile = hasFileBinding(tpl);
+            const defs = tpl.parameters?.definitions;
+            const hasDefs = defs && Object.keys(defs).length > 0;
+            const label = isCover ? '표지'
+              : !hasDefs ? '빈 내지'
+              : hasFile ? '사진+글' : '텍스트';
+
+            return (
+              <button
+                key={tpl.templateUid}
+                type="button"
+                onClick={() => updateGalleryItem(idx, { templateUid: tpl.templateUid })}
+                className={`rounded-xl border-2 overflow-hidden transition-all ${
+                  isActive
+                    ? 'border-warm-600 ring-1 ring-warm-300 shadow-sm'
+                    : 'border-ink-100 hover:border-ink-300'
+                }`}
+              >
+                <div className="w-full h-16 bg-ink-100 relative overflow-hidden">
+                  {thumbUrl ? (
+                    <img src={thumbUrl} alt={label} className="w-full h-full object-cover"
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-ink-100 to-ink-200">
+                      <span className="text-ink-400 text-sm">{isCover ? '📔' : hasFile ? '🖼️' : '📝'}</span>
+                    </div>
+                  )}
+                  {isActive && (
+                    <span className="absolute top-0.5 right-0.5 text-[8px] bg-warm-600 text-white px-1 py-0.5 rounded-full font-bold">✓</span>
+                  )}
+                </div>
+                <p className="text-[10px] text-center py-1 font-medium text-ink-600 truncate px-1">{label}</p>
               </button>
             );
           })}
@@ -1133,6 +1210,9 @@ export default function EditorPage() {
             <div className="bg-white rounded-2xl border border-ink-100 p-4 sticky top-20 space-y-4">
               <h2 className="font-display font-bold text-ink-900">📖 구성 미리보기</h2>
 
+              {/* ── 카테고리(테마) 스위처 — 사이드바 최상단 ──────── */}
+              {!bookCreated && renderCategorySwitcher()}
+
               {/* ── 표지 스프레드 슬롯 ─────────────────────────────── */}
               {/* SweetBook 표지 템플릿은 [뒤표지(좌) | 앞표지(우)] 한 장 Spread로 인쇄됨 */}
               <div>
@@ -1469,26 +1549,10 @@ export default function EditorPage() {
               )}
             </div>
 
-            {/* API 로그 */}
-            {showLog && (
-              <div className="bg-ink-900 rounded-2xl p-6 text-sm font-mono">
-                <h3 className="text-warm-200 font-bold mb-3">📋 API 호출 로그</h3>
-                <div className="space-y-1 max-h-[300px] overflow-y-auto">
-                  {apiLog.length === 0
-                    ? <p className="text-ink-400">아직 API 호출 기록이 없습니다.</p>
-                    : apiLog.map((log, i) => (
-                        <div key={i} className="text-ink-200">
-                          <span className="text-ink-400">[{log.time}]</span> {log.msg}
-                        </div>
-                      ))}
-                </div>
-              </div>
-            )}
-
             {/* ── 인라인 편집 패널 (사진 선택 시) 또는 책 생성 액션 (미선택 시) ── */}
             {selectedIdx !== null && modalItem ? (
               /* 인라인 속성 편집 패널 — 모달 대체 */
-              <div className="bg-white rounded-2xl border-2 border-warm-200 shadow-md animate-fade-up">
+              <div ref={editPanelRef} className="bg-white rounded-2xl border-2 border-warm-200 shadow-md animate-fade-up">
                 {/* 패널 헤더 */}
                 <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-ink-100">
                   <div className="flex items-center gap-2">
@@ -1573,8 +1637,8 @@ export default function EditorPage() {
                       </div>
                     </div>
 
-                    {/* 표지 전용 — 테마 스위처 */}
-                    {(modalItem.role === 'front' || modalItem.role === 'back') && renderCategorySwitcher()}
+                    {/* 표지 전용 — 레이아웃 선택 */}
+                    {(modalItem.role === 'front' || modalItem.role === 'back') && renderLayoutThumbnails(modalItem, selectedIdx)}
                   </div>
 
                   {/* 우: 내지 전용 편집 컨트롤 */}
@@ -1681,8 +1745,8 @@ export default function EditorPage() {
                         </p>
                       </div>
 
-                      {/* 디자인 테마 선택 */}
-                      {renderCategorySwitcher()}
+                      {/* 세부 레이아웃(템플릿) 선택 */}
+                      {renderLayoutThumbnails(modalItem, selectedIdx)}
 
                       {/* 양면(Spread) 분할 옵션 */}
                       {modalItem.isLandscape && (
@@ -1822,9 +1886,6 @@ export default function EditorPage() {
               /* 책 생성 액션 패널 */
               <div className="bg-white rounded-2xl border border-ink-100 p-6 space-y-6">
 
-                {/* ── 테마 스위처 (항상 노출) ── */}
-                {!bookCreated && renderCategorySwitcher()}
-
                 <div className="mb-4">
                   <h3 className="font-display font-bold text-ink-900">
                     {bookCreated ? '✅ 책이 생성되었습니다!' : '최종 생성 및 주문'}
@@ -1887,6 +1948,22 @@ export default function EditorPage() {
 
           </div>
         </div>
+
+        {/* ── API 로그 — 레이아웃 하단 고정 ──────────────────── */}
+        {showLog && (
+          <div className="mt-6 bg-ink-900 rounded-2xl p-6 text-sm font-mono">
+            <h3 className="text-warm-200 font-bold mb-3">📋 API 호출 로그</h3>
+            <div className="space-y-1 max-h-[300px] overflow-y-auto">
+              {apiLog.length === 0
+                ? <p className="text-ink-400">아직 API 호출 기록이 없습니다.</p>
+                : apiLog.map((log, i) => (
+                    <div key={i} className="text-ink-200">
+                      <span className="text-ink-400">[{log.time}]</span> {log.msg}
+                    </div>
+                  ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

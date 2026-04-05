@@ -183,7 +183,10 @@ Authorization: Bearer {SWEETBOOK_API_KEY}
 - **에디터 그룹화**: `buildCategoryGroups()` — theme별로 `{ covers[], withPhoto[], textOnly[], blank[] }` 분류
 - **서비스 추천**: `SERVICE_CATEGORY_MAP` — baby→일기장A, kindergarten→알림장B, travel→구글포토북A 등
 - **handleCreateBook**: `categoryToTplMap(categoryGroups[selectedCategory])` + definitions 기반 파라미터 자동 빌드
-- **에디터 UI**: Category Switcher 카드 그리드 — 추천 배지, 대표 썸네일, 카테고리 전환
+- **에디터 UI**: Category Switcher는 좌측 사이드바 최상단에 1회 배치 (우측 편집 패널에서 제거됨)
+- **세부 레이아웃 선택**: 우측 편집 패널에서 `renderLayoutThumbnails(item, idx)` — 선택된 카테고리 내 content 템플릿 썸네일 카드로 페이지별 레이아웃 커스텀
+- **자동 스크롤**: 사진 클릭 시 편집 패널로 `scrollIntoView({ behavior: 'smooth' })` 자동 이동
+- **API 로그**: 레이아웃 최하단(그리드 밖)에 배치 — 편집 플로우와 분리
 - 아키텍처 상세: `ARCHITECTURE_GUIDE.md` 참조
 
 ### 사용 가능한 템플릿 UID (SQUAREBOOK_HC 기준, 실제 API 검증 완료)
@@ -394,6 +397,10 @@ try {
 - [x] 페이지 미리보기 시각화 — 스프레드 뷰(Spread View)로 전면 재구현, 에디터 실데이터 기반 렌더링, CSS 책등 효과
 - [x] 템플릿 선택 UI 정제 — API 원본 명칭 숨김, 정제된 한글 라벨(사진+글/사진만/글만) 카테고리 그룹 표시, 텍스트 유무 강제 필터 제거
 - [x] 미리보기 Flip UI 구현 — 상하 스크롤 → 좌우 스프레드 페이징 전환, [이전/다음] 버튼 + 키보드 화살표 + 도트 인디케이터, 블러 잠금 오버레이
+- [x] 카테고리 스위처 좌측 사이드바 독립 배치 — 우측 편집 패널 3곳 중복 제거 → 좌측 "구성 미리보기" 최상단 1회 렌더링
+- [x] 페이지별 세부 레이아웃(템플릿) 선택 — `renderLayoutThumbnails(item, idx)` 함수로 선택된 카테고리 내 content 템플릿 썸네일 카드 표시, 개별 `templateUid` 변경 가능
+- [x] 사진 클릭 시 편집 패널 자동 스크롤 — `editPanelRef` + `useEffect([selectedIdx])` → `scrollIntoView({ behavior: 'smooth' })`
+- [x] API 로그 레이아웃 하단 이동 — 갤러리·편집 패널 사이에서 제거, 전체 그리드 밖 컨테이너 최하단으로 이동
 - [ ] Skeleton UI 로딩 (현재 spinner만 있음)
 - [ ] 에디터 전체 플로우 E2E 검증 영상 녹화 (더미 채우기 → 책 생성 → 주문 완료)
 - [ ] 모바일 반응형 최종 점검 (640px 이하)
