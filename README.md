@@ -221,7 +221,37 @@ bookmaker/
 
 ---
 
-## 7. 보안
+## 7. SweetBook API 스펙 대응 현황
+
+SweetBook API 공식 문서(10개 Concepts 페이지)를 전수 검토하여 구현 상태를 분류했습니다.
+
+### 완전 구현 (9개 영역)
+- **Books API** — 생성, 사진 업로드, 표지, 내지, 최종화 전체 워크플로우
+- **Orders API** — 견적, 주문 생성, 목록/상세 조회, 취소
+- **Template Engine** — theme(카테고리) 기반 필터링, templateKind 분리, 파라미터 바인딩 자동 감지
+- **Base Layer** — 썸네일 odd/even 폴백 체인 적용
+- **Cover Spread** — 앞+뒤표지 통합 API 호출
+- **Photo Upload** — multipart Drag & Drop, 갤러리 관리
+- **Retry / Backoff** — 5xx 3회 재시도, 지수 백오프
+- **페이지 규격 검증** — pageMin/pageIncrement 실시간 체크 + 자동 패딩
+
+### 부분 구현 / 개선 예정
+- **Gallery 배열** (`/concepts/gallery/`) — 단일 사진 배열만 지원, 다중 사진 갤러리(collageGallery/rowGallery) 개선 예정
+- **Dynamic Layout** (`/concepts/dynamic-layout/`) — breakBefore 'page' 고정, 조건부 제어 개선 예정
+- **Special Page Rules** (`/concepts/special-page-rules/`) — PUR 제본 첫 내지 Right 배치 미리보기 반영 예정
+- **Idempotency** (`/concepts/idempotency/`) — 409 Conflict 처리 및 referenceId 적용 예정
+
+### 의도적 미구현 (서버 측 자동 처리 또는 고급 UX)
+- Element Grouping (visible 토글, shiftUpOnHide)
+- Column Templates (2/3단 레이아웃)
+- Text Processing (서버 측 자동 처리)
+- Dynamic Layout 고급 기능 (splittable, isDynamic, lanes)
+
+> 상세 분석: `DECISION_LOG.md` "2026-04-06 — SweetBook API 문서 전수 검토 & Gap 분석" 참조
+
+---
+
+## 8. 보안
 
 - API Key는 **서버 측(API Routes)에서만** 사용되며 클라이언트에 노출되지 않습니다
 - `.env` 파일은 `.gitignore`에 등록되어 커밋되지 않습니다

@@ -393,10 +393,15 @@ try {
 - [x] 사진 업로드 인덱스 매핑 최종 동기화 — `stagedFilesRef` (useRef, itemId→File) 도입으로 gallery state와 독립적으로 파일 이중 보관. `handleCreateBook` 시작 시 `contentFileMap[ci]` 스냅샷으로 절대 내지 인덱스 기준 파일 매핑. `uploadFile()` 헬퍼에 instanceof 타입 체크 + `console.log` 진단 로그 추가
 - [x] 동적 템플릿 판형 필터링 버그 픽스 완료 — `resolveTemplates()` 엄격 필터링 적용. `t.bookSpecUid === bookSpecUid` 정확 일치만 허용, `bookSpecUids` 배열도 호환. 다른 판형 UID 혼입으로 인한 전체 400 에러 해결
 
-### P0 — 과제 제출 전 필수 (마감: 4/8 화 23:59)
-- [ ] GitHub 저장소 **Public** 설정 확인 (심사자 접근 가능해야 함)
-- [ ] `.gitignore`에 `.claude/` 추가 (현재 untracked 상태로 노출 위험)
+### P0 — API 스펙 Gap 수정 (마감: 4/8 화 23:59, 순서대로 진행)
+- [ ] **1순위: Idempotency 적용** — fetchWithRetry에 409 Conflict 처리 추가, 주문 생성 시 `crypto.randomUUID()` referenceId 생성, 책 생성/주문 POST에 중복 방지 로직 구현 (`/concepts/idempotency/`)
+- [ ] **2순위: Gallery 배열 바인딩** — rowGallery/collageGallery binding 타입 감지 시 다중 사진 URL 배열로 전달 (현재 `[url]` 단일 배열 → 템플릿 정의에 따라 복수 사진 매핑) (`/concepts/gallery/`)
+- [ ] **3순위: Special Page Rules** — PUR 제본 첫 내지 Right 배치 규칙을 미리보기 렌더링에 반영 (SQUAREBOOK_HC는 pageNum=1이 오른쪽 면) (`/concepts/special-page-rules/`)
+- [ ] **4순위: breakBefore 동적 제어** — 하드코딩 `'page'` 제거, 템플릿 정의 또는 사용자 설정에 따라 none/column/page 조건부 전달 (`/concepts/dynamic-layout/`)
 - [ ] `npm run build` 최종 성공 확인
+- [ ] E2E 플로우 수동 검증 (더미→에디터→책생성→미리보기→주문→주문내역)
+- [ ] GitHub 저장소 **Public** 설정 확인 (심사자 접근 가능해야 함)
+- [x] `.gitignore`에 `.claude/` 추가 (이미 완료)
 - [ ] 구글폼 서술형 4문항 작성 + GitHub URL 제출 (https://forms.gle/PrdSrWNyTucLeZdX9)
 
 ### P1 — 면접 전 개선
@@ -417,7 +422,12 @@ try {
 - [ ] 에디터 전체 플로우 E2E 검증 영상 녹화 (더미 채우기 → 책 생성 → 주문 완료)
 - [ ] 모바일 반응형 최종 점검 (640px 이하)
 
-### P2 — 시간 여유 시
+### P2 — 시간 여유 시 / 면접 후 개선
+- [ ] Element Grouping — `visible` 파라미터 토글 UI (아이콘 숨기기, 코멘트 끄기 등), `shiftUpOnHide` 자동 레이아웃 조정 (`/concepts/element-grouping/`)
+- [ ] Column Templates — 1/2/3단 레이아웃 선택 UI (UID: `cnH0Ud1nl1f9`, `4G5qpFLebGKd`, `2Ec6Dp8duR3z`) (`/concepts/column/`)
+- [ ] Dynamic Layout 고급 — `splittable` 긴 텍스트 자동 분할, `isDynamic` 동적 높이, `lanes` X범위 독립 Y-flow (`/concepts/dynamic-layout/`)
+- [ ] Text Processing — 서버 텍스트 높이 계산 API 연동 (`/concepts/text-processing/`)
+- [ ] Base Layer — odd/even 페이지 구분 콘텐츠 차별화 (`/concepts/base-layer/`)
 - [ ] 웹훅 연동 (주문 상태 변경 실시간 알림)
 - [ ] 사용자 인증 (NextAuth)
 - [ ] 다크 모드

@@ -1931,6 +1931,82 @@ POD(Print-On-Demand) 인쇄 API 특성상 표지 템플릿을 좌(뒤표지)·�
 - 내지 템플릿은 크롭 없이 원본 비율 그대로 표시
 - 이미지 로드 실패 시 CSS 와이어프레임 폴백 유지
 
+## 🔍 2026-04-06 — SweetBook API 문서 전수 검토 & Gap 분석
+
+### 배경
+
+제출 마감(4/8) 전 SweetBook API 공식 문서 10개 페이지를 전수 검토하여, 현재 구현이 API 스펙을 얼마나 충실히 반영하고 있는지 Gap 분석을 실시함. 검토 대상: Books API, Dynamic Layout, Template Engine, Element Grouping, Gallery, Column, Base Layer, Text Processing, Special Page Rules, Idempotency.
+
+### 잘 구현된 영역 (✅ 9개)
+
+| 영역 | 상태 |
+|------|------|
+| Books API 전체 워크플로우 (create→photos→cover→contents→finalize) | 완벽 |
+| Orders API (estimate, create, list, detail, cancel) | 완벽 |
+| Template Engine — theme 기반 필터링, templateKind(cover/content) 분리 | 완벽 |
+| Template 파라미터 바인딩 — definitions[key].binding = file/text 자동 감지 | 완벽 |
+| Base Layer 썸네일 — baseLayerOdd/baseLayerEven 폴백 체인 | 구현됨 |
+| Cover Spread — 앞+뒤 통합 POST /cover | 구현됨 |
+| Photo Upload — multipart, Drag & Drop, 갤러리 관리 | 구현됨 |
+| Retry / Backoff — fetchWithRetry, 5xx 3회 재시도 | 구현됨 |
+| 판형별 pageMin/pageIncrement 자동 검증 + 패딩 | 구현됨 |
+
+### 부분 구현 영역 (⚠️ 3개)
+
+**1. Gallery 배열 처리 (`/concepts/gallery/`)**
+- 문제: API는 `rowGallery`(무제한 사진 행 배치)와 `collageGallery`(1-9장 콜라주)라는 바인딩 타입을 지원. 이들은 사진 URL **배열**을 받아야 함
+- 현재: 에디터가 `[imageUrl]` 단일 원소 배열로만 전달 → 다중 사진 갤러리 템플릿 선택 시 레이아웃 미대응
+- 영향: 다중 사진 레이아웃 선택 시 400 에러 가능
+
+**2. breakBefore 동적 제어 (`/concepts/dynamic-layout/`)**
+- 문제: API는 breakBefore를 `none`(연속 배치), `column`(다음 단), `page`(다음 페이지)로 제어 가능
+- 현재: 모든 내지에 `breakBefore: 'page'`로 하드코딩 → 연속 배치 불가
+- 영향: 기능 제한이지만 현재 사용 중인 1-column 템플릿에서는 문제 없음
+
+**3. Special Page Rules — PUR 첫 내지 Right (`/concepts/special-page-rules/`)**
+- 문제: PUR 제본(SQUAREBOOK_HC 포함)은 첫 내지(pageNum=1)가 오른쪽(Right) 면에 배치됨
+- 현재: 미리보기에서 이 규칙을 반영하지 않아 첫 내지가 왼쪽에 표시될 수 있음
+- 영향: 미리보기와 실제 인쇄 결과 불일치 가능
+
+### 완전 누락 영역 (❌ 4개)
+
+**1. Idempotency (`/concepts/idempotency/`) — 🔴 위험도 높음**
+- API 문서: POST 요청 중복 방지를 위해 Redis 분산 락(30초 TTL) 사용. 동일 요청 30초 내 재전송 시 `409 Conflict` 반환. 주문 생성 시 `referenceId` 사용 권장
+- 현재: Idempotency-Key 헤더 없음, 409 응답 처리 없음, referenceId 생성 없음
+- 위험: 네트워크 불안정 시 책 이중 생성 또는 이중 결제 가능
+- 구현 난이도: ⭐ 낮음 (fetchWithRetry에 409 처리 + crypto.randomUUID() referenceId)
+
+**2. Dynamic Layout 고급 기능 (`/concepts/dynamic-layout/`)**
+- `splittable`: 긴 텍스트 자동 분할 (페이지/단 경계에서 자동 잘림) — 미구현
+- `isDynamic`: 텍스트 실제 길이 기반 동적 높이 계산 — 미구현
+- `lanes`: X 범위 기반 독립 Y-flow 영역 — 미구현
+- `itemSpacing`: 템플릿 인스턴스 간 간격 — 미구현
+- 영향: 서버 측 처리이므로 파라미터만 전달하면 됨. 현재 1-page-per-content 구조에서는 문제 없음
+
+**3. Element Grouping / 조건부 렌더링 (`/concepts/element-grouping/`)**
+- `visible` 파라미터: 특정 요소(아이콘, 코멘트 등) 숨기기 — UI 토글 없음
+- `shiftUpOnHide`: 숨긴 요소 공간 자동 당김 — 미구현
+- `groupName`: 논리 그룹 단위 배치 — 미구현
+- 영향: UX 편의 기능. 현재 사용자가 직접 텍스트를 비워서 우회 가능
+
+**4. Column Templates (`/concepts/column/`)**
+- 1/2/3단 레이아웃 지원 (UID: `cnH0Ud1nl1f9`, `4G5qpFLebGKd`, `2Ec6Dp8duR3z`) — 선택 UI 없음
+- 영향: 현재 1단 레이아웃만 사용. 다단 레이아웃은 디자인 다양성 확보용
+
+### 의사결정 — 제출 전 우선순위
+
+| 순서 | 작업 | 이유 |
+|------|------|------|
+| 1 | Idempotency 적용 (409 처리 + referenceId) | API 문서 명시 필수, 이중 결제 방지, 난이도 낮음 |
+| 2 | Gallery 배열 바인딩 수정 | 일부 템플릿 400 에러 방지 |
+| 3 | Special Page Rules 미리보기 반영 | 인쇄 결과와 미리보기 정확도 |
+| 4 | breakBefore 동적 제어 | 하드코딩 제거, API 스펙 준수 |
+| 5 | npm run build + E2E 검증 | 제출 필수 |
+
+Dynamic Layout 고급 기능, Element Grouping, Column Templates는 서버 측 자동 처리이거나 UX 편의 기능이므로 제출 후 개선 대상으로 분류.
+
+---
+
 <!-- 새 기록 추가 시 아래 템플릿 복사 -->
 <!--
 ## 📅 YYYY-MM-DD — 제목
