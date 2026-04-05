@@ -13,10 +13,15 @@ import { DUMMY_DATA } from '@/data/dummy';
 import StepIndicator from '@/components/StepIndicator';
 
 // ── 이미지 소스 안전 변환 ─────────────────────────────────────────
-// File/Blob → createObjectURL, string → 그대로, 그 외 → null
+// File/Blob → createObjectURL, 렌더링 가능한 URL string → 그대로, 순수 fileName → null
 const resolveImageUrl = (src) => {
   if (!src) return null;
-  if (typeof src === 'string') return src;
+  if (typeof src === 'string') {
+    // http/https, blob:, data: 로 시작하는 문자열만 렌더링 가능한 URL
+    if (/^(https?:|blob:|data:)/i.test(src)) return src;
+    // 그 외 순수 fileName (예: "photo~.PNG") → 브라우저 404 방지
+    return null;
+  }
   if (src instanceof File || src instanceof Blob) {
     try { return URL.createObjectURL(src); } catch { return null; }
   }

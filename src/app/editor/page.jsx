@@ -1116,17 +1116,32 @@ export default function EditorPage() {
         sessionStorage.setItem('bookmaker_session',
           JSON.stringify({ ...session, bookUid: uid, pageCount: finalData.data?.pageCount }));
 
-        // 미리보기 페이지용 스프레드 데이터 저장 (실데이터 기반 렌더링)
+        // 미리보기 페이지용 스프레드 데이터 저장
+        // ⚠️ 핵심: API 전송용 fileName(photo~.PNG)이 아닌, 원본 UI previewUrl을 사용
+        // fileName은 SweetBook 내부 참조용이며 브라우저가 직접 렌더링할 수 없음 (404 발생)
+        const safePreviewUrl = (apiUrl, uiUrl) => {
+          if (!apiUrl) return uiUrl || null;
+          // http/https/blob/data 로 시작하면 브라우저 렌더링 가능
+          if (/^(https?:|blob:|data:)/i.test(apiUrl)) return apiUrl;
+          // 순수 fileName이면 UI 원본 URL로 대체
+          return uiUrl || null;
+        };
+
         const previewData = {
-          coverFront: { url: coverFrontUrl, title },
-          coverBack:  { url: coverBackUrl,  title: '뒤표지' },
-          pages: paddedPages.map((p, idx) => ({
-            imageUrl: p.imageUrl,
-            title:    p.title || `페이지 ${idx + 1}`,
-            text:     p.text  || '',
-            date:     p.date  || '',
-            isSpreadPage: p.isSpreadPage || false,
-          })),
+          coverFront: { url: safePreviewUrl(coverFrontUrl, frontItem.previewUrl), title },
+          coverBack:  { url: safePreviewUrl(coverBackUrl,  backItem.previewUrl),  title: '뒤표지' },
+          pages: paddedPages.map((p, idx) => {
+            // 원본 갤러리 아이템의 previewUrl 찾기 (패딩 페이지는 원본이 없음)
+            const origItem = idx < contentItems.length ? contentItems[idx] : null;
+            const uiUrl    = origItem?.previewUrl || null;
+            return {
+              imageUrl:     safePreviewUrl(p.imageUrl, uiUrl),
+              title:        p.title || `페이지 ${idx + 1}`,
+              text:         p.text  || '',
+              date:         p.date  || '',
+              isSpreadPage: p.isSpreadPage || false,
+            };
+          }),
         };
         sessionStorage.setItem('bookmaker_preview', JSON.stringify(previewData));
       } else {

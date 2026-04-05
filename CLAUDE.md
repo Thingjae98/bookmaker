@@ -231,6 +231,11 @@ Authorization: Bearer {SWEETBOOK_API_KEY}
 
 ### ✅ 해결된 버그 (2026-04-05 추가)
 
+#### 버그 G — 업로드 응답 fileName에 의한 미리보기 404 크래시 → **해결**
+- 증상: 책 생성 후 미리보기에서 모든 이미지가 404 에러 → 깨진 이미지 표시
+- 원인: `uploadFile()` 반환값 `fileName`(예: `photo~.PNG`)이 `contentPageData.imageUrl`을 거쳐 `sessionStorage('bookmaker_preview')`로 직통 저장 → 브라우저가 상대 경로로 해석 → 404
+- 해결: `safePreviewUrl(apiUrl, uiUrl)` — API 반환값이 `http/blob/data:` 접두사면 사용, 순수 fileName이면 원본 갤러리 `previewUrl`로 대체. `resolveImageUrl()`에도 최종 안전망 추가 — `http/blob/data:` 이외 문자열은 `null` 반환
+
 #### 버그 F — 미리보기 화면 File 객체 렌더링 크래시 (White Screen) → **해결**
 - 증상: 사용자가 직접 업로드한 사진이 포함된 페이지에서 React 렌더링 크래시 → 해당 페이지 이후 전부 하얀 화면
 - 원인: `page.imageUrl`에 URL 문자열이 아닌 `File` 객체가 들어왔는데, `<img src={page.imageUrl}>`에 직접 주입 → 브라우저 렌더링 실패

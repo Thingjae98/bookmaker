@@ -5,6 +5,29 @@
 
 ---
 
+## ✅ 2026-04-05 — 업로드 응답 fileName에 의한 404 렌더링 크래시 해결
+
+### 배경 / 문제
+
+책 생성 과정에서 SweetBook Photos API가 반환하는 `fileName`(예: `photo~.PNG`)이 미리보기 상태에 그대로 저장되어, 브라우저가 이를 상대 경로 URL로 해석 → `GET /photo~.PNG` → 404 대량 발생 → 이미지 전부 깨짐.
+
+- **근본 원인**: `handleCreateBook` 내부에서 `uploadFile()` 반환값(fileName)을 `contentPageData[].imageUrl`에 저장 → 이 데이터가 `sessionStorage('bookmaker_preview')`로 직통 전달 → 미리보기 `<img src="photo~.PNG">` → 404
+- UI 미리보기 상태(로컬 previewUrl)와 API 전송용 페이로드(fileName)가 분리되지 않은 구조적 문제
+
+### 의사결정
+
+1. **`safePreviewUrl(apiUrl, uiUrl)` 분류 함수**: API 반환값이 `http/blob/data:` 접두사면 렌더링 가능 URL → 그대로 사용, 순수 fileName이면 원본 갤러리 `previewUrl`로 대체
+2. **미리보기 데이터 빌드 시 원본 UI URL 사용**: `coverFront/coverBack`은 갤러리 아이템의 `previewUrl`, 내지는 `contentItems[idx].previewUrl`로 매핑
+3. **`resolveImageUrl()` 최종 안전망**: 문자열이 `http/blob/data:` 이외이면 `null` 반환 → Fallback UI 표시 (fileName이 엣지 케이스로 넘어와도 404 차단)
+4. **API 페이로드는 변경 없음**: `contentPageData[].imageUrl`은 fileName 그대로 유지 → SweetBook API가 정상 처리
+
+### 결과
+- 미리보기 화면 404 에러 100% 해소
+- API 전송 로직은 일절 변경 없이 기존 동작 보존
+- fileName이 어떤 경로로든 렌더링 단에 도달해도 Fallback으로 안전 처리
+
+---
+
 ## ✅ 2026-04-05 — 미리보기 File 객체 렌더링 크래시 수정 (White Screen Bug)
 
 ### 배경 / 문제
