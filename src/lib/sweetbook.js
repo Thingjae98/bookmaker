@@ -52,7 +52,7 @@ export async function listPhotos(bookUid) {
   return ok(data);
 }
 
-export async function addContents(bookUid, { templateUid, parameters, breakBefore = 'page' }) {
+export async function addContents(bookUid, { templateUid, parameters, breakBefore = 'none' }) {
   const data = await getClient().contents.insert(bookUid, templateUid, parameters || {}, { breakBefore });
   return ok(data);
 }

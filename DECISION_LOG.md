@@ -5,6 +5,26 @@
 
 ---
 
+## ⚙️ 2026-04-06 — 동적 레이아웃 엔진 최적화: breakBefore 하드코딩 제거 및 템플릿 기본 플로우(none) 복원
+
+### 문제
+내지 추가 API(`POST /books/{bookUid}/contents`)에 `breakBefore: 'page'`가 하드코딩되어 있어, 모든 내지가 강제 페이지 분리됨. SweetBook API Dynamic Layout 스펙(`/concepts/dynamic-layout/`)에 따르면 content 템플릿의 기본값은 `'none'`(연속 플로우 배치)이며, `'page'`는 divider/publish 템플릿 전용.
+
+### 해결
+1. `categoryToTplMap()`에 `tplMeta` 맵 추가 — 각 템플릿의 `templateKind`와 `layoutRules.breakBefore` 메타데이터를 별도 저장
+2. 내지 전송 루프에서 `breakBefore` 동적 해석 로직 도입:
+   - 1순위: 템플릿 정의에 명시된 `layoutRules.breakBefore` 값 사용
+   - 2순위: `templateKind` 기반 폴백 — `content` → `'none'`, `divider`/`publish` → `'page'`
+3. `sweetbook.js`의 `addContents()` 기본값도 `'page'` → `'none'`으로 변경 (API 스펙 정렬)
+
+### 결과
+- 하드코딩 제거 → API 엔진이 템플릿별 최적 레이아웃 플로우를 자동 결정
+- content 템플릿: 연속 배치(`none`) — 텍스트가 여러 페이지에 걸쳐 자연스럽게 흐름
+- divider/publish: 독립 페이지(`page`) — 간지·발행면이 항상 새 페이지에서 시작
+- 템플릿에 `layoutRules.breakBefore`가 명시되어 있으면 해당 값을 우선 적용
+
+---
+
 ## ✅ 2026-04-05 — Create 페이지 폼 데이터 임시 저장(Draft) 기능 완성
 
 ### 배경 / 문제

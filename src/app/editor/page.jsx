@@ -114,6 +114,7 @@ const categoryToTplMap = (catGroup) => {
       source:    'fallback',
       coverTpl:  null,
       contentTpls: {},
+      tplMeta: {},
     };
   }
   const cover     = catGroup.covers[0]?.templateUid    || COVER_TEMPLATE_FALLBACK;
@@ -125,12 +126,18 @@ const categoryToTplMap = (catGroup) => {
   // UID 유일성 안전망: textOnly가 photoText와 같으면 폴백
   const finalTextOnly = (textOnly === photoText) ? TPL_TEXT_ONLY_FALLBACK : textOnly;
 
-  // 개별 템플릿의 parameter definitions 맵 (UID → definitions)
+  // 개별 템플릿의 parameter definitions + 메타데이터 맵 (UID → definitions)
+  // tplMeta: UID → { templateKind, breakBefore } (동적 레이아웃 제어용)
   const contentTpls = {};
+  const tplMeta = {};
   catGroup.all.forEach((t) => {
     if (t.parameters?.definitions) {
       contentTpls[t.templateUid] = t.parameters.definitions;
     }
+    tplMeta[t.templateUid] = {
+      templateKind: t.templateKind || 'content',
+      breakBefore:  t.layoutRules?.breakBefore || null, // 템플릿 정의에 명시된 breakBefore
+    };
   });
 
   return {
@@ -139,6 +146,7 @@ const categoryToTplMap = (catGroup) => {
     source: 'category:' + catGroup.name,
     coverTpl: catGroup.covers[0] || null,
     contentTpls,
+    tplMeta,
   };
 };
 
@@ -1154,11 +1162,17 @@ export default function EditorPage() {
           if (hasImage) params.photo1 = page.imageUrl;
         }
 
+        // breakBefore 동적 제어: 템플릿 정의에 명시된 값 우선, 없으면 'none' (API 기본 플로우)
+        // content 템플릿은 flow layout('none')이 기본, divider/publish는 항상 'page'
+        const meta = tplMap.tplMeta?.[tplUid] || {};
+        const resolvedBreakBefore = meta.breakBefore
+          || (meta.templateKind === 'divider' || meta.templateKind === 'publish' ? 'page' : 'none');
+
         try {
           const r = await fetch(`/api/books/${uid}/contents`, {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ templateUid: tplUid, parameters: params, breakBefore: 'page' }),
+            body:    JSON.stringify({ templateUid: tplUid, parameters: params, breakBefore: resolvedBreakBefore }),
           });
           const d = await r.json();
           if (!d.success) {

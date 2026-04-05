@@ -394,10 +394,10 @@ try {
 - [x] 동적 템플릿 판형 필터링 버그 픽스 완료 — `resolveTemplates()` 엄격 필터링 적용. `t.bookSpecUid === bookSpecUid` 정확 일치만 허용, `bookSpecUids` 배열도 호환. 다른 판형 UID 혼입으로 인한 전체 400 에러 해결
 
 ### P0 — API 스펙 Gap 수정 (마감: 4/8 화 23:59, 순서대로 진행)
-- [ ] **1순위: Idempotency 적용** — fetchWithRetry에 409 Conflict 처리 추가, 주문 생성 시 `crypto.randomUUID()` referenceId 생성, 책 생성/주문 POST에 중복 방지 로직 구현 (`/concepts/idempotency/`)
-- [ ] **2순위: Gallery 배열 바인딩** — rowGallery/collageGallery binding 타입 감지 시 다중 사진 URL 배열로 전달 (현재 `[url]` 단일 배열 → 템플릿 정의에 따라 복수 사진 매핑) (`/concepts/gallery/`)
-- [ ] **3순위: Special Page Rules** — PUR 제본 첫 내지 Right 배치 규칙을 미리보기 렌더링에 반영 (SQUAREBOOK_HC는 pageNum=1이 오른쪽 면) (`/concepts/special-page-rules/`)
-- [ ] **4순위: breakBefore 동적 제어** — 하드코딩 `'page'` 제거, 템플릿 정의 또는 사용자 설정에 따라 none/column/page 조건부 전달 (`/concepts/dynamic-layout/`)
+- [x] **1순위: Idempotency 적용** — fetchWithRetry에 Idempotency-Key 헤더 자동 주입 + 409 Conflict 안전 처리, 주문/책 생성에 `crypto.randomUUID()` 기반 고유 referenceId 적용 (`/concepts/idempotency/`)
+- [x] **2순위: Gallery 배열 바인딩** — rowGallery/collageGallery binding 감지 시 후속 이미지 전용 페이지를 배열로 수집 (collage 최대 9장, row 최대 50장), consumed Set으로 중복 전송 방지 (`/concepts/gallery/`)
+- [x] **3순위: Special Page Rules** — PUR 제본 첫 내지 Right 배치 규칙 미리보기 반영, 첫 스프레드 `{ left: null, right: page1 }` 구조 + 표지 spineTitle 자동 바인딩 (`/concepts/special-page-rules/`)
+- [x] **4순위: breakBefore 동적 제어** — 하드코딩 `'page'` 제거, 템플릿 메타데이터(layoutRules.breakBefore) 우선 → templateKind 기반 폴백(content→'none', divider/publish→'page') (`/concepts/dynamic-layout/`)
 - [ ] `npm run build` 최종 성공 확인
 - [ ] E2E 플로우 수동 검증 (더미→에디터→책생성→미리보기→주문→주문내역)
 - [ ] GitHub 저장소 **Public** 설정 확인 (심사자 접근 가능해야 함)
