@@ -371,9 +371,11 @@ export default function EditorPage() {
       const items = [];
 
       // 표지 생성 헬퍼
+      // 이미지 URL 판별: http(s) URL, 로컬 경로(/images/...) 모두 허용
+      const isValidImageUrl = (url) => url && (url.startsWith('http') || url.startsWith('/'));
       const makePageUrl = (p, fallbackSeed) =>
         (p?.image === null || p?.image === '') ? null
-        : (p?.image?.startsWith('http') ? p.image : `https://picsum.photos/seed/${fallbackSeed}/600/600`);
+        : (isValidImageUrl(p?.image) ? p.image : `https://picsum.photos/seed/${fallbackSeed}/600/600`);
 
       // ── 앞표지 (frontCover에서 가져옴 — pages 배열과 무관) ──
       if (frontCoverData) {
@@ -583,6 +585,70 @@ export default function EditorPage() {
   const addSpread = () => {
     setGallery((prev) => [...prev, makeBlankItem(), makeBlankItem()]);
     toast.success('스프레드 1장(2페이지)이 추가됐습니다');
+  };
+
+  // ── AI 자동 구성 (Auto-Compose) ────────────────────────────────
+  const [showAutoCompose, setShowAutoCompose] = useState(false);
+  const [autoComposePages, setAutoComposePages] = useState(24);
+
+  const handleAutoCompose = () => {
+    // 현재 갤러리에서 이미지가 있는 아이템만 수집 (역할 무관)
+    const imageItems = gallery.filter(item => item.previewUrl && !item.isBlankSlot);
+    if (imageItems.length === 0) {
+      toast.error('먼저 사진을 업로드해 주세요');
+      return;
+    }
+
+    const targetPages = Math.max(24, Math.min(130, autoComposePages));
+    // 짝수로 맞추기 (2페이지 단위)
+    const adjustedTarget = targetPages % 2 === 0 ? targetPages : targetPages + 1;
+
+    const ts = Date.now();
+    const newGallery = [];
+
+    // 1. 앞표지: 첫 번째 이미지
+    const frontImg = imageItems[0];
+    newGallery.push({
+      ...frontImg,
+      id: `auto-front-${ts}`,
+      role: 'front',
+    });
+
+    // 2. 뒤표지: 마지막 이미지 (이미지가 2장 이상일 때)
+    const backImg = imageItems.length > 1 ? imageItems[imageItems.length - 1] : null;
+    if (backImg) {
+      newGallery.push({
+        ...backImg,
+        id: `auto-back-${ts}`,
+        role: 'back',
+      });
+    }
+
+    // 3. 내지: 나머지 이미지 순서대로 배치
+    const contentImages = imageItems.slice(1, backImg ? -1 : undefined);
+    contentImages.forEach((img, i) => {
+      newGallery.push({
+        ...img,
+        id: `auto-c${i}-${ts}`,
+        role: 'content',
+        title: img.title || `Page ${i + 1}`,
+      });
+    });
+
+    // 4. 부족한 페이지 → 빈 슬롯(text-only)으로 자동 패딩
+    const currentContentCount = contentImages.length;
+    const neededPadding = adjustedTarget - currentContentCount;
+    for (let i = 0; i < neededPadding; i++) {
+      newGallery.push({
+        ...makeBlankItem(),
+        id: `auto-blank-${i}-${ts}`,
+      });
+    }
+
+    setGallery(newGallery);
+    setSelectedIdx(null);
+    setShowAutoCompose(false);
+    toast.success(`자동 구성 완료: 표지 2장 + 내지 ${Math.max(adjustedTarget, currentContentCount)}장`);
   };
 
   // 스프레드 쌍 삭제 — 내지 아이템의 파트너까지 함께 제거해 항상 짝수 유지
@@ -1337,8 +1403,19 @@ export default function EditorPage() {
       if (frontFile) {
         const url = await uploadFile(frontFile, '앞표지');
         if (url) coverFrontUrl = url;
-      } else if (frontItem.previewUrl?.startsWith('http')) {
-        coverFrontUrl = frontItem.previewUrl;
+      } else if (frontItem.previewUrl?.startsWith('http') || frontItem.previewUrl?.startsWith('/')) {
+        // 로컬 경로(/images/...)는 같은 origin에서 fetch → File로 변환 → 업로드
+        if (frontItem.previewUrl.startsWith('/')) {
+          try {
+            const resp = await fetch(frontItem.previewUrl);
+            const blob = await resp.blob();
+            const file = new File([blob], 'front-cover.png', { type: blob.type });
+            const url = await uploadFile(file, '앞표지(로컬)');
+            if (url) coverFrontUrl = url;
+          } catch (e) { console.warn('앞표지 로컬 업로드 실패:', e); }
+        } else {
+          coverFrontUrl = frontItem.previewUrl;
+        }
       }
       addLog(`📗 앞표지 URL: ${coverFrontUrl.slice(0, 70)}`);
 
@@ -1347,8 +1424,18 @@ export default function EditorPage() {
       if (backFile) {
         const url = await uploadFile(backFile, '뒤표지');
         if (url) coverBackUrl = url;
-      } else if (backItem.previewUrl?.startsWith('http')) {
-        coverBackUrl = backItem.previewUrl;
+      } else if (backItem.previewUrl?.startsWith('http') || backItem.previewUrl?.startsWith('/')) {
+        if (backItem.previewUrl.startsWith('/')) {
+          try {
+            const resp = await fetch(backItem.previewUrl);
+            const blob = await resp.blob();
+            const file = new File([blob], 'back-cover.png', { type: blob.type });
+            const url = await uploadFile(file, '뒤표지(로컬)');
+            if (url) coverBackUrl = url;
+          } catch (e) { console.warn('뒤표지 로컬 업로드 실패:', e); }
+        } else {
+          coverBackUrl = backItem.previewUrl;
+        }
       }
       addLog(`📘 뒤표지 URL: ${coverBackUrl.slice(0, 70)}`);
 
@@ -1373,10 +1460,31 @@ export default function EditorPage() {
               const f = img.file || img;
               const url = await uploadFile(f, `내지 ${ci + 1} 갤러리`);
               if (url) urls.push(url);
-            } else if (typeof img === 'string' && img.startsWith('http')) {
-              urls.push(img);
-            } else if (img.previewUrl?.startsWith('http')) {
-              urls.push(img.previewUrl);
+            } else if (typeof img === 'string' && (img.startsWith('http') || img.startsWith('/'))) {
+              // 로컬 경로는 fetch → File → 업로드
+              if (img.startsWith('/')) {
+                try {
+                  const resp = await fetch(img);
+                  const blob = await resp.blob();
+                  const f = new File([blob], `gallery-${ci}-${urls.length}.png`, { type: blob.type });
+                  const url = await uploadFile(f, `내지 ${ci + 1} 갤러리(로컬)`);
+                  if (url) urls.push(url);
+                } catch (e) { console.warn('갤러리 로컬 업로드 실패:', e); }
+              } else {
+                urls.push(img);
+              }
+            } else if (img.previewUrl && (img.previewUrl.startsWith('http') || img.previewUrl.startsWith('/'))) {
+              if (img.previewUrl.startsWith('/')) {
+                try {
+                  const resp = await fetch(img.previewUrl);
+                  const blob = await resp.blob();
+                  const f = new File([blob], `gallery-${ci}-${urls.length}.png`, { type: blob.type });
+                  const url = await uploadFile(f, `내지 ${ci + 1} 갤러리(로컬)`);
+                  if (url) urls.push(url);
+                } catch (e) { console.warn('갤러리 로컬 업로드 실패:', e); }
+              } else {
+                urls.push(img.previewUrl);
+              }
             }
           }
           if (urls.length > 0) {
@@ -1394,9 +1502,23 @@ export default function EditorPage() {
             preUploadedImagesMap[ci] = `https://picsum.photos/seed/${svcKey}-c${ci}/600/600`;
           }
         }
-        // ── Case 3: 파일 없음 — previewUrl(http)이 있으면 그대로 사용 ──
-        else if (item.previewUrl?.startsWith('http')) {
-          preUploadedImagesMap[ci] = item.previewUrl;
+        // ── Case 3: 파일 없음 — previewUrl(http 또는 로컬 경로)이 있으면 사용 ──
+        else if (item.previewUrl?.startsWith('http') || item.previewUrl?.startsWith('/')) {
+          if (item.previewUrl.startsWith('/')) {
+            // 로컬 경로: fetch → File → 업로드
+            try {
+              const resp = await fetch(item.previewUrl);
+              const blob = await resp.blob();
+              const file = new File([blob], `content-${ci}.png`, { type: blob.type });
+              const serverRef = await uploadFile(file, `내지 ${ci + 1}(로컬)`);
+              preUploadedImagesMap[ci] = serverRef || `https://picsum.photos/seed/${svcKey}-c${ci}/600/600`;
+            } catch (e) {
+              console.warn(`내지 ${ci + 1} 로컬 업로드 실패:`, e);
+              preUploadedImagesMap[ci] = `https://picsum.photos/seed/${svcKey}-c${ci}/600/600`;
+            }
+          } else {
+            preUploadedImagesMap[ci] = item.previewUrl;
+          }
         }
         // ── Case 4: 빈 슬롯이 아닌데 파일도 URL도 없음 → fallback ──
         else if (!item.isBlankSlot) {
@@ -2151,6 +2273,51 @@ export default function EditorPage() {
                 <p className="text-sm font-medium text-ink-600">사진을 드래그하거나 클릭하여 업로드</p>
                 <p className="text-xs text-ink-400 mt-1">여러 장 동시 선택 가능 · 가로형 이미지 자동 감지 (↔)</p>
               </div>
+
+              {/* AI 자동 구성 버튼 */}
+              {gallery.filter(g => g.previewUrl && !g.isBlankSlot).length > 0 && (
+                <div className="mb-4">
+                  {!showAutoCompose ? (
+                    <button
+                      onClick={() => setShowAutoCompose(true)}
+                      className="w-full py-3 bg-neutral-900 text-white text-sm font-mono font-medium tracking-wider hover:bg-neutral-800 transition-colors flex items-center justify-center gap-2"
+                    >
+                      <span>AUTO COMPOSE</span>
+                      <span className="text-neutral-400 text-xs">({gallery.filter(g => g.previewUrl && !g.isBlankSlot).length}장)</span>
+                    </button>
+                  ) : (
+                    <div className="border border-neutral-200 p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-mono font-medium text-neutral-900">AUTO COMPOSE</p>
+                        <button onClick={() => setShowAutoCompose(false)} className="text-neutral-400 hover:text-neutral-600 text-lg leading-none">&times;</button>
+                      </div>
+                      <p className="text-xs text-neutral-500">
+                        업로드된 {gallery.filter(g => g.previewUrl && !g.isBlankSlot).length}장의 사진을 자동으로 배치합니다.
+                        첫 장 → 앞표지, 마지막 → 뒤표지, 나머지 → 내지 순서. 부족분은 빈 페이지로 자동 패딩.
+                      </p>
+                      <div className="flex items-center gap-3">
+                        <label className="text-xs text-neutral-600 font-mono whitespace-nowrap">페이지 수</label>
+                        <input
+                          type="number"
+                          min={24}
+                          max={130}
+                          step={2}
+                          value={autoComposePages}
+                          onChange={(e) => setAutoComposePages(Number(e.target.value))}
+                          className="input-field w-24 text-center text-sm"
+                        />
+                        <span className="text-xs text-neutral-400">(24~130, 2 단위)</span>
+                      </div>
+                      <button
+                        onClick={handleAutoCompose}
+                        className="w-full py-2.5 bg-neutral-900 text-white text-sm font-mono font-medium tracking-wider hover:bg-neutral-800 transition-colors"
+                      >
+                        COMPOSE ({autoComposePages}p)
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* 갤러리 그리드 */}
               {gallery.length > 0 ? (

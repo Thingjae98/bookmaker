@@ -84,6 +84,8 @@ bookmaker/
 - `categoryToTplMap()` — 카테고리 그룹 → 템플릿 UID 매핑
 - `DECORATIVE_FILE_KEYS` — 장식용 파일 바인딩(`lineVertical`, `pencilIcon` 등) 분리
 - `breakBefore` 안전 기본값: `'page'` — 1 content = 1 물리적 페이지 보장
+- **Auto Compose**: 갤러리 이미지를 자동으로 표지/내지 배치 (24~130p, 빈 슬롯 자동 패딩)
+- **로컬 이미지 지원**: `public/images/portfolio/` 경로 → 프리뷰 표시 + API 업로드 시 fetch→File 변환
 
 ### 판형 (BookSpec)
 - `SQUAREBOOK_HC` — 243×248mm, 하드커버, PUR 무선철, 24~130p (**기본**)
@@ -134,8 +136,9 @@ bookmaker/
 - [ ] Skeleton UI 로딩 (현재 spinner → 콘텐츠 형태 스켈레톤)
 
 ### P2 — 면접 후 개선
-- [ ] AI 자동 페이지 구성 (이미지 업로드 → 자동 배치)
-- [ ] 임시저장 & 이어서 편집 (Orders 페이지 연동)
+- [x] Auto Compose — 이미지 기반 자동 페이지 구성 (규칙 기반 배치, 24~130p 지원)
+- [ ] AI 텍스트 생성 — 에디터 내 페이지별 회고/캡션 AI 자동 작성 (Vision API 활용)
+- [ ] 임시저장 & 이어서 편집 (localStorage/IndexedDB → Orders 페이지 연동)
 - [ ] Webhook 상태 동기화 로직
 - [ ] 사용자 인증 (NextAuth)
 - [ ] 다크 모드

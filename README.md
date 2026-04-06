@@ -29,6 +29,12 @@
 - `DECORATIVE_FILE_KEYS` Set (`lineVertical`, `pencilIcon`, `weatherIcon` 등) — 장식 파일에는 투명 placeholder 자동 주입
 - 전 카테고리(일기장A, 알림장A/B/C, 구글포토북A/B/C) API 100% 호환 달성
 
+### 5. Auto Compose — 이미지 기반 자동 페이지 구성
+- 갤러리에 이미지 업로드 후 **AUTO COMPOSE** 버튼 클릭 → 자동 페이지 배치
+- 첫 장 → 앞표지, 마지막 → 뒤표지, 나머지 → 내지 순서 자동 배정
+- 목표 페이지 수 설정 (24~130p, 2 단위) → 부족분 빈 슬롯 자동 패딩
+- 구성 후 자유롭게 수정 가능 — 역할 재지정, 순서 변경, 텍스트 추가
+
 ---
 
 ## 실행 방법
