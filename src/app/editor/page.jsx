@@ -57,11 +57,27 @@ const CATEGORY_LABELS = {
   '공용':        '공용',
 };
 
-// parameters.definitions에서 file/gallery binding 유무로 세부 역할 판별
+// ── 장식용 파일 바인딩 vs 사용자 사진 바인딩 구분 ──────────────────
+// 장식용 파일: lineVertical, pencilIcon, weatherIcon, parentBalloon 등 — 템플릿 내장 에셋
+// 사용자 사진: photo, photo1, photos, coverPhoto, collagePhotos 등 — 사용자가 업로드한 이미지
+const DECORATIVE_FILE_KEYS = new Set([
+  'lineVertical', 'pencilIcon', 'weatherIcon', 'parentBalloon',
+  'teacherBalloon', 'heartIcon', 'starIcon', 'lineHorizontal',
+  'borderImage', 'backgroundImage', 'watermark', 'logo',
+  'pointColor',  // 색상값이지만 file binding으로 정의된 경우 있음
+]);
+const isDecorativeFile = (key) => DECORATIVE_FILE_KEYS.has(key);
+
+// parameters.definitions에서 사용자 사진(file/gallery) binding 유무로 세부 역할 판별
+// 장식용 파일(lineVertical, pencilIcon 등)은 사진으로 간주하지 않음
 const hasFileBinding = (t) => {
   const defs = t.parameters?.definitions;
   if (!defs) return false;
-  return Object.values(defs).some((d) => d.binding === 'file' || d.binding === 'rowGallery' || d.binding === 'collageGallery');
+  return Object.entries(defs).some(([key, d]) =>
+    (d.binding === 'file' && !isDecorativeFile(key)) ||
+    d.binding === 'rowGallery' ||
+    d.binding === 'collageGallery'
+  );
 };
 
 // 카테고리 그룹 빌드: API 응답 → { [theme]: { covers[], withPhoto[], textOnly[], blank[], all[] } }
@@ -1607,11 +1623,18 @@ export default function EditorPage() {
           Object.entries(contentDefs).forEach(([key, def]) => {
             const binding = def?.binding || 'text';
             if (binding === 'file') {
-              // 단일 사진: 사전 업로드된 서버 참조(fileName/URL)만 사용
-              // ⚠️ blob: URL이 여기에 들어오면 API 실패 — 반드시 서버 참조값만 전달
-              const fileRef = hasImage ? page.imageUrl : null;
-              const isSafeRef = fileRef && !String(fileRef).startsWith('blob:');
-              params[key] = isSafeRef ? fileRef : `https://picsum.photos/seed/${session.serviceType || 'archive'}-p${i}/600/600`;
+              // ── 장식용 파일(lineVertical, pencilIcon 등)과 사용자 사진 구분 ──
+              if (isDecorativeFile(key)) {
+                // 장식용 파일: 빈 문자열은 API 400 유발 → 투명 placeholder 이미지 전송
+                // SweetBook 엔진이 렌더링 시 해당 요소를 거의 보이지 않게 처리함
+                params[key] = `https://picsum.photos/seed/deco-${key}/10/10`;
+              } else {
+                // 사용자 사진: 사전 업로드된 서버 참조(fileName/URL)만 사용
+                // ⚠️ blob: URL이 여기에 들어오면 API 실패 — 반드시 서버 참조값만 전달
+                const fileRef = hasImage ? page.imageUrl : null;
+                const isSafeRef = fileRef && !String(fileRef).startsWith('blob:');
+                params[key] = isSafeRef ? fileRef : `https://picsum.photos/seed/${session.serviceType || 'archive'}-p${i}/600/600`;
+              }
             } else if (binding === 'text') {
               // 1순위: 사용자가 동적 폼에서 직접 입력한 params[key]
               const userVal = page.params?.[key];
@@ -1620,22 +1643,47 @@ export default function EditorPage() {
               }
               // 2순위: 레거시 필드 폴백 + 자동 생성 로직
               else if (key === 'date' || key === 'dayLabel' || key === 'dateLabel') params[key] = page.date || new Date().toISOString().slice(0, 10);
+              else if (key === 'monthYearLabel') {
+                // 구글포토북A/B 전용 — "2026년 3월" 형식
+                const d = new Date(page.date || Date.now());
+                params[key] = `${d.getFullYear()}년 ${d.getMonth() + 1}월`;
+              }
               else if (key === 'title') params[key] = page.title || `Page ${i + 1}`;
-              else if (key === 'diaryText' || key === 'text' || key === 'content' || key === 'memo' || key === 'comment' || key === 'teacherComment' || key === 'description') params[key] = (page.text || '').trim() || ' ';
+              else if (key === 'diaryText' || key === 'text' || key === 'content' || key === 'memo' || key === 'comment' || key === 'teacherComment' || key === 'parentComment' || key === 'description') params[key] = (page.text || '').trim() || ' ';
               else if (key === 'monthNum' || key === 'month') params[key] = String(new Date(page.date || Date.now()).getMonth() + 1);
+              else if (key === 'monthNameCapitalized') {
+                const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+                params[key] = months[new Date(page.date || Date.now()).getMonth()];
+              }
+              else if (key === 'monthColor' || key === 'pointColor') params[key] = '#000000';
               else if (key === 'dayNum') params[key] = String(new Date(page.date || Date.now()).getDate());
+              else if (key === 'dayOfWeek') {
+                const days = ['일','월','화','수','목','금','토'];
+                params[key] = days[new Date(page.date || Date.now()).getDay()];
+              }
+              else if (key === 'dayOfWeekX') params[key] = '0';
               else if (key === 'year') params[key] = String(new Date(page.date || Date.now()).getFullYear());
               else if (key === 'bookTitle' || key === 'spineTitle') params[key] = title;
               else if (key === 'author' || key === 'authorName') params[key] = name || ' ';
               else if (key === 'subTitle' || key === 'subtitle') params[key] = fd.bookDescription || service.subtitle || ' ';
+              // 알림장 전용 필드 — 기본값 자동 채움
+              else if (key === 'weather') params[key] = '☀️';
+              else if (key === 'meal') params[key] = ' ';
+              else if (key === 'nap') params[key] = ' ';
+              else if (key === 'weatherLabelX' || key === 'weatherValueX' || key === 'mealLabelX' || key === 'mealValueX' || key === 'napLabelX' || key === 'napValueX') params[key] = '0';
+              // visible 토글 필드 — 기본값 false (숨김)
+              else if (key === 'hasParentComment' || key === 'hasTeacherComment' || key === 'hasDayLabel') params[key] = 'false';
               else params[key] = ' '; // required text 필드 빈값 방지 — 절대 undefined 전송 금지
             } else if (binding === 'rowGallery' || binding === 'collageGallery') {
               // 갤러리 바인딩: preUploadedImagesMap에서 전달된 서버 참조 배열만 사용
               // ⚠️ blob: URL 절대 전송 금지 — 모든 값은 서버 fileName 또는 http URL이어야 함
               let images;
               if (page.images && page.images.length > 0) {
-                // 사전 업로드 완료된 서버 참조 배열 — blob: 필터링
-                images = page.images.filter(u => typeof u === 'string' && !u.startsWith('blob:'));
+                // 사전 업로드 완료된 서버 참조 배열
+                // images 원소가 string이면 직접 사용, 객체({previewUrl})이면 URL 추출
+                images = page.images
+                  .map(u => typeof u === 'string' ? u : u?.previewUrl || u?.url || null)
+                  .filter(u => u && typeof u === 'string' && !u.startsWith('blob:'));
               }
               if (!images || images.length === 0) {
                 // 폴백: 단일 사진 서버 참조를 배열로 감싸기
@@ -1652,28 +1700,30 @@ export default function EditorPage() {
             }
           });
         } else {
-          // definitions 없는 레거시 폴백 (blank 템플릿 포함)
-          // ⚠️ 빈 파라미터({}) 전송 시 API 400 방어 — 항상 최소 필드 보장
-          params.date      = page.date  || new Date().toISOString().slice(0, 10);
-          params.title     = page.title || `Page ${i + 1}`;
-          params.diaryText = (page.text || '').trim() || ' ';
-          // photo 바인딩: blob: URL 차단, fileName/http URL만 허용
-          if (hasImage) {
-            const safeRef = !String(page.imageUrl).startsWith('blob:') ? page.imageUrl : null;
-            if (safeRef) params.photo1 = safeRef;
+          // definitions 없는 템플릿 = 진정한 blank (파라미터 기대하지 않음)
+          // ⚠️ 알 수 없는 파라미터를 보내면 API 400 가능 → 빈 객체 전송
+          // 단, 온디맨드 보강이 실패한 경우를 위한 최소 안전망
+          if (page.isBlankSlot) {
+            // 진정한 빈 슬롯 — 파라미터 없이 전송
+            console.log(`[빈 슬롯] 페이지 ${i + 1} tpl=${tplUid} — 파라미터 없이 전송`);
+          } else {
+            // definitions 보강 실패했지만 사용자 데이터가 있는 경우 — 레거시 폴백
+            params.date      = page.date  || new Date().toISOString().slice(0, 10);
+            params.title     = page.title || `Page ${i + 1}`;
+            params.diaryText = (page.text || '').trim() || ' ';
+            if (hasImage) {
+              const safeRef = !String(page.imageUrl).startsWith('blob:') ? page.imageUrl : null;
+              if (safeRef) params.photo1 = safeRef;
+            }
+            console.log(`[레거시 폴백] 페이지 ${i + 1} tpl=${tplUid} params:`, params);
           }
-          // blank 템플릿은 빈 파라미터가 와도 최소 text 필드로 400 방어
-          if (Object.keys(params).filter(k => params[k] && String(params[k]).trim()).length === 0) {
-            params.diaryText = ' ';
-          }
-          console.log(`[레거시 폴백] 페이지 ${i + 1} tpl=${tplUid} params:`, params);
         }
 
-        // breakBefore 동적 제어: 템플릿 정의에 명시된 값 우선, 없으면 'none' (API 기본 플로우)
-        // content 템플릿은 flow layout('none')이 기본, divider/publish는 항상 'page'
+        // breakBefore 동적 제어: 템플릿 메타데이터 → templateKind 기반 폴백
+        // ★ rowGallery/dynamic 템플릿은 'none' 사용 시 페이지 카운트가 예측 불가능해져 finalize 400 유발
+        // ★ 안전 기본값: 'page' — 각 content가 독립 페이지로 배치되어 pageCount = 내지 수와 일치
         const meta = tplMap.tplMeta?.[tplUid] || {};
-        const resolvedBreakBefore = meta.breakBefore
-          || (meta.templateKind === 'divider' || meta.templateKind === 'publish' ? 'page' : 'none');
+        const resolvedBreakBefore = meta.breakBefore || 'page';
 
         // 전송 전 진단 로그 (첫 페이지 + 매 5번째 + 마지막)
         if (i === 0 || i % 5 === 0 || i === paddedPages.length - 1) {
