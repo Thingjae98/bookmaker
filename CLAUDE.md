@@ -87,7 +87,9 @@ bookmaker/
     │       │   └── [orderUid]/route.js  # GET 상세, DELETE 취소
     │       ├── templates/route.js       # GET 목록
     │       ├── book-specs/route.js      # GET 판형 목록
-    │       └── credits/route.js         # GET 잔액
+    │       ├── credits/route.js         # GET 잔액
+    │       └── webhooks/
+    │           └── sweetbook/route.js   # POST Webhook 수신
     ├── components/
     │   ├── Header.jsx           # 공통 헤더 + 모바일 메뉴
     │   ├── ServiceCard.jsx      # 서비스 선택 카드
@@ -426,12 +428,12 @@ try {
 ### P2 — 시간 여유 시 / 면접 후 개선
 
 #### Orders API 보완
-- [ ] 주문 취소 상태 범위 확장 — 현재 PAID(20)만 → PDF_READY 상태 추가, ORDER_STATUS 상수에 PDF_READY 코드 등록
-- [ ] 배송지 변경 기능 — `PATCH /v1/orders/{orderUid}/shipping` 라우트 신규 생성 (`src/app/api/orders/[orderUid]/shipping/route.js`), SDK `updateShipping()` 함수 추가, 주문 상세 UI에 "배송지 수정" 버튼 (CONFIRMED 이전 상태에서만 활성화)
+- [x] 주문 취소 상태 범위 확장 — PAID(20) + PDF_READY(25) 상태에서 취소 허용, ORDER_STATUS 상수에 전체 11개 상태 코드(20~90) 등록
+- [x] 배송지 변경 기능 — `PATCH /api/orders/[orderUid]/shipping` 라우트 + `updateShipping()` SDK 함수 + 주문 상세 배송지 변경 모달 UI (PAID·PDF_READY·CONFIRMED 상태에서만 활성화)
 - [ ] `externalUserId` 전달 — NextAuth 도입 후 사용자별 주문 필터링에 활용 예정
 
 #### Webhook 연동 (주문 상태 실시간 동기화)
-- [ ] Webhook 수신 라우트 — `src/app/api/webhooks/sweetbook/route.js` POST 핸들러 생성, SweetBook 서명 검증(`X-Webhook-Signature` 헤더), `externalRef`로 내부 주문 매칭
+- [x] Webhook 수신 라우트 — `POST /api/webhooks/sweetbook` Skeleton 개통 (payload 파싱 + console.log + 200 OK), 서명 검증(`X-Webhook-Signature`) 주석 준비 완료
 - [ ] 상태 동기화 로직 — 수신 이벤트의 `orderStatus` 변경을 캐시/세션에 반영 (DB 없으므로 인메모리 또는 폴링 대체 가능), 주문 내역 UI 자동 갱신
 - [ ] SweetBook 대시보드에서 Webhook URL 등록 (배포 URL 확보 후)
 

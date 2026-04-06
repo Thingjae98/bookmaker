@@ -153,15 +153,17 @@ export const BOOK_SPEC_LABELS = {
   PHOTOBOOK_A5_SC: 'A5 소프트커버 포토북 (148×210mm)',
 };
 
-// 주문 상태 매핑
+// 주문 상태 매핑 — SweetBook API 전체 상태 코드
 export const ORDER_STATUS = {
   20: { key: 'PAID', label: '결제완료', color: 'blue' },
   25: { key: 'PDF_READY', label: 'PDF 준비완료', color: 'cyan' },
   30: { key: 'CONFIRMED', label: '제작확정', color: 'indigo' },
-  40: { key: 'IN_PRODUCTION', label: '제작중', color: 'yellow' },
-  50: { key: 'PRODUCTION_COMPLETE', label: '제작완료', color: 'green' },
+  40: { key: 'IN_PRODUCTION', label: '제작 진행 중', color: 'yellow' },
+  45: { key: 'COMPLETED', label: '항목 제작 완료', color: 'lime' },
+  50: { key: 'PRODUCTION_COMPLETE', label: '전체 제작 완료', color: 'green' },
   60: { key: 'SHIPPED', label: '발송완료', color: 'teal' },
   70: { key: 'DELIVERED', label: '배송완료', color: 'emerald' },
   80: { key: 'CANCELLED', label: '취소', color: 'red' },
-  81: { key: 'CANCELLED_REFUND', label: '취소(환불)', color: 'red' },
+  81: { key: 'CANCELLED_REFUND', label: '환불 완료', color: 'red' },
+  90: { key: 'ERROR', label: '오류', color: 'rose' },
 };

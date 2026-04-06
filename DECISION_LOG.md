@@ -5,6 +5,26 @@
 
 ---
 
+## 📋 2026-04-06 — 주문 상태 전이 처리 정책 확립 및 Webhook 수신 라우트 개통
+
+### 배경
+주문 라이프사이클 분석 결과, CONFIRMED(30)부터 DELIVERED(70)까지의 상태 전이는 파트너가 아닌 스위트북(제조사) 측에서 발생함. 이를 실시간으로 동기화하기 위해 전체 상태 코드를 UI에 반영하고, Webhook 수신 백엔드 라우트를 개통.
+
+### 변경 내역
+
+#### 전체 주문 상태 코드 UI 매핑
+- `constants.js`에 API 스펙의 **전체 11개 상태 코드** 등록: 20(PAID) → 25(PDF_READY) → 30(CONFIRMED) → 40(IN_PRODUCTION) → **45(COMPLETED, 항목 제작 완료)** → 50(PRODUCTION_COMPLETE) → 60(SHIPPED) → 70(DELIVERED) → 80(CANCELLED) → 81(CANCELLED_REFUND) → **90(ERROR)**
+- 기존 누락: 45(항목 단위 제작 완료), 90(오류) — 상태 코드가 알 수 없는 값으로 들어올 때 gray fallback 배지 유지
+- `orders/page.jsx` colorMap에 `lime`(45), `rose`(90) 추가
+
+#### Webhook 수신 라우트 개통
+- **라우트**: `POST /api/webhooks/sweetbook` (`src/app/api/webhooks/sweetbook/route.js`)
+- **현재 단계**: Skeleton — payload 파싱(`orderUid`, `externalRef`, `status`, `previousStatus`, `updatedAt`, `eventType`) + `console.log` 기록 + 200 OK 응답
+- **설계 결정**: 파싱 실패 시에도 200 반환 — 스위트북 서버의 무한 재시도 방지. 서명 검증(`X-Webhook-Signature`)은 주석으로 준비, `SWEETBOOK_WEBHOOK_SECRET` 환경변수 확보 후 활성화 예정
+- **다음 단계**: DB/캐시 연동으로 상태 실시간 동기화, 사용자 알림(이메일/푸시) 발송
+
+---
+
 ## 📋 2026-04-06 — CS 방어: 주문 취소 범위 확장 및 배송지 변경 기능 풀스택 구현
 
 ### 배경
