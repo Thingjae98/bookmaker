@@ -1,54 +1,36 @@
-# 📚 북메이커 BookMaker
+# ARCHIVE — Premium Project Portfolio Book
 
-> Book Print API를 활용한 맞춤형 포토북 제작 플랫폼
+> 당신의 프로젝트와 1년의 성과를 한 권의 프리미엄 아카이브로 남기세요.
 
-**나만의 특별한 책을 손쉽게 만들어 보세요.**
-육아 일기, 여행 포토북, AI 동화책, 유치원 알림장, 감성 에세이, 반려동물 앨범까지 — 6가지 서비스 중 원하는 유형을 선택하고, 사진과 텍스트를 입력하면 Book Print API를 통해 실제 인쇄 가능한 포토북이 만들어집니다.
+**크리에이터/개발자를 위한 프로젝트 포트폴리오 북 제작 플랫폼.**
+SweetBook Book Print API를 활용하여 프로젝트 스크린샷, 아키텍처 다이어그램, 회고 텍스트를 실제 하드커버 북으로 만들어 드립니다.
 
 ---
 
 ## 1. 서비스 소개
 
 ### 한 문장 설명
-다양한 주제(육아, 여행, 동화, 졸업앨범 등)의 포토북을 간편한 스텝 UI로 구성하고, SweetBook Book Print API를 통해 책 생성부터 주문까지 한 번에 처리하는 웹 애플리케이션입니다.
+프로젝트 포트폴리오를 프리미엄 하드커버 북으로 아카이빙하는 웹 애플리케이션. SweetBook Book Print API로 책 생성부터 주문·배송까지 한 번에 처리합니다.
 
 ### 타겟 고객
-- 아이의 성장 기록을 책으로 남기고 싶은 **부모**
-- 한 학기 알림장을 졸업 앨범으로 만들고 싶은 **유치원 / 어린이집**
-- 여행 사진을 멋진 포토북으로 정리하고 싶은 **여행자**
-- 자신만의 에세이, 시집, 사진집을 출판하고 싶은 **1인 창작자**
-- 반려동물의 성장을 기록하고 싶은 **반려인**
+- 1년 성과를 물리적 아카이브로 남기고 싶은 **개발자**
+- 포트폴리오를 책으로 제작하고 싶은 **디자이너/PM**
+- 팀 프로젝트 회고를 기념품으로 제작하고 싶은 **스타트업 팀**
+- 기술 블로그 콘텐츠를 단행본으로 출간하고 싶은 **테크 크리에이터**
 
 ### 주요 기능
-- **6가지 서비스 유형 선택**: 육아일기 포토북, 유치원 알림장 책, AI 동화책, 여행 포토북, 감성 에세이, 반려동물 성장 앨범
-- **서비스별 맞춤 입력 폼**: 각 서비스 유형에 최적화된 정보 입력 필드
-- **모달 없는 쾌적한 인라인 편집 패널**: 갤러리 썸네일을 클릭하면 화면을 덮는 모달 대신, 하단 액션 패널이 부드럽게 전환되며 2열 레이아웃의 편집 패널이 나타납니다. 갤러리 전체 구성을 유지한 채 개별 사진 역할·텍스트·템플릿·양면 분할을 설정할 수 있습니다. 편집 완료 후 "확인·닫기"를 누르면 최종 생성 버튼 영역으로 즉시 복귀합니다.
-- **직관적인 갤러리 에디터**: 에디터 우측 상단에 전진 배치된 갤러리 섹션에서 사진을 한 번에 업로드 → 썸네일 그리드로 확인 → 드래그로 순서 변경 → 썸네일 클릭 한 번으로 앞표지·뒤표지·내지 역할 직접 지정 (중복 방지 Validation 포함)
-- **직관적인 앞/뒤표지 통합 슬롯 UI**: SweetBook 표지 템플릿이 `[뒤표지(좌) | 앞표지(우)]` 한 장짜리 Spread로 인쇄된다는 물리 구조를 그대로 UI에 반영 — 에디터 좌측 패널과 인라인 편집 패널 모두에서 2-슬롯 Spread 프레임으로 표시. 갤러리에서 앞/뒤 사진을 지정하면 해당 슬롯이 즉시 채워지고, 비어있는 슬롯은 점선으로 명확히 표시됩니다
-- **갤러리-표지 실시간 연동**: 갤러리에서 앞표지/뒤표지로 지정한 사진이 좌측 패널 표지 썸네일에 즉시 반영 — 별도 업로드 없이 갤러리 상태 하나로 일관성 유지
-- **Canvas API 기반 양면(Spread) 사진 분할**: 갤러리 모달에서 "양면 펼침" 체크 → `splitImageHalves()`가 Canvas API로 가로형 사진을 좌/우 정밀 분할 → 연속된 2페이지로 전송 (JPEG quality=1.0 최고 화질, 원본 해상도 유지)
-- **템플릿 동적 분기**: 책 생성 시 선택된 판형(bookSpecUid)에 호환되는 템플릿을 API에서 실시간 조회 후 적용 → 판형별 400 에러 방지. 조회 실패 시 하드코딩 폴백 자동 사용
-- **실제 템플릿 썸네일 표시**: SweetBook API의 `thumbnails.layout` → `thumbnails.baseLayerOdd` → `thumbnails.baseLayerEven` 우선순위로 실제 썸네일 이미지를 렌더링. 이미지 로드 실패 시 `onError`로 Tailwind CSS 미니 와이어프레임(6종)을 자동 대체 표시
-- **텍스트 입력 유무에 따른 템플릿 동적 추천**: 갤러리 모달에서 페이지 텍스트를 입력하면 텍스트 구역을 가진 레이아웃(사진+텍스트형, 텍스트 전용형, 달력형)만 실시간 필터링해 표시하고, 텍스트가 없으면 이미지 전용 레이아웃만 표시 → 불필요한 선택지 제거로 인지 부하 최소화
-- **템플릿 바인딩 속성에 따른 동적 사진 업로드 UI**: 선택된 템플릿의 `binding` 타입을 실시간 감지하여 단일 사진(`file`)이면 1장 교체 UI, 다중 사진(`rowGallery`/`collageGallery`)이면 누적형(Append) 트레이 UI로 자동 전환. 썸네일 격자에서 개별 삭제 가능, `collageGallery`는 최대 9장 제한
-- **AI 동화책 생성**: 입력 폼에서 주인공 이름·나이·주제 입력 후 Gemini AI가 10페이지 동화 자동 생성 → 에디터에서 자유롭게 수정 가능 (AI 동화책 서비스 전용)
-- **토스트 알림**: 모든 작업 성공/실패 시 우하단 토스트 표시 (3.5초 자동 소멸, 이벤트 버스 기반)
-- **에러 재시도**: API 5xx 오류 시 최대 3회 자동 재시도 (지수 백오프)
-- **판형 선택**: 정방형 하드커버(243×248mm), A4 소프트커버, A5 소프트커버 등 API 실시간 조회 후 선택 (서비스별 추천 판형 자동 표시)
-- **API 규격 자동 검증 시스템**: 선택한 판형의 `pageMin`(최소 페이지 수)과 `pageIncrement`(증분 단위)를 실시간으로 체크 — 조건 미충족 시 [책 생성] 버튼 비활성화 + 빨간 안내 문구 표시("최소 24페이지가 필요합니다" / "2페이지 단위로 추가해 주세요") → 400 에러 원천 차단
-- **표지 Spread 통합**: 앞표지와 뒤표지를 단일 `POST /books/{uid}/cover` API 호출로 통합 전송 (`coverPhoto` + `backPhoto`). 인쇄 물리 규격(양면 Spread 1장)과 정확히 대응하는 데이터 구조 유지
-- **2페이지 Spread 단위 내지 편집**: 내지를 항상 [L|R] 2페이지 쌍으로 관리 — "+2페이지(1장) 추가" 버튼으로 빈 슬롯 쌍 추가, "스프레드 삭제 (2p)" 버튼으로 쌍 단위 제거, "↔ L/R 교체"로 좌우 배치 즉시 변경, 인라인 편집 패널 최상단 미니 스프레드 미리보기로 현재 슬롯 위치 직관적 파악 (홀수 페이지 상태 원천 차단)
-- **빈 슬롯 직접 편집**: 스프레드 뷰에서 빈 슬롯(📄)을 클릭하면 인라인 편집 패널이 열립니다. 패널 내 업로드 플레이스홀더를 클릭해 사진을 직접 등록하거나, 텍스트/제목만 입력해 텍스트 전용 페이지로도 저장 가능합니다
-- **API 데이터 기반 템플릿 자동 추천**: 내지 생성 시 `GET /templates` API에서 현재 판형의 실제 템플릿 목록을 조회하고, 페이지 데이터 조합(이미지+텍스트, 이미지만, 텍스트만, 양면 분할)에 따라 최적 템플릿을 동적으로 매핑합니다. API 조회 실패 시 검증된 폴백 상수가 자동 적용됩니다
-- **책 넘김(Spread Paging) 미리보기**: 실제 책을 펼쳐놓은 듯한 3D 스프레드 뷰로 미리보기를 제공합니다. [< 이전] / [다음 >] 버튼과 키보드 화살표로 2페이지씩 넘기며, 하단 도트 인디케이터로 전체 구성을 한눈에 파악합니다. CSS 책등(Spine) 그림자 효과로 입체감을 살리고, 상위 4스프레드 이후는 블러 잠금으로 구매 전환을 유도합니다
-- **사진 업로드 및 최종화 100% 안정화**: 절대 페이지 인덱스 기준 데이터 매핑, 업로드 실패 시 picsum 자동 폴백으로 내지 400 에러 및 최종화 실패를 완전히 해결
-- **고품질 더미 데이터**: 6개 서비스 각 24페이지, 12페이지 감성 장문 텍스트 + 12페이지 Full-bleed 사진 구성. 감성 에세이는 text_only ↔ photo_only 교차 배치로 모든 템플릿 유형(텍스트+사진·텍스트 전용·사진 전용) 자동 시연. 여행 서비스에는 파노라마 이미지 2장 포함
-- **API 호출 로그**: 책 생성 → 표지/내지 사진 업로드 → 표지(앞+뒤 통합) → 내지 → 최종화 과정을 실시간 로그로 확인
-- **테마 기반 디자인 시스템**: 서비스별 추천 테마 자동 적용 + 좌측 사이드바 카테고리 스위처로 전체 디자인을 한 번에 변경 (테마 단위로 표지·내지 일괄 적용하여 디자인 일관성 보장)
-- **페이지별 세부 레이아웃 선택**: 선택된 카테고리 내 content 템플릿을 썸네일 카드 그리드로 표시 — 페이지 단위로 사진+글 / 텍스트 전용 / 빈 내지 등 세부 레이아웃을 자유롭게 커스텀 가능
-- **사진 클릭 시 편집 패널 자동 스크롤**: 좌측 사이드바나 갤러리에서 사진을 클릭하면 인라인 편집 패널이 뷰포트로 부드럽게 자동 이동 — 스크롤 없이 즉시 편집 시작
-- **가격 견적 조회**: 주문 전 예상 금액 확인 (상품금액 + 배송비 + 포장비)
-- **주문 생성 & 관리**: 배송지 입력 → 주문 → 주문 내역 조회 → 주문 취소
+- **단일 포트폴리오 서비스**: Black & White 미니멀 매거진 스타일의 Configure → Compose → Preview → Order 4단계 플로우
+- **인라인 편집 패널**: 갤러리 썸네일 클릭 → 하단 패널에서 역할·텍스트·레이아웃 설정 (모달 없음)
+- **Drag & Drop 갤러리**: 스크린샷, 다이어그램, 팀 사진을 드래그앤드롭으로 업로드 → 역할 지정(표지/내지)
+- **표지 Spread 통합**: 앞/뒤표지를 단일 API 호출로 통합 전송, 2-슬롯 UI로 직관적 관리
+- **2페이지 Spread 단위 내지 편집**: [L|R] 쌍 단위 관리로 홀수 페이지 원천 차단
+- **Canvas API 양면 분할**: 파노라마 스크린샷을 좌/우 정밀 분할 → 연속 2페이지로 전송
+- **동적 템플릿 시스템**: API 기반 카테고리 그룹핑 + definitions 바인딩 자동 감지
+- **책 넘김(Flip) 미리보기**: CSS Spread 뷰 + 블러 티저(상위 4스프레드 공개)
+- **주문 관리**: 견적 조회 → 주문 생성 → 상태 추적(11단계) → 취소 → 배송지 변경
+- **Webhook 수신**: 주문 상태 변경 실시간 로깅
+- **토스트 알림 & 에러 재시도**: 5xx 3회 자동 재시도 + 지수 백오프
+- **더미 데이터**: 개발자 포트폴리오 시나리오 24페이지 즉시 체험
 
 ---
 
@@ -74,7 +56,6 @@ cp .env.example .env
 # .env 파일을 열고 API Key를 입력하세요:
 #   SWEETBOOK_API_KEY=your_sandbox_api_key_here
 #   SWEETBOOK_API_BASE_URL=https://api-sandbox.sweetbook.com/v1
-#   GEMINI_API_KEY=your_gemini_api_key_here  ← AI 동화 생성 기능에 필요 (https://aistudio.google.com 무료 발급)
 
 # 4. 개발 서버 실행
 npm run dev
@@ -83,16 +64,15 @@ npm run dev
 브라우저에서 `http://localhost:3000` 접속하면 서비스를 확인할 수 있습니다.
 
 ### 빠른 테스트 순서
-1. 메인 페이지에서 원하는 서비스 선택 (예: 여행 포토북)
-2. **"더미 데이터 채우기"** 버튼 클릭 → 샘플 데이터 자동 입력
-3. 에디터 우측 상단 갤러리 **Drag & Drop 존**에 사진을 한 번에 드롭 (또는 클릭하여 다중 선택)
-4. 갤러리 썸네일 클릭 → 인라인 편집 패널에서 **앞표지 / 뒤표지 / 내지** 역할 지정 (가로형 사진은 "양면 펼침" 체크 시 Canvas API로 2페이지 자동 분할)
-5. 지정된 표지 이미지가 좌측 패널 썸네일에 실시간 반영되는지 확인
-6. 에디터 하단 **"📗 책 생성 & 최종화"** 클릭
-7. API 로그에서 앞표지→내지→뒤표지→최종화 과정 확인
-8. **"다음: 미리보기 & 주문"** → 가격 확인
-9. **"다음: 주문하기"** → 더미 배송지 채우기 → **"📦 주문하기"**
-10. 주문 완료! **"주문 내역 보기"**에서 확인
+1. 메인 페이지에서 **"Start Archiving"** 클릭
+2. **"Fill Demo Data"** 버튼 클릭 → 포트폴리오 샘플 데이터 자동 입력
+3. **"Next: Compose"** → 에디터 진입
+4. 갤러리 Drag & Drop 존에 스크린샷/다이어그램 업로드 (또는 더미 이미지 자동 사용)
+5. 갤러리 썸네일 클릭 → 인라인 편집 패널에서 표지/내지 역할 지정
+6. 에디터 하단 **"책 생성 & 최종화"** 클릭 → API 로그 확인
+7. **"다음: 미리보기 & 주문"** → 스프레드 뷰로 결과 확인
+8. **"다음: 주문하기"** → 더미 배송지 → **"주문하기"**
+9. **"주문 내역"**에서 주문 상태 확인
 
 ---
 
@@ -111,10 +91,13 @@ npm run dev
 | Orders | `POST` | `/v1/orders/estimate` | 주문 전 가격 견적 조회 |
 | Orders | `GET` | `/v1/orders` | 주문 목록 조회 |
 | Orders | `GET` | `/v1/orders/{orderUid}` | 주문 상세 조회 |
-| Orders | `POST` | `/v1/orders/{orderUid}/cancel` | 주문 취소 (PAID 상태일 때) |
+| Orders | `POST` | `/v1/orders/{orderUid}/cancel` | 주문 취소 |
+| Orders | `PATCH` | `/v1/orders/{orderUid}/shipping` | 배송지 변경 |
 | Templates | `GET` | `/v1/templates` | 템플릿 목록 조회 |
+| Templates | `GET` | `/v1/templates/{templateUid}` | 템플릿 상세 조회 |
 | BookSpecs | `GET` | `/v1/book-specs` | 판형 목록 조회 |
 | Credits | `GET` | `/v1/credits` | 충전금 잔액 조회 |
+| Webhooks | `POST` | `/api/webhooks/sweetbook` | 주문 상태 변경 이벤트 수신 |
 
 ---
 
@@ -123,40 +106,37 @@ npm run dev
 | AI 도구 | 활용 내용 |
 |---------|----------|
 | Claude (Anthropic) | 전체 프로젝트 아키텍처 설계, 프론트엔드/백엔드 코드 작성, API 연동 로직 구현 |
-| Claude (Anthropic) | API 문서 분석 및 워크플로우 설계 |
-| Claude (Anthropic) | 더미 데이터 생성 (6가지 서비스 유형별 24페이지 샘플) |
-| Claude (Anthropic) | README.md 작성 |
-| Gemini (Google) | AI 페이지 초안 생성 기능 — 에디터 내 서비스별 10페이지 콘텐츠 자동 생성 |
-| Gemini (Google) | 모델 404 에러 해결 — `gemini-1.5-flash` 계열이 v1beta API에서 미지원임을 ListModels API로 확인, `gemini-flash-lite-latest` → `gemini-2.5-flash` 순으로 대체 |
-| Gemini (Google) | 429 할당량 초과 에러 해결 — 모델 순차 폴백(gemini-flash-lite-latest → 2.5-flash → 2.5-pro) + 시도 간 1초 delay + 로컬 템플릿 폴백 구현 |
-| Gemini (Google) | 6개 서비스 타입별 한국어 프롬프트 작성 및 JSON 스키마 응답 파싱 |
+| Claude (Anthropic) | API 문서 분석 및 워크플로우 설계, 트러블슈팅 |
+| Claude (Anthropic) | 더미 데이터 생성 (포트폴리오 시나리오 24페이지 샘플) |
+| Claude (Anthropic) | ARCHIVE 피벗 — B&W 미니멀 매거진 스타일 UI/UX 전면 개편 |
+| Claude (Anthropic) | README.md, DECISION_LOG.md 작성 |
 
 ---
 
 ## 5. 설계 의도
 
-### 왜 이 서비스를 선택했는지
+### 왜 "ARCHIVE"를 선택했는지
 
-Book Print API의 핵심 가치는 **"콘텐츠를 책으로 만드는 것"**입니다. 하지만 최종 고객(일반 사용자)에게 API를 직접 노출하는 것은 현실적이지 않습니다. 그래서 **다양한 사용 시나리오를 하나의 플랫폼에 모아**, 각 시나리오에 맞는 UX를 제공하는 "올인원 북 메이커"를 설계했습니다.
+Book Print API의 핵심 가치는 **"디지털 콘텐츠를 물리적 책으로 만드는 것"**입니다. 개발자/크리에이터에게 1년간의 프로젝트 회고, 아키텍처 의사결정, 스크린샷을 **한 권의 프리미엄 하드커버 북**으로 아카이빙하는 경험을 제공합니다.
 
-6가지 서비스 유형은 실제 포토북 시장에서 수요가 큰 카테고리를 기반으로 선정했습니다:
-- **육아/반려동물**: 감정적 가치가 높아 재주문률이 높음
-- **여행/졸업앨범**: 이벤트 기반으로 시즌 수요가 명확함
-- **1인 출판/AI 동화**: 창작자 시장의 성장세와 AI 트렌드를 반영
+### 디자인 철학: Black & White Minimalism
+
+- **Magazine-style Typography**: JetBrains Mono + Noto Serif KR 조합으로 개발자 친화적 타이포그래피
+- **Monochrome Palette**: neutral-900 ~ neutral-50 그레이스케일 기반, 콘텐츠에 집중하는 UI
+- **Grid System**: 60px 그리드 패턴 배경, 정보 위계를 명확히 하는 레이아웃
+- **No Emoji, No Color Noise**: 프로페셔널한 톤앤매너 유지
 
 ### 비즈니스 가능성
-
-- **SaaS 모델**: 월정액으로 일정 권수 무료 → 초과분 과금
-- **B2B2C 파트너십**: 유치원, 어린이집, 여행사, 동물병원 등과 제휴하여 화이트라벨 서비스 제공
-- **AI 기능 확장**: AI 동화책을 시작으로, AI 자서전, AI 레시피북 등 자동 콘텐츠 생성 서비스로 확장
+- **B2B SaaS**: 기업 연간 프로젝트 보고서를 책으로 제작하는 팀 구독 모델
+- **개발자 커뮤니티 파트너십**: 컨퍼런스 발표자료 → 아카이브 북 변환
+- **프리미엄 포트폴리오**: 면접/이직 시 물리적 포트폴리오 북으로 차별화
 
 ### 더 시간이 있었다면 추가했을 기능
-
-- **실시간 페이지 미리보기**: 템플릿 레이아웃을 프론트엔드에서 시각적으로 렌더링
-- **AI 자동 구성**: 사진만 올리면 AI가 날짜/장소 분석하여 자동으로 포토북 구성
-- **웹훅 연동**: 주문 상태 변경 시 실시간 알림 (SSE/WebSocket)
-- **사용자 인증**: NextAuth 등으로 사용자별 책/주문 관리
-- **결제 연동**: Sandbox → Live 전환 시 실제 PG 결제 플로우
+- **GitHub API 연동**: 커밋 히스토리·PR 통계를 자동으로 페이지에 배치
+- **AI 회고 생성**: 프로젝트 README를 분석하여 자동 회고문 작성
+- **Skeleton UI**: 현재 spinner → 콘텐츠 형태의 스켈레톤 로딩
+- **사용자 인증**: NextAuth 기반 개인 아카이브 관리
+- **다크 모드**: 개발자 친화적 다크 테마
 
 ---
 
@@ -170,7 +150,7 @@ Book Print API의 핵심 가치는 **"콘텐츠를 책으로 만드는 것"**입
 | API 클라이언트 | bookprintapi-nodejs-sdk (공식 SDK) |
 | API 연동 | SweetBook Book Print API (Sandbox) |
 | 파일 업로드 | HTML5 File API + Drag & Drop + FormData |
-| AI 생성 | Google Gemini (@google/generative-ai) — gemini-flash-lite → 2.5-flash → 2.5-pro 순차 폴백 |
+| 폰트 | JetBrains Mono, Noto Serif KR, Noto Sans KR |
 
 ### 프로젝트 구조
 
@@ -178,39 +158,34 @@ Book Print API의 핵심 가치는 **"콘텐츠를 책으로 만드는 것"**입
 bookmaker/
 ├── src/
 │   ├── app/
-│   │   ├── page.jsx                          # 메인 — 서비스 선택
+│   │   ├── page.jsx                          # 메인 랜딩 페이지
 │   │   ├── layout.jsx                        # 루트 레이아웃
-│   │   ├── globals.css                       # 글로벌 스타일
-│   │   ├── create/[serviceType]/page.jsx     # 서비스별 정보 입력
+│   │   ├── globals.css                       # B&W 미니멀 스타일
+│   │   ├── create/[serviceType]/page.jsx     # 아카이브 정보 입력
 │   │   ├── editor/page.jsx                   # 콘텐츠 에디터
 │   │   ├── preview/page.jsx                  # 미리보기 & 가격 확인
 │   │   ├── order/page.jsx                    # 주문 (배송지 입력)
 │   │   ├── orders/page.jsx                   # 주문 내역
 │   │   └── api/                              # 백엔드 API 라우트
-│   │       ├── books/route.js                #   POST /api/books, GET /api/books
-│   │       ├── books/[bookUid]/cover/        #   POST 표지 추가
-│   │       ├── books/[bookUid]/contents/     #   POST 내지 추가
-│   │       ├── books/[bookUid]/finalize/     #   POST 최종화
-│   │       ├── books/[bookUid]/photos/       #   POST 사진업로드, GET 목록
-│   │       ├── orders/route.js               #   POST 주문생성, GET 목록
-│   │       ├── orders/estimate/              #   POST 가격견적
-│   │       ├── orders/[orderUid]/            #   GET 상세, DELETE 취소
-│   │       ├── templates/                    #   GET 템플릿 목록
-│   │       ├── book-specs/                   #   GET 판형 목록
-│   │       └── credits/                      #   GET 충전금 잔액
+│   │       ├── books/                        #   Books API 프록시
+│   │       ├── orders/                       #   Orders API 프록시
+│   │       ├── templates/                    #   Templates API 프록시
+│   │       ├── book-specs/                   #   BookSpecs API 프록시
+│   │       ├── credits/                      #   Credits API 프록시
+│   │       └── webhooks/sweetbook/           #   Webhook 수신
 │   ├── components/
-│   │   ├── Header.jsx                        # 공통 헤더/네비게이션
-│   │   ├── ServiceCard.jsx                   # 서비스 선택 카드
-│   │   ├── StepIndicator.jsx                 # 진행 단계 인디케이터
-│   │   └── Toast.jsx                         # 토스트 알림 컴포넌트
+│   │   ├── Header.jsx                        # B&W 헤더/네비게이션
+│   │   ├── StepIndicator.jsx                 # 4단계 진행 인디케이터
+│   │   ├── ServiceCard.jsx                   # 서비스 카드 (호환용)
+│   │   └── Toast.jsx                         # 토스트 알림
 │   ├── lib/
 │   │   ├── sweetbook.js                      # SweetBook API 클라이언트 (서버 전용)
 │   │   ├── constants.js                      # 서비스 타입, 판형, 상태 상수
-│   │   ├── toast.js                          # 토스트 이벤트 버스 (클라이언트)
-│   │   └── fetchWithRetry.js                 # fetch 재시도 래퍼 (5xx 3회)
+│   │   ├── toast.js                          # 토스트 이벤트 버스
+│   │   └── fetchWithRetry.js                 # fetch 재시도 래퍼
 │   └── data/
-│       └── dummy.js                          # 6가지 서비스별 더미 데이터
-├── .env.example                              # 환경변수 예시
+│       └── dummy.js                          # 포트폴리오 더미 데이터 (24페이지)
+├── .env.example
 ├── .gitignore
 ├── package.json
 ├── next.config.js
@@ -226,29 +201,24 @@ bookmaker/
 
 SweetBook API 공식 문서(10개 Concepts 페이지)를 전수 검토하여 구현 상태를 분류했습니다.
 
-### 완전 구현 (9개 영역)
+### 완전 구현
 - **Books API** — 생성, 사진 업로드, 표지, 내지, 최종화 전체 워크플로우
-- **Orders API** — 견적, 주문 생성, 목록/상세 조회, 취소 (externalRef UUID 기반 추적, Idempotency-Key 적용)
-- **Template Engine** — theme(카테고리) 기반 필터링, templateKind 분리, 파라미터 바인딩 자동 감지 (rowGallery/collageGallery 다중 사진 UI 포함)
-- **Base Layer** — 썸네일 odd/even 폴백 체인 적용
+- **Orders API** — 견적, 주문 생성, 목록/상세 조회, 취소, 배송지 변경 (Idempotency-Key 적용)
+- **Template Engine** — theme(카테고리) 기반 필터링, templateKind 분리, 파라미터 바인딩 자동 감지
 - **Cover Spread** — 앞+뒤표지 통합 API 호출
 - **Photo Upload** — multipart Drag & Drop, 갤러리 관리
 - **Retry / Backoff** — 5xx 3회 재시도, 지수 백오프
 - **페이지 규격 검증** — pageMin/pageIncrement 실시간 체크 + 자동 패딩
-
-### 부분 구현 / 개선 예정
-- **주문 취소 상태 범위** — 현재 PAID(20) 상태에서만 취소 가능. PDF_READY 상태 취소 지원 예정
-- **배송지 변경** (`PATCH /orders/{orderUid}/shipping`) — CONFIRMED 이전 단계에서 수정 가능한 API 라우트 + UI 개발 예정
-- **Webhook 기반 주문 상태 동기화** — SweetBook Webhook으로 주문 상태 변경 이벤트를 실시간 수신하는 `/api/webhooks/sweetbook` 라우트 개발 예정. `externalRef`로 내부 주문 매칭, 서명 검증(`X-Webhook-Signature`) 포함
+- **Special Page Rules** — PUR 제본 첫 내지 Right 배치, breakBefore 동적 제어
+- **Webhook 수신** — POST /api/webhooks/sweetbook 개통, payload 파싱 + 200 OK
 
 ### 의도적 미구현 (서버 측 자동 처리 또는 고급 UX)
-- Element Grouping (visible 토글, shiftUpOnHide)
+- Element Grouping (visible 토글)
 - Column Templates (2/3단 레이아웃)
 - Text Processing (서버 측 자동 처리)
 - Dynamic Layout 고급 기능 (splittable, isDynamic, lanes)
-- `externalUserId` — 사용자 인증(NextAuth) 도입 시 활용 예정
 
-> 상세 분석: `DECISION_LOG.md` "2026-04-06 — SweetBook API 문서 전수 검토 & Gap 분석" 참조
+> 상세 분석: `DECISION_LOG.md` 참조
 
 ---
 

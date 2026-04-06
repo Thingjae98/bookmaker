@@ -5,6 +5,79 @@
 
 ---
 
+## 📋 2026-04-06 — 동적 폼 도입 후 400 Finalize 에러: 내지 전송 루프 복구 및 최소 페이지 Padding 안전화
+
+### 증상
+- `POST /books/{bookUid}/finalize` 단계에서 400 에러 발생
+- 콘솔 로그에 `[contentFileMap 스냅샷] {}` 기록 — 내지 POST /contents 루프가 스킵되거나 전 페이지 실패 의심
+
+### 근본 원인 (3가지)
+1. **SERVICE_TYPES 참조 크래시**: ARCHIVE 피벗으로 6개 서비스 타입이 삭제되었으나, 이전 세션(`baby`, `travel` 등)이 sessionStorage에 잔존 → `SERVICE_TYPES[session.serviceType]` = undefined → `service.name` TypeError로 전체 handleCreateBook 함수가 catch 블록으로 빠짐
+2. **패딩 루프 division-by-zero**: `contentPageData.length === 0`일 때 `contentPageData[ri % 0]` = `contentPageData[NaN]` = undefined → `srcPage.imageUrl` TypeError → 최종화 단계 도달 불가
+3. **동적 파라미터 undefined 전송**: `page.params[key]`가 undefined인 경우 일부 코드 경로에서 API에 undefined 값이 전송 → SweetBook 서버 400
+
+### 해결
+1. **SERVICE_TYPES 안전 폴백**: `SERVICE_TYPES[session.serviceType] || SERVICE_TYPES.archive || Object.values(SERVICE_TYPES)[0]` 3단 체인으로 서비스 참조 보장
+2. **패딩 루프 null-safe 처리**: `contentPageData.length > 0` 조건 분기 추가, 빈 배열일 때 picsum fallback으로 패딩 페이지를 처음부터 생성
+3. **동적 파라미터 전면 안전화**:
+   - `def?.binding` null-safe 접근
+   - `page.params?.[key]` optional chaining
+   - `String(userVal)` 명시적 문자열 변환
+   - text 바인딩 폴백 체인 확장 (diaryText, text, content, memo, comment, teacherComment, description 등 동의어 키 일괄 처리)
+   - 알 수 없는 바인딩 타입에도 빈 문자열 할당 (절대 undefined 전송 금지)
+4. **디버그 로그 강화**:
+   - 패딩 전/후 페이지 수 명시 로그
+   - `console.log('총 전송할 내지 페이지 수:', paddedPages.length)` 루프 직전 추가
+   - 페이지별 전송 전 진단 로그 (tpl, hasImg, hasText, paramKeys)
+   - 전체 실패 시 경고 + tplMap/bookSpecUid 출력
+
+---
+
+## 📋 2026-04-06 — 프로덕트 피벗: '북메이커' → 'ARCHIVE'
+
+### 배경
+시니어 개발자 리뷰 결과, 기존 6개 카테고리(육아·여행·동화 등) 범용 포토북 플랫폼이 "무엇이든 할 수 있지만 아무것도 특별하지 않은" 서비스라는 피드백을 받음. Book Print API의 핵심 가치와 타겟 고객을 명확히 할 필요성 제기.
+
+### 결정: 크리에이터/개발자를 위한 프리미엄 포트폴리오 북
+
+**변경 전**: 6개 서비스(baby, kindergarten, fairytale, travel, selfpublish, pet) 선택 UI
+**변경 후**: 단일 서비스 `archive` — 프로젝트 포트폴리오 북
+
+### 변경 범위 (UI/UX만 — 엔진 코드 무변경)
+
+| 파일 | 변경 내용 |
+|------|----------|
+| `constants.js` | SERVICE_TYPES 6개 → `archive` 단일 타입 (fields: bookTitle, authorName, role, techStack, period, bookDescription) |
+| `page.jsx` (메인) | 6-카드 선택 그리드 → B&W 매거진 스타일 풀스크린 랜딩 |
+| `layout.jsx` | 메타데이터 "북메이커" → "ARCHIVE — Premium Project Portfolio Book" |
+| `Header.jsx` | 로고 "📚 북메이커" → 블랙 스퀘어 "A" + "ARCHIVE" / 네비: "서비스 선택" → "New Archive" |
+| `StepIndicator.jsx` | 5단계 → 4단계 (서비스 선택 제거: Configure → Compose → Preview → Order) |
+| `ServiceCard.jsx` | warm 컬러 → neutral B&W 스타일 |
+| `globals.css` | cream/warm 배경 → #FFFFFF, JetBrains Mono 추가, 버튼/인풋 B&W 스타일 |
+| `tailwind.config.js` | warm/ink → neutral 그레이스케일 매핑 (레거시 호환 유지) |
+| `create/[serviceType]/page.jsx` | 서비스별 분기 → 단일 폼, AI 동화 패널 제거, B&W 스타일 |
+| `dummy.js` | 6개 서비스 더미 → `archiveDummy` 1개 (개발자 포트폴리오 24페이지) |
+| `editor/page.jsx` | TEXT_FIELD_LABELS 포트폴리오 맥락으로 변경, SERVICE_CATEGORY_MAP에 archive 추가 |
+
+### 엔진 보존 확인
+- `sweetbook.js` (SweetBook SDK 클라이언트): 무변경
+- `fetchWithRetry.js` (재시도 래퍼): 무변경
+- `api/*` (18개 API 라우트): 전체 무변경
+- `editor/page.jsx` (핵심 로직): handleCreateBook, spreadGroups, gallery 시스템 무변경
+- `preview/page.jsx`, `order/page.jsx`, `orders/page.jsx`: 무변경
+
+### 디자인 시스템 변경
+- **컬러**: cream(#FAF7F2) → white(#FFFFFF), warm → neutral 매핑
+- **폰트**: JetBrains Mono 추가 (기술 라벨, 네비, 버튼에 적용)
+- **UI 패턴**: 둥근 모서리(rounded-2xl) → 직각(border), 그래디언트 → 플랫
+- **레이아웃**: 그리드 패턴 배경, uppercase tracking, minimal divider
+
+### 위험 완화
+- `tailwind.config.js`에서 `warm`/`ink` 색상 키를 삭제하지 않고 neutral 값으로 리매핑 → 에디터·주문·미리보기 페이지의 기존 클래스명이 깨지지 않음
+- `SERVICE_CATEGORY_MAP`에서 기존 6개 키 보존 (레거시 호환)
+
+---
+
 ## 📋 2026-04-06 — 버그 H: 동적 폼 미표시 및 HTTP 500 에러 해결
 
 ### 증상

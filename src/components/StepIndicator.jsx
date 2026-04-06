@@ -1,11 +1,10 @@
 'use client';
 
 const STEPS = [
-  { key: 'select', label: '서비스 선택' },
-  { key: 'info', label: '정보 입력' },
-  { key: 'editor', label: '콘텐츠 편집' },
-  { key: 'preview', label: '미리보기' },
-  { key: 'order', label: '주문' },
+  { key: 'info', label: 'Configure' },
+  { key: 'editor', label: 'Compose' },
+  { key: 'preview', label: 'Preview' },
+  { key: 'order', label: 'Order' },
 ];
 
 export default function StepIndicator({ currentStep }) {
@@ -22,8 +21,8 @@ export default function StepIndicator({ currentStep }) {
               }`}
             />
             <span
-              className={`text-xs mt-1.5 whitespace-nowrap ${
-                i === currentIdx ? 'text-warm-600 font-medium' : 'text-ink-400'
+              className={`text-xs mt-1.5 whitespace-nowrap font-mono tracking-wide ${
+                i === currentIdx ? 'text-neutral-900 font-medium' : 'text-neutral-400'
               }`}
             >
               {step.label}
@@ -32,7 +31,7 @@ export default function StepIndicator({ currentStep }) {
           {i < STEPS.length - 1 && (
             <div
               className={`w-8 h-px mx-1 mt-[-14px] ${
-                i < currentIdx ? 'bg-warm-600' : 'bg-ink-200'
+                i < currentIdx ? 'bg-neutral-900' : 'bg-neutral-200'
               }`}
             />
           )}

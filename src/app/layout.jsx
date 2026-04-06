@@ -3,8 +3,8 @@ import Header from '@/components/Header';
 import Toast from '@/components/Toast';
 
 export const metadata = {
-  title: '북메이커 BookMaker — 나만의 특별한 책을 만드세요',
-  description: 'Book Print API를 활용한 맞춤형 포토북 제작 플랫폼. 육아일기, 여행포토북, AI동화책 등 다양한 주제의 책을 손쉽게 만들 수 있습니다.',
+  title: 'ARCHIVE — Premium Project Portfolio Book',
+  description: '당신의 프로젝트와 1년의 성과를 한 권의 프리미엄 아카이브로. SweetBook Book Print API 기반 포트폴리오 북 제작 플랫폼.',
 };
 
 export default function RootLayout({ children }) {

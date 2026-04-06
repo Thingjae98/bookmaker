@@ -5,12 +5,14 @@ module.exports = {
     extend: {
       fontFamily: {
         display: ['"Noto Serif KR"', 'Georgia', 'serif'],
-        body: ['"Pretendard"', '"Noto Sans KR"', 'sans-serif'],
+        body: ['"Noto Sans KR"', 'sans-serif'],
+        mono: ['"JetBrains Mono"', '"Consolas"', 'monospace'],
       },
       colors: {
-        cream: '#FAF7F2',
-        warm: { 50: '#FDF8F0', 100: '#F9EDDA', 200: '#F0D9B5', 400: '#D4A574', 600: '#B07D4F', 800: '#7A5230' },
-        ink: { 50: '#F5F5F4', 100: '#E7E5E4', 200: '#D6D3D1', 400: '#A8A29E', 600: '#57534E', 800: '#292524', 900: '#1C1917' },
+        // Legacy aliases — 기존 에디터/주문 페이지 호환성 유지
+        cream: '#FAFAFA',
+        warm: { 50: '#FAFAFA', 100: '#F5F5F5', 200: '#E5E5E5', 400: '#A3A3A3', 600: '#525252', 800: '#262626' },
+        ink: { 50: '#FAFAFA', 100: '#F5F5F5', 200: '#E5E5E5', 400: '#A3A3A3', 600: '#525252', 800: '#262626', 900: '#0A0A0A' },
       },
       animation: {
         'fade-up': 'fadeUp 0.6s ease-out forwards',

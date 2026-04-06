@@ -31,6 +31,8 @@ const TPL_TEXT_ONLY  = TPL_TEXT_ONLY_FALLBACK;
 
 // 서비스 타입 → 추천 카테고리(theme) 매핑
 const SERVICE_CATEGORY_MAP = {
+  archive:      '구글포토북A',
+  // Legacy mappings (하위 호환)
   baby:         '일기장A',
   kindergarten: '알림장B',
   fairytale:    '일기장B',
@@ -864,27 +866,27 @@ export default function EditorPage() {
 
   // ── 텍스트 바인딩 키 → 사용자 친화적 라벨 매핑 ──────────────────
   const TEXT_FIELD_LABELS = {
-    title:      '제목',
-    bookTitle:  '책 제목',
-    date:       '날짜',
-    dateLabel:  '날짜 라벨',
-    dayLabel:   '요일 라벨',
+    title:      '프로젝트 제목',
+    bookTitle:  '아카이브 제목',
+    date:       '릴리즈 / 개발 기간',
+    dateLabel:  '기간 라벨',
+    dayLabel:   '일정 라벨',
     dayNum:     '일',
     monthNum:   '월',
     month:      '월',
     year:       '연도',
-    weather:    '날씨',
-    meal:       '식단',
+    weather:    '상태 / 환경',
+    meal:       '기술 스택',
     memo:       '메모',
-    diaryText:  '본문 텍스트',
+    diaryText:  '프로젝트 회고 및 트러블슈팅',
     text:       '텍스트',
     content:    '내용',
     spineTitle: '책등 제목',
-    subTitle:   '부제목',
-    author:     '저자',
-    location:   '장소',
-    comment:    '코멘트',
-    teacherComment: '선생님 코멘트',
+    subTitle:   '서브타이틀',
+    author:     'Author',
+    location:   '프로젝트 환경',
+    comment:    '리뷰 코멘트',
+    teacherComment: '멘토 / 리드 코멘트',
     description: '설명',
   };
 
@@ -1070,12 +1072,13 @@ export default function EditorPage() {
 
     setLoading(true);
     try {
-      const service = SERVICE_TYPES[session.serviceType];
+      const service = SERVICE_TYPES[session.serviceType] || SERVICE_TYPES.archive || Object.values(SERVICE_TYPES)[0];
+      if (!service) throw new Error('서비스 타입을 찾을 수 없습니다. 처음부터 다시 시작해 주세요.');
       const fd      = session.formData || {};
-      const name    = fd.babyName || fd.childName || fd.heroName || fd.petName || fd.authorName || '';
+      const name    = fd.authorName || fd.babyName || fd.childName || fd.heroName || fd.petName || '';
       const title   = name
         ? `${name}의 ${service.name}`
-        : fd.bookTitle || fd.tripName || service.name;
+        : fd.bookTitle || fd.tripName || service.name || 'ARCHIVE';
 
       // bookSpecUid 검증 — API에서 실제로 책 생성 가능한 UID인지 확인 후 보정
       // bs_ 접두사 UID(bs_6a8OUY 등)는 빈 플레이스홀더로 API가 400 반환 — 반드시 내부 키(SQUAREBOOK_HC 등) 사용
@@ -1314,27 +1317,33 @@ export default function EditorPage() {
       const rem               = rawCount % specPageIncrement;
       const targetContentCount = rem === 0 ? rawCount : rawCount + (specPageIncrement - rem);
 
+      console.log('[패딩 전] contentPageData.length:', contentPageData.length, '/ targetContentCount:', targetContentCount);
+      addLog(`📊 패딩 전 내지: ${contentPageData.length}장 / 목표: ${targetContentCount}장 (판형 최소 ${specPageMin}p, 증분 ${specPageIncrement}p)`);
+
       // 패딩 페이지 — picsum fallback URL 사용으로 API 400 방지
       const paddedPages = [...contentPageData];
       let ri = 0;
       while (paddedPages.length < targetContentCount) {
-        const pIdx    = paddedPages.length;
-        const srcPage = contentPageData[ri % contentPageData.length];
+        const pIdx = paddedPages.length;
+        // ★ contentPageData가 비어있으면 소스 페이지를 처음부터 생성 (division-by-zero 방지)
+        const srcPage = contentPageData.length > 0
+          ? contentPageData[ri % contentPageData.length]
+          : null;
         // 패딩 페이지는 반드시 이미지 URL 확보 (null 이미지로 API 전송 시 400 위험)
-        const padImgUrl = srcPage.imageUrl
-          || `https://picsum.photos/seed/${session.serviceType}-pad${pIdx}/600/600`;
+        const padImgUrl = srcPage?.imageUrl
+          || `https://picsum.photos/seed/${session.serviceType || 'archive'}-pad${pIdx}/600/600`;
         paddedPages.push({
           imageUrl: padImgUrl,
-          text:  srcPage.text  || '',
-          title: srcPage.title || '',
-          date:  srcPage.date  || new Date().toISOString().slice(0, 10),
-          params: srcPage.params || {},
+          text:  srcPage?.text  || '',
+          title: srcPage?.title || `Page ${pIdx + 1}`,
+          date:  srcPage?.date  || new Date().toISOString().slice(0, 10),
+          params: srcPage?.params || {},
         });
         ri++;
       }
       if (paddedPages.length > contentPageData.length) {
-        const targetTotal = targetContentCount + 1;
-        addLog(`📋 판형 최소 ${specPageMin}p / 증분 ${specPageIncrement}p 충족 — ${paddedPages.length - contentPageData.length}p 패딩 (내지 ${targetContentCount}p, 총 ${targetTotal}p)`);
+        const padded = paddedPages.length - contentPageData.length;
+        addLog(`📋 판형 최소 ${specPageMin}p / 증분 ${specPageIncrement}p 충족 — ${padded}p 패딩 추가 (최종 내지 ${paddedPages.length}p)`);
       }
 
       // ── STEP 3: 앞표지 추가 — parameters.definitions 기반 안전 바인딩 ──
@@ -1400,7 +1409,12 @@ export default function EditorPage() {
       // ── STEP 4: 내지 추가 — parameters.definitions 기반 안전 바인딩 ──
       // 절대 규칙: UI 페이지 1개 = POST /contents 1회 호출 (1:1 매핑)
       // 갤러리 바인딩(rowGallery/collageGallery)은 현재 페이지 스코프 내 사진만 배열로 전달
-      addLog(`📄 내지 ${paddedPages.length}페이지 추가 중...`);
+      console.log('총 전송할 내지 페이지 수:', paddedPages.length);
+      addLog(`📄 내지 ${paddedPages.length}페이지 추가 중... (원본 ${contentPageData.length}장 + 패딩 ${paddedPages.length - contentPageData.length}장)`);
+      if (paddedPages.length === 0) {
+        addLog('❌ 전송할 내지 페이지가 0장입니다 — 최종화가 실패할 수 있습니다.');
+        console.error('[handleCreateBook] paddedPages가 비어있음. contentItems:', contentItems.length, 'contentPageData:', contentPageData.length);
+      }
       let contentsFailCount = 0;
 
       for (let i = 0; i < paddedPages.length; i++) {
@@ -1440,34 +1454,41 @@ export default function EditorPage() {
         const params = {};
         if (Object.keys(contentDefs).length > 0) {
           Object.entries(contentDefs).forEach(([key, def]) => {
-            if (def.binding === 'file') {
+            const binding = def?.binding || 'text';
+            if (binding === 'file') {
               // 단일 사진: imageUrl 사용, 없으면 picsum fallback
-              params[key] = hasImage ? page.imageUrl : `https://picsum.photos/seed/${session.serviceType}-p${i}/600/600`;
-            } else if (def.binding === 'text') {
+              params[key] = hasImage ? page.imageUrl : `https://picsum.photos/seed/${session.serviceType || 'archive'}-p${i}/600/600`;
+            } else if (binding === 'text') {
               // 1순위: 사용자가 동적 폼에서 직접 입력한 params[key]
-              if (page.params && page.params[key] !== undefined && page.params[key] !== '') {
-                params[key] = page.params[key];
+              const userVal = page.params?.[key];
+              if (userVal !== undefined && userVal !== null && String(userVal).trim() !== '') {
+                params[key] = String(userVal);
               }
               // 2순위: 레거시 필드 폴백 + 자동 생성 로직
               else if (key === 'date' || key === 'dayLabel' || key === 'dateLabel') params[key] = page.date || new Date().toISOString().slice(0, 10);
-              else if (key === 'title') params[key] = page.title || `페이지 ${i + 1}`;
-              else if (key === 'diaryText') params[key] = (page.text || '').trim() || ' ';
+              else if (key === 'title') params[key] = page.title || `Page ${i + 1}`;
+              else if (key === 'diaryText' || key === 'text' || key === 'content' || key === 'memo' || key === 'comment' || key === 'teacherComment' || key === 'description') params[key] = (page.text || '').trim() || ' ';
               else if (key === 'monthNum' || key === 'month') params[key] = String(new Date(page.date || Date.now()).getMonth() + 1);
               else if (key === 'dayNum') params[key] = String(new Date(page.date || Date.now()).getDate());
               else if (key === 'year') params[key] = String(new Date(page.date || Date.now()).getFullYear());
-              else if (key === 'bookTitle') params[key] = title;
-              else params[key] = ' '; // required text 필드 빈값 방지
-            } else if (def.binding === 'rowGallery' || def.binding === 'collageGallery') {
+              else if (key === 'bookTitle' || key === 'spineTitle') params[key] = title;
+              else if (key === 'author' || key === 'authorName') params[key] = name || ' ';
+              else if (key === 'subTitle' || key === 'subtitle') params[key] = fd.bookDescription || service.subtitle || ' ';
+              else params[key] = ' '; // required text 필드 빈값 방지 — 절대 undefined 전송 금지
+            } else if (binding === 'rowGallery' || binding === 'collageGallery') {
               // 갤러리 바인딩: 현재 페이지 스코프 내 사진만 배열로 전달
               // page.images가 있으면 다중 사진 배열, 없으면 단일 사진을 배열로 감쌈
               const images = page.images || (hasImage ? [page.imageUrl] : []);
               params[key] = images;
+            } else {
+              // 알 수 없는 바인딩 타입 → 빈 문자열로 안전 처리
+              params[key] = ' ';
             }
           });
         } else {
           // definitions 없는 레거시 폴백
           params.date      = page.date  || new Date().toISOString().slice(0, 10);
-          params.title     = page.title || `페이지 ${i + 1}`;
+          params.title     = page.title || `Page ${i + 1}`;
           params.diaryText = (page.text || '').trim() || ' ';
           if (hasImage) params.photo1 = page.imageUrl;
         }
@@ -1478,6 +1499,10 @@ export default function EditorPage() {
         const resolvedBreakBefore = meta.breakBefore
           || (meta.templateKind === 'divider' || meta.templateKind === 'publish' ? 'page' : 'none');
 
+        // 전송 전 진단 로그 (첫 페이지 + 매 5번째 + 마지막)
+        if (i === 0 || i % 5 === 0 || i === paddedPages.length - 1) {
+          console.log(`[내지 ${i + 1}/${paddedPages.length}] tpl=${tplUid} hasImg=${hasImage} hasText=${hasText} paramKeys=[${Object.keys(params).join(',')}]`);
+        }
         try {
           const r = await fetch(`/api/books/${uid}/contents`, {
             method:  'POST',
@@ -1490,8 +1515,10 @@ export default function EditorPage() {
             const detail = d.details ? JSON.stringify(d.details) : '';
             addLog(`⚠️ 페이지 ${i + 1} 실패: ${d.message} | tpl=${tplUid} hasImg=${hasImage} | ${detail}`);
             console.dir({ contentsError: d, page, tplUid, params, pageIndex: i });
-          } else if (i % 5 === 0 || i === paddedPages.length - 1) {
-            addLog(`📄 내지 ${i + 1}/${paddedPages.length}`);
+          } else {
+            if (i === 0 || i % 5 === 0 || i === paddedPages.length - 1) {
+              addLog(`✅ 내지 ${i + 1}/${paddedPages.length} 전송 성공`);
+            }
           }
         } catch (err) {
           contentsFailCount++;
@@ -1506,6 +1533,10 @@ export default function EditorPage() {
       }
 
       // ── STEP 5: 최종화 ────────────────────────────────────────
+      if (contentsFailCount === paddedPages.length && paddedPages.length > 0) {
+        addLog(`❌ 내지 ${paddedPages.length}페이지 전부 실패 — 최종화를 시도하지만 400 에러가 예상됩니다.`);
+        console.error('[handleCreateBook] 모든 내지 전송 실패. tplMap:', tplMap, 'bookSpecUid:', bookSpecUid);
+      }
       addLog('🔒 최종화 중...');
       const finalRes  = await fetch(`/api/books/${uid}/finalize`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },

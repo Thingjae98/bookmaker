@@ -1,79 +1,122 @@
-import ServiceCard from '@/components/ServiceCard';
-import { SERVICE_TYPES } from '@/lib/constants';
+import Link from 'next/link';
 
 export default function HomePage() {
-  const services = Object.values(SERVICE_TYPES);
-
   return (
-    <div className="min-h-screen">
-      {/* 히어로 섹션 */}
-      <section className="relative overflow-hidden py-20 md:py-28">
-        <div className="absolute inset-0 bg-gradient-to-b from-warm-50 to-cream" />
-        <div className="absolute top-10 left-10 w-72 h-72 bg-warm-200/20 rounded-full blur-3xl" />
-        <div className="absolute bottom-10 right-10 w-96 h-96 bg-warm-200/10 rounded-full blur-3xl" />
+    <div className="min-h-screen bg-white">
+      {/* Hero — Full-screen Black & White */}
+      <section className="relative min-h-[92vh] flex items-center justify-center overflow-hidden">
+        {/* Background grid pattern */}
+        <div className="absolute inset-0 opacity-[0.03]" style={{
+          backgroundImage: 'linear-gradient(#000 1px, transparent 1px), linear-gradient(90deg, #000 1px, transparent 1px)',
+          backgroundSize: '60px 60px',
+        }} />
 
-        <div className="relative max-w-4xl mx-auto px-6 text-center">
-          <p className="text-warm-600 font-medium tracking-wider text-sm mb-4 opacity-0 animate-fade-up">
-            BOOK PRINT API POWERED
+        <div className="relative max-w-3xl mx-auto px-6 text-center">
+          <p className="text-neutral-400 font-mono text-xs tracking-[0.3em] uppercase mb-8 opacity-0 animate-fade-up">
+            Premium Project Portfolio Book
           </p>
-          <h1 className="font-display font-black text-4xl md:text-6xl text-ink-900 leading-tight mb-6 opacity-0 animate-fade-up delay-100">
-            나만의 특별한 책을<br />
-            손쉽게 만들어 보세요
+
+          <h1 className="font-display font-black text-5xl md:text-7xl lg:text-8xl text-neutral-900 tracking-tight leading-[0.95] mb-8 opacity-0 animate-fade-up delay-100">
+            ARCHIVE
           </h1>
-          <p className="text-ink-400 text-lg md:text-xl leading-relaxed max-w-2xl mx-auto opacity-0 animate-fade-up delay-200">
-            육아 일기, 여행 포토북, AI 동화책까지.<br />
-            소중한 순간을 세상에 하나뿐인 책으로 만들어 드립니다.
+
+          <div className="w-16 h-px bg-neutral-900 mx-auto mb-8 opacity-0 animate-fade-up delay-200" />
+
+          <p className="text-neutral-500 text-lg md:text-xl leading-relaxed max-w-xl mx-auto mb-12 opacity-0 animate-fade-up delay-200">
+            당신의 프로젝트와 1년의 성과를<br />
+            한 권의 프리미엄 아카이브로 남기세요.
           </p>
+
+          <Link
+            href="/create/archive"
+            className="group inline-flex items-center gap-3 px-8 py-4 bg-neutral-900 text-white text-sm font-medium tracking-wider uppercase transition-all hover:bg-neutral-800 opacity-0 animate-fade-up delay-300"
+          >
+            Start Archiving
+            <svg className="w-4 h-4 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          </Link>
         </div>
       </section>
 
-      {/* 서비스 선택 그리드 */}
-      <section className="max-w-6xl mx-auto px-6 pb-24 mt-8">
-        <h2 className="font-display font-bold text-2xl text-ink-900 text-center mb-2">
-          어떤 책을 만들까요?
-        </h2>
-        <p className="text-ink-400 text-center mb-10">
-          만들고 싶은 서비스를 선택하세요
-        </p>
+      {/* Process — Minimal Steps */}
+      <section className="border-t border-neutral-200 py-24">
+        <div className="max-w-5xl mx-auto px-6">
+          <p className="text-neutral-400 font-mono text-xs tracking-[0.3em] uppercase text-center mb-16">
+            How it works
+          </p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {services.map((service, i) => (
-            <ServiceCard key={service.key} service={service} index={i} />
-          ))}
-        </div>
-      </section>
-
-      {/* 이용 흐름 안내 */}
-      <section className="bg-white border-t border-ink-100 py-20">
-        <div className="max-w-4xl mx-auto px-6">
-          <h2 className="font-display font-bold text-2xl text-ink-900 text-center mb-12">
-            이렇게 만들어져요
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-12 md:gap-8">
             {[
-              { step: '01', icon: '🎯', title: '서비스 선택', desc: '원하는 포토북 유형을 선택합니다' },
-              { step: '02', icon: '✏️', title: '정보 입력', desc: '서비스에 맞는 정보를 입력합니다' },
-              { step: '03', icon: '📸', title: '콘텐츠 편집', desc: '사진과 텍스트로 페이지를 구성합니다' },
-              { step: '04', icon: '📦', title: '주문 완료', desc: '배송 정보 입력 후 주문합니다' },
+              { num: '01', title: 'Configure', desc: '프로젝트 정보와 아카이브 기간을 설정합니다' },
+              { num: '02', title: 'Compose', desc: '스크린샷, 다이어그램, 회고를 페이지별로 구성합니다' },
+              { num: '03', title: 'Preview', desc: '스프레드 뷰로 전체 레이아웃을 확인합니다' },
+              { num: '04', title: 'Order', desc: '하드커버 북으로 제작 · 배송합니다' },
             ].map((item) => (
-              <div key={item.step} className="text-center">
-                <div className="w-16 h-16 mx-auto mb-4 bg-warm-50 rounded-2xl flex items-center justify-center text-2xl">
-                  {item.icon}
-                </div>
-                <p className="text-warm-600 text-xs font-medium mb-1">STEP {item.step}</p>
-                <h3 className="font-display font-bold text-ink-900 mb-2">{item.title}</h3>
-                <p className="text-sm text-ink-400">{item.desc}</p>
+              <div key={item.num} className="text-center md:text-left">
+                <span className="font-mono text-3xl font-light text-neutral-200 block mb-3">{item.num}</span>
+                <h3 className="font-display font-bold text-lg text-neutral-900 mb-2">{item.title}</h3>
+                <p className="text-sm text-neutral-500 leading-relaxed">{item.desc}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* 푸터 */}
-      <footer className="border-t border-ink-100 py-8">
-        <div className="max-w-6xl mx-auto px-6 text-center text-sm text-ink-400">
-          <p>북메이커 BookMaker — Powered by <a href="https://api.sweetbook.com" className="text-warm-600 hover:underline" target="_blank" rel="noopener noreferrer">SweetBook Book Print API</a></p>
-          <p className="mt-1">© 2026 BookMaker. 스위트북 바이브코딩 과제</p>
+      {/* Features — Magazine Grid */}
+      <section className="border-t border-neutral-200 bg-neutral-50 py-24">
+        <div className="max-w-5xl mx-auto px-6">
+          <p className="text-neutral-400 font-mono text-xs tracking-[0.3em] uppercase text-center mb-4">
+            Features
+          </p>
+          <h2 className="font-display font-bold text-2xl md:text-3xl text-neutral-900 text-center mb-16">
+            프로젝트의 가치를 물성으로
+          </h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {[
+              { title: 'Hardcover Binding', desc: '243x248mm 정방형 하드커버. PUR 무선철 제본으로 오래 보관할 수 있는 견고한 품질.' },
+              { title: 'Spread Layout', desc: '실제 책을 펼쳐놓은 듯한 2페이지 스프레드 단위 편집. 프로젝트 스크린샷과 회고가 함께.' },
+              { title: 'Smart Templates', desc: 'API 기반 동적 템플릿 매칭. 사진+텍스트, 텍스트 전용, 갤러리 레이아웃 자동 추천.' },
+              { title: 'Drag & Drop', desc: '아키텍처 다이어그램, UI 스크린샷, 팀 사진을 드래그앤드롭으로 간편하게 업로드.' },
+              { title: 'Real-time Preview', desc: '책 넘김 애니메이션과 블러 티저로 완성본을 주문 전 미리 확인.' },
+              { title: 'API Powered', desc: 'SweetBook Book Print API 기반. 책 생성부터 주문·배송 추적까지 자동화.' },
+            ].map((item) => (
+              <div key={item.title} className="p-6 bg-white border border-neutral-200">
+                <h3 className="font-mono text-sm font-medium text-neutral-900 mb-3 tracking-wide">{item.title}</h3>
+                <p className="text-sm text-neutral-500 leading-relaxed">{item.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* CTA */}
+      <section className="border-t border-neutral-200 py-24">
+        <div className="max-w-2xl mx-auto px-6 text-center">
+          <h2 className="font-display font-bold text-2xl md:text-3xl text-neutral-900 mb-6">
+            나의 첫 아카이브를 만들어 보세요
+          </h2>
+          <p className="text-neutral-500 mb-10">
+            더미 데이터로 즉시 체험하거나, 실제 프로젝트 정보를 입력해 시작할 수 있습니다.
+          </p>
+          <Link
+            href="/create/archive"
+            className="inline-flex items-center gap-3 px-8 py-4 bg-neutral-900 text-white text-sm font-medium tracking-wider uppercase transition-all hover:bg-neutral-800"
+          >
+            Create Archive
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          </Link>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="border-t border-neutral-200 py-8">
+        <div className="max-w-6xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-neutral-400">
+          <p>ARCHIVE — Powered by <a href="https://api.sweetbook.com" className="text-neutral-600 hover:underline" target="_blank" rel="noopener noreferrer">SweetBook Book Print API</a></p>
+          <p>&copy; 2026 ARCHIVE. Built for SweetBook Vibe Coding Challenge.</p>
         </div>
       </footer>
     </div>

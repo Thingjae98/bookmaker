@@ -20,8 +20,6 @@ export default function CreatePage() {
   const [formData, setFormData] = useState({});
   const [selectedSpec, setSelectedSpec] = useState('');
   const [useDummy, setUseDummy] = useState(false);
-  const [aiGenerating, setAiGenerating] = useState(false);
-  const [aiError, setAiError] = useState(null);
   const [draftRestored, setDraftRestored] = useState(false);
 
   // Draft 복원된 판형 UID를 ref로 보관 — API 로딩 완료 후 덮어쓰기 방지용
@@ -45,7 +43,6 @@ export default function CreatePage() {
         }
         if (draft.selectedSpec) {
           setSelectedSpec(draft.selectedSpec);
-          // ref에 복원된 specUid 기록 — API 로딩에서 이 값이 있으면 절대 덮어쓰지 않음
           restoredSpecRef.current = draft.selectedSpec;
         }
         if (draft.useDummy) {
@@ -65,7 +62,6 @@ export default function CreatePage() {
   const saveDraft = useCallback(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      // 초기 빈 상태에서는 저장하지 않음
       if (Object.keys(formData).length === 0 && !useDummy && !selectedSpec) return;
       try {
         const draft = { formData, selectedSpec, useDummy };
@@ -91,19 +87,13 @@ export default function CreatePage() {
         const data = await res.json();
         if (data.success && Array.isArray(data.data)) {
           setBookSpecs(data.data);
-          // ⚠️ 핵심: Draft에서 복원된 specUid가 있으면 API 기본값으로 절대 덮어쓰지 않음
           if (restoredSpecRef.current) {
-            console.log('[bookSpecs] Draft 복원된 판형 유지:', restoredSpecRef.current);
-            // 복원된 spec이 API 목록에 존재하는지 검증
             const exists = data.data.some(s => s.bookSpecUid === restoredSpecRef.current);
             if (!exists) {
-              console.warn('[bookSpecs] Draft 복원 판형이 API 목록에 없음 — 추천 판형으로 보정');
               const recommended = data.data.find(s => s.bookSpecUid === service?.recommendedSpec);
               setSelectedSpec(recommended ? recommended.bookSpecUid : data.data[0]?.bookSpecUid || '');
             }
-            // exists=true면 이미 setSelectedSpec 완료 상태이므로 건드리지 않음
           } else {
-            // Draft 복원 없음 — 추천 판형 자동 선택
             const recommended = data.data.find(s => s.bookSpecUid === service?.recommendedSpec);
             setSelectedSpec(recommended ? recommended.bookSpecUid : data.data[0]?.bookSpecUid || service?.recommendedSpec || '');
           }
@@ -125,7 +115,7 @@ export default function CreatePage() {
     loadBookSpecs();
   }, [service]);
 
-  // 2단계: 판형 선택 시 GET /templates?bookSpecUid=.. 호출 — 에디터 모달 템플릿 선택용
+  // 2단계: 판형 선택 시 GET /templates 호출
   useEffect(() => {
     if (!selectedSpec) return;
     const loadTemplates = async () => {
@@ -136,7 +126,7 @@ export default function CreatePage() {
           setAllTemplates(data.data);
         }
       } catch {
-        // 실패 시 빈 배열 유지 — 에디터 모달에서 기본값 자동 사용
+        // 실패 시 빈 배열 유지
       }
     };
     loadTemplates();
@@ -146,8 +136,8 @@ export default function CreatePage() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <h1 className="font-display text-2xl font-bold text-ink-900 mb-4">서비스를 찾을 수 없습니다</h1>
-          <Link href="/" className="btn-primary inline-block">홈으로 돌아가기</Link>
+          <h1 className="font-display text-2xl font-bold text-neutral-900 mb-4">Page not found</h1>
+          <Link href="/" className="btn-primary inline-block">Back to Home</Link>
         </div>
       </div>
     );
@@ -162,72 +152,22 @@ export default function CreatePage() {
     if (dummy) {
       setFormData(dummy.meta);
       setUseDummy(true);
-    }
-  };
-
-  // AI 동화 생성 (fairytale 서비스 전용)
-  const handleGenerateStory = async () => {
-    const missing = ['heroName', 'theme'].filter((k) => !formData[k]);
-    if (missing.length > 0) {
-      alert('주인공 이름과 동화 주제를 먼저 입력해주세요.');
-      return;
-    }
-
-    setAiGenerating(true);
-    setAiError(null);
-
-    try {
-      const res = await fetch('/api/generate-story', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          heroName: formData.heroName,
-          heroAge: formData.heroAge,
-          theme: formData.theme === '직접 입력' ? formData.customTheme : formData.theme,
-          moralLesson: formData.moralLesson,
-        }),
-      });
-      const data = await res.json();
-
-      if (!data.success) throw new Error(data.message);
-
-      // 생성된 페이지를 sessionStorage에 임시 저장 (에디터에서 로드)
-      sessionStorage.setItem('bookmaker_ai_pages', JSON.stringify(data.data.pages));
-
-      // 세션 메타데이터 저장 후 에디터로 이동 (allTemplates 포함 — 에디터 모달에서 활용)
-      const sessionData = {
-        serviceType,
-        formData: { ...formData, bookTitle: data.data.title },
-        bookSpecUid: selectedSpec,
-        allTemplates,
-        useDummy: false,
-        aiGenerated: true,
-        aiTitle: data.data.title,
-      };
-      sessionStorage.setItem('bookmaker_session', JSON.stringify(sessionData));
-      sessionStorage.removeItem(DRAFT_KEY);
-      router.push('/editor');
-    } catch (err) {
-      setAiError(err.message);
-    } finally {
-      setAiGenerating(false);
+      toast.success('더미 데이터가 채워졌습니다');
     }
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    // 필수 필드 검증
     const missingFields = service.fields
       .filter((f) => f.required && !formData[f.key])
       .map((f) => f.label);
 
     if (missingFields.length > 0) {
-      alert(`다음 필수 항목을 입력해주세요:\n${missingFields.join(', ')}`);
+      toast.error(`필수 항목을 입력해주세요: ${missingFields.join(', ')}`);
       return;
     }
 
-    // 세션 스토리지에 저장 후 에디터로 이동 (allTemplates 포함 — 에디터 모달 템플릿 선택용)
     const sessionData = {
       serviceType,
       formData,
@@ -236,33 +176,30 @@ export default function CreatePage() {
       useDummy,
     };
     sessionStorage.setItem('bookmaker_session', JSON.stringify(sessionData));
-    // 에디터로 이동 시 Draft 삭제 (에디터에서 뒤로 오면 session에서 복원)
     sessionStorage.removeItem(DRAFT_KEY);
     router.push('/editor');
   };
 
-  const spec = BOOK_SPECS[selectedSpec];
-
   return (
-    <div className="min-h-screen pb-20">
+    <div className="min-h-screen bg-white pb-20">
       <StepIndicator currentStep="info" />
 
-      <div className="max-w-2xl mx-auto px-6">
-        {/* 헤더 */}
-        <div className="text-center mb-10 opacity-0 animate-fade-up">
-          <div className={`w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br ${service.color} flex items-center justify-center text-4xl`}>
-            {service.icon}
-          </div>
-          <h1 className="font-display font-bold text-3xl text-ink-900 mb-2">{service.name}</h1>
-          <p className="text-ink-400">{service.subtitle}</p>
+      <div className="max-w-xl mx-auto px-6">
+        {/* Header */}
+        <div className="text-center mb-12 opacity-0 animate-fade-up">
+          <p className="text-neutral-400 font-mono text-xs tracking-[0.3em] uppercase mb-4">Configure</p>
+          <h1 className="font-display font-bold text-3xl md:text-4xl text-neutral-900 tracking-tight mb-3">
+            New Archive
+          </h1>
+          <p className="text-neutral-500 text-sm">프로젝트 정보를 입력하고 아카이브를 구성하세요</p>
         </div>
 
-        {/* 더미 데이터 버튼 + Draft 초기화 */}
-        <div className="mb-8 p-4 bg-warm-50 rounded-xl border border-warm-200/50 opacity-0 animate-fade-up delay-100">
+        {/* Quick Fill */}
+        <div className="mb-8 p-4 border border-neutral-200 opacity-0 animate-fade-up delay-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-ink-800">🧪 테스트 데이터로 빠르게 체험</p>
-              <p className="text-xs text-ink-400 mt-0.5">더미 데이터를 자동으로 채워줍니다</p>
+              <p className="text-sm font-medium text-neutral-800 font-mono">Quick Fill</p>
+              <p className="text-xs text-neutral-400 mt-0.5">더미 데이터로 빠르게 체험</p>
             </div>
             <div className="flex items-center gap-2">
               {draftRestored && (
@@ -273,28 +210,27 @@ export default function CreatePage() {
                     setUseDummy(false);
                     setDraftRestored(false);
                     sessionStorage.removeItem(DRAFT_KEY);
-                    toast.info('입력 내용이 초기화되었습니다');
+                    toast.info('초기화되었습니다');
                   }}
-                  className="px-3 py-2 text-xs text-ink-500 border border-ink-200 rounded-lg hover:bg-ink-50 transition-colors"
+                  className="px-3 py-2 text-xs text-neutral-500 border border-neutral-300 hover:bg-neutral-50 transition-colors"
                 >
-                  초기화
+                  Reset
                 </button>
               )}
-              <button onClick={fillDummy} className="px-4 py-2 bg-warm-600 text-white text-sm rounded-lg hover:bg-warm-800 transition-colors">
-                더미 데이터 채우기
+              <button onClick={fillDummy} className="px-4 py-2 bg-neutral-900 text-white text-xs font-medium tracking-wider hover:bg-neutral-800 transition-colors">
+                Fill Demo Data
               </button>
             </div>
           </div>
         </div>
 
-        {/* 폼 */}
+        {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-6 opacity-0 animate-fade-up delay-200">
-          {/* 서비스별 필드 */}
-          <div className="bg-white rounded-2xl border border-ink-100 p-6 space-y-5">
-            <h2 className="font-display font-bold text-lg text-ink-900">기본 정보</h2>
+          {/* Service Fields */}
+          <div className="border border-neutral-200 p-6 space-y-5">
+            <h2 className="font-mono text-sm font-medium text-neutral-900 tracking-wide uppercase">Project Info</h2>
 
             {service.fields.map((field) => {
-              // showWhen 조건 처리
               if (field.showWhen) {
                 const { field: depField, value } = field.showWhen;
                 if (formData[depField] !== value) return null;
@@ -302,7 +238,7 @@ export default function CreatePage() {
 
               return (
                 <div key={field.key}>
-                  <label className="block text-sm font-medium text-ink-800 mb-1.5">
+                  <label className="block text-xs font-medium text-neutral-600 mb-1.5 tracking-wide uppercase">
                     {field.label}
                     {field.required && <span className="text-red-400 ml-0.5">*</span>}
                   </label>
@@ -332,7 +268,7 @@ export default function CreatePage() {
                       value={formData[field.key] || ''}
                       onChange={(e) => handleChange(field.key, e.target.value)}
                     >
-                      <option value="">선택해주세요</option>
+                      <option value="">Select...</option>
                       {field.options.map((opt) => (
                         <option key={opt} value={opt}>{opt}</option>
                       ))}
@@ -352,29 +288,28 @@ export default function CreatePage() {
             })}
           </div>
 
-          {/* 판형 선택 — GET /api/book-specs 실시간 조회 */}
-          <div className="bg-white rounded-2xl border border-ink-100 p-6">
+          {/* Book Spec Selection */}
+          <div className="border border-neutral-200 p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-display font-bold text-lg text-ink-900">판형 선택</h2>
-              {specsLoading && <span className="text-xs text-ink-400 flex items-center gap-1"><span className="spinner" style={{width:12,height:12}} /> API 조회 중...</span>}
+              <h2 className="font-mono text-sm font-medium text-neutral-900 tracking-wide uppercase">Book Format</h2>
+              {specsLoading && <span className="text-xs text-neutral-400 flex items-center gap-1"><span className="spinner" style={{width:12,height:12}} /> Loading...</span>}
             </div>
             <div className="space-y-3">
               {(bookSpecs.length > 0 ? bookSpecs : Object.values(BOOK_SPECS).map(s => ({ bookSpecUid: s.uid, ...s }))).map((s) => {
                 const uid = s.bookSpecUid || s.uid;
-                // API 데이터 우선, 없으면 constants 폴백
                 const displayName = BOOK_SPEC_LABELS[uid] || s.name || uid;
                 const displayDetail = s.width && s.height
-                  ? `${s.width}×${s.height}mm · ${s.coverType || ''} · ${s.bindingType || ''}`.replace(/ · $/, '')
+                  ? `${s.width}x${s.height}mm / ${s.coverType || ''} / ${s.bindingType || ''}`.replace(/ \/ $/, '')
                   : BOOK_SPECS[uid]
-                    ? `${BOOK_SPECS[uid].size} · ${BOOK_SPECS[uid].cover} · ${BOOK_SPECS[uid].binding} · ${BOOK_SPECS[uid].pages}`
+                    ? `${BOOK_SPECS[uid].size} / ${BOOK_SPECS[uid].cover} / ${BOOK_SPECS[uid].binding} / ${BOOK_SPECS[uid].pages}`
                     : s.description || uid;
                 return (
                   <label
                     key={uid}
-                    className={`block p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                    className={`block p-4 border cursor-pointer transition-all ${
                       selectedSpec === uid
-                        ? 'border-warm-600 bg-warm-50'
-                        : 'border-ink-100 hover:border-ink-200'
+                        ? 'border-neutral-900 bg-neutral-50'
+                        : 'border-neutral-200 hover:border-neutral-400'
                     }`}
                   >
                     <div className="flex items-start gap-3">
@@ -384,16 +319,16 @@ export default function CreatePage() {
                         value={uid}
                         checked={selectedSpec === uid}
                         onChange={() => setSelectedSpec(uid)}
-                        className="mt-1 accent-warm-600"
+                        className="mt-1 accent-neutral-900"
                       />
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
-                          <span className="font-medium text-ink-900">{displayName}</span>
+                          <span className="font-medium text-neutral-900 text-sm">{displayName}</span>
                           {uid === service.recommendedSpec && (
-                            <span className="text-xs bg-warm-600 text-white px-2 py-0.5 rounded-full">추천</span>
+                            <span className="text-xs bg-neutral-900 text-white px-2 py-0.5 font-mono">REC</span>
                           )}
                         </div>
-                        <p className="text-sm text-ink-400 mt-1">{displayDetail}</p>
+                        <p className="text-xs text-neutral-500 mt-1 font-mono">{displayDetail}</p>
                       </div>
                     </div>
                   </label>
@@ -402,66 +337,13 @@ export default function CreatePage() {
             </div>
           </div>
 
-          {/* AI 동화 생성 패널 (fairytale 전용) */}
-          {serviceType === 'fairytale' && (
-            <div className="rounded-2xl border-2 border-violet-200 bg-gradient-to-br from-violet-50 to-purple-50 p-6">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-xl">✨</span>
-                <h2 className="font-display font-bold text-lg text-violet-900">AI 동화 자동 생성</h2>
-                <span className="text-xs bg-violet-600 text-white px-2 py-0.5 rounded-full">Gemini AI</span>
-              </div>
-              <p className="text-sm text-violet-700 mb-4 leading-relaxed">
-                위에 입력한 정보를 바탕으로 AI가 10페이지 분량의 동화를 자동으로 집필합니다.<br />
-                생성된 내용은 에디터에서 자유롭게 수정할 수 있습니다.
-              </p>
-
-              {aiError && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">
-                  <p className="font-medium">생성 실패</p>
-                  <p className="mt-0.5">{aiError}</p>
-                </div>
-              )}
-
-              <button
-                type="button"
-                onClick={handleGenerateStory}
-                disabled={aiGenerating}
-                className="w-full py-3 rounded-xl font-bold text-white transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-                style={{ background: aiGenerating ? '#7c3aed80' : 'linear-gradient(135deg, #7c3aed, #a855f7)' }}
-              >
-                {aiGenerating ? (
-                  <span className="flex items-center justify-center gap-3">
-                    <span className="spinner" />
-                    <span>
-                      AI가 <strong>{formData.heroName || '주인공'}</strong>을(를) 위한 동화를 집필 중입니다...
-                    </span>
-                  </span>
-                ) : (
-                  '🪄 AI 동화 생성하기'
-                )}
-              </button>
-
-              {/* 로딩 중 애니메이션 힌트 */}
-              {aiGenerating && (
-                <div className="mt-4 space-y-2">
-                  {['이야기 구조 설계 중...', '캐릭터와 배경 구성 중...', '각 장면 집필 중...'].map((hint, i) => (
-                    <div key={i} className="flex items-center gap-2 text-xs text-violet-500 opacity-0 animate-fade-in" style={{ animationDelay: `${i * 0.8}s`, animationFillMode: 'forwards' }}>
-                      <span className="w-1.5 h-1.5 rounded-full bg-violet-400 inline-block" />
-                      {hint}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* 하단 버튼 */}
+          {/* Submit */}
           <div className="flex gap-3 pt-4">
             <Link href="/" className="btn-secondary flex-1 text-center">
-              뒤로
+              Back
             </Link>
             <button type="submit" className="btn-primary flex-1">
-              {serviceType === 'fairytale' ? '직접 편집하기 →' : '다음: 콘텐츠 편집 →'}
+              Next: Compose
             </button>
           </div>
         </form>
