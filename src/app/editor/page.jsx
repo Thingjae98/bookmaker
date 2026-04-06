@@ -1158,16 +1158,17 @@ export default function EditorPage() {
           </div>
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="block text-xs font-medium text-ink-700">
-                텍스트
-                <span className="ml-1 font-normal text-ink-400">(선택 — 입력 시 텍스트+사진 템플릿 적용)</span>
-              </label>
+              <label className="block text-xs font-medium text-ink-700">텍스트</label>
               <button
                 onClick={() => handleGenerateAiText(item, idx)}
                 disabled={aiTextLoading === idx}
-                className="text-[10px] font-mono font-medium px-2 py-0.5 bg-neutral-900 text-white hover:bg-neutral-700 disabled:opacity-50 transition-colors"
+                className={`text-[10px] font-mono font-medium px-2.5 py-1 rounded transition-all ${
+                  aiTextLoading === idx
+                    ? 'bg-neutral-400 text-white cursor-wait animate-pulse'
+                    : 'bg-neutral-900 text-white hover:bg-neutral-700'
+                }`}
               >
-                {aiTextLoading === idx ? 'AI...' : 'AI TEXT'}
+                {aiTextLoading === idx ? '생성중...' : 'AI TEXT'}
               </button>
             </div>
             <textarea
@@ -1230,9 +1231,13 @@ export default function EditorPage() {
                   <button
                     onClick={() => handleGenerateAiText(item, idx)}
                     disabled={aiTextLoading === idx}
-                    className="text-[10px] font-mono font-medium px-2 py-0.5 bg-neutral-900 text-white hover:bg-neutral-700 disabled:opacity-50 transition-colors"
+                    className={`text-[10px] font-mono font-medium px-2.5 py-1 rounded transition-all ${
+                      aiTextLoading === idx
+                        ? 'bg-neutral-400 text-white cursor-wait animate-pulse'
+                        : 'bg-neutral-900 text-white hover:bg-neutral-700'
+                    }`}
                   >
-                    {aiTextLoading === idx ? 'AI...' : 'AI TEXT'}
+                    {aiTextLoading === idx ? '생성중...' : 'AI TEXT'}
                   </button>
                 </div>
                 <textarea

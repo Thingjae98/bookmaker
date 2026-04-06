@@ -11,6 +11,10 @@ export default function OrdersPage() {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
+  // Webhook 이벤트 로그
+  const [webhookEvents, setWebhookEvents] = useState([]);
+  const [simulatingOrder, setSimulatingOrder] = useState(null);
+
   // 배송지 변경 모달 state
   const [shippingModal, setShippingModal] = useState(false);
   const [shippingForm, setShippingForm] = useState({
@@ -26,6 +30,10 @@ export default function OrdersPage() {
 
   useEffect(() => {
     fetchOrders();
+    fetchWebhookEvents();
+    // 30초마다 Webhook 이벤트 폴링
+    const interval = setInterval(fetchWebhookEvents, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   const fetchOrders = async () => {
@@ -119,6 +127,43 @@ export default function OrdersPage() {
       setShippingError(err.message);
     } finally {
       setShippingLoading(false);
+    }
+  };
+
+  // Webhook 이벤트 로그 조회
+  const fetchWebhookEvents = async () => {
+    try {
+      const res = await fetch('/api/webhooks/sweetbook?limit=50');
+      const data = await res.json();
+      if (data.success) {
+        setWebhookEvents(data.events || []);
+      }
+    } catch (err) {
+      console.error('[Webhook 조회 실패]:', err.message);
+    }
+  };
+
+  // Webhook 상태 변경 시뮬레이션 (로컬 시연용)
+  const handleSimulateWebhook = async (orderUid, currentStatus) => {
+    setSimulatingOrder(orderUid);
+    try {
+      const res = await fetch('/api/webhooks/sweetbook/simulate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderUid, currentStatus }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        // 이벤트 로그 즉시 갱신 + 주문 목록 갱신
+        await Promise.all([fetchWebhookEvents(), fetchOrders()]);
+        if (selectedOrder?.orderUid === orderUid) {
+          await fetchOrderDetail(orderUid);
+        }
+      }
+    } catch (err) {
+      console.error('[시뮬레이션 실패]:', err.message);
+    } finally {
+      setSimulatingOrder(null);
     }
   };
 
@@ -222,6 +267,46 @@ export default function OrdersPage() {
           ))}
         </div>
 
+        {/* Webhook 이벤트 로그 */}
+        {webhookEvents.length > 0 && (
+          <div className="mt-10">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="font-display font-bold text-xl text-ink-900">Webhook 이벤트 로그</h2>
+                <p className="text-ink-400 text-xs mt-1">SweetBook 서버로부터 수신된 주문 상태 변경 이벤트</p>
+              </div>
+              <button onClick={fetchWebhookEvents} className="btn-secondary text-xs !px-3 !py-1.5">
+                새로고침
+              </button>
+            </div>
+            <div className="bg-neutral-950 rounded-xl border border-neutral-800 overflow-hidden">
+              <div className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-x-4 px-4 py-2 bg-neutral-900 text-[10px] font-mono uppercase tracking-wider text-neutral-500 border-b border-neutral-800">
+                <span>시각</span>
+                <span>주문</span>
+                <span>이전</span>
+                <span></span>
+                <span>현재</span>
+              </div>
+              <div className="max-h-[240px] overflow-y-auto divide-y divide-neutral-800/50">
+                {webhookEvents.map((evt) => (
+                  <div key={evt.id} className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-x-4 items-center px-4 py-2 text-xs font-mono hover:bg-neutral-900/50 transition-colors">
+                    <span className="text-neutral-500 text-[10px]">
+                      {new Date(evt.receivedAt).toLocaleTimeString('ko-KR')}
+                    </span>
+                    <span className="text-neutral-300 truncate">
+                      {evt.orderUid?.slice(-8) || '—'}
+                      {evt.simulated && <span className="ml-1.5 text-[9px] text-amber-500 bg-amber-500/10 px-1 py-0.5 rounded">SIM</span>}
+                    </span>
+                    <span className="text-neutral-500">{evt.previousStatus ?? '—'}</span>
+                    <span className="text-neutral-600">→</span>
+                    <span className="text-emerald-400 font-medium">{evt.status}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* 주문 상세 모달 */}
         {selectedOrder && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setSelectedOrder(null)}>
@@ -313,6 +398,27 @@ export default function OrdersPage() {
                       >
                         주문 취소
                       </button>
+                    )}
+
+                    {/* Webhook 시뮬레이션 (로컬 시연용) */}
+                    {selectedOrder.orderStatus < 70 && (
+                      <div className="border-t border-ink-100 pt-4 mt-4">
+                        <p className="text-[10px] font-mono uppercase tracking-wider text-ink-400 mb-2">Webhook 시뮬레이션</p>
+                        <button
+                          onClick={() => handleSimulateWebhook(selectedOrder.orderUid, selectedOrder.orderStatus)}
+                          disabled={simulatingOrder === selectedOrder.orderUid}
+                          className={`w-full py-2 text-xs font-mono rounded-lg border transition-all ${
+                            simulatingOrder === selectedOrder.orderUid
+                              ? 'bg-neutral-100 text-neutral-400 border-neutral-200 cursor-wait animate-pulse'
+                              : 'bg-neutral-900 text-white border-neutral-900 hover:bg-neutral-700'
+                          }`}
+                        >
+                          {simulatingOrder === selectedOrder.orderUid
+                            ? '시뮬레이션 중...'
+                            : `다음 상태로 전이 (현재: ${selectedOrder.orderStatus})`}
+                        </button>
+                        <p className="text-[10px] text-ink-400 mt-1">localhost에서 SweetBook Webhook 수신을 시뮬레이션합니다</p>
+                      </div>
                     )}
                   </div>
                 </>
