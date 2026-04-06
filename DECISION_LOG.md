@@ -5,7 +5,30 @@
 
 ---
 
-## 🎨 2026-04-06 — 갤러리 템플릿(rowGallery, collageGallery) 지원을 위한 다중 사진 업로드 UI 개편
+## 🔧 2026-04-06 — 템플릿 definitions의 binding 속성 기반 단일/다중 사진 UI 초정밀 분기 리팩토링
+
+### 배경
+이전 커밋에서 갤러리 트레이 UI를 추가했으나, 단일 사진 미리보기와 다중 트레이가 동시에 보이거나, 레이아웃 변경 시 기존 단일 사진이 다중 배열로 자연스럽게 이관되지 않는 UX 결함이 있었다. API 페이로드에서도 `page.templateUid`(사용자 선택)와 `page.images`(다중 배열)가 일관되게 연결되지 않았다.
+
+### 결정
+**템플릿 `parameters.definitions[key].binding` 속성을 핀포인트로 감지하여 UI + 페이로드를 완벽히 조건부 스위칭.**
+
+1. **`getGalleryBindingInfo()` 완전 재작성**: 반환 구조를 `{ isGallery, key, type, max }` 형태로 표준화. `key`는 실제 파라미터명(예: `photos`), `type`은 `rowGallery`/`collageGallery`, `max`는 최대 장수(콜라주=9, 행=50)
+2. **좌측 미리보기 영역 완전 분기**: `isGallery === true` → 보라색 다중 트레이(단일 사진 미리보기 숨김), `isGallery === false` → 기존 단일 사진 교체 UI + 빈 슬롯 업로드
+3. **단일→다중 자동 마이그레이션**: 레이아웃(templateUid) 변경 시 새 템플릿에 gallery binding이 있고 기존에 단일 사진(previewUrl)만 있으면 `images[0]`으로 자동 이관
+4. **API 페이로드 정합성**: `contentPageData`에 `templateUid`를 포함시켜 사용자가 직접 선택한 레이아웃 반영. `tplUid` 결정에 `page.templateUid` 최우선 적용. `hasAnyImage = hasImage || hasImages`로 다중 배열도 이미지 존재로 인식
+5. **양면 분할 옵션 갤러리 모드 차단**: 갤러리 모드에서는 양면(Spread) 분할 체크박스 비표시 (상충 방지)
+6. **우측 IIFE 중복 트레이 제거**: 좌측에 통합하여 렌더링 경로 단일화
+
+### 영향 범위
+- `getGalleryBindingInfo()` — 반환 스키마 변경 (`maxImages` → `max`, `binding` → `type`, `isGallery` 추가)
+- `renderLayoutThumbnails()` → `onClick` — 단일→다중 마이그레이션 로직 주입
+- 인라인 편집 패널 좌측 컬럼 — IIFE로 갤러리/단일/빈 슬롯 3-way 분기
+- `handleCreateBook` — `page.templateUid` 우선 사용, `hasAnyImage` 확장
+
+---
+
+## 🎨 2026-04-06 — 갤러리 템플릿(rowGallery, collageGallery) 지원을 위한 다중 사진 업로드 UI 최초 구현
 
 ### 배경
 SweetBook 템플릿의 `parameters.definitions` 중 `binding`이 `rowGallery` 또는 `collageGallery`인 파라미터는 단일 이미지 URL이 아니라 **이미지 URL 배열**을 요구한다. 기존 에디터 우측 편집 패널은 사진 1장 교체(Replace) 방식만 지원하여, 갤러리 템플릿을 사용하면 배열에 사진이 1장만 들어가는 문제가 있었다.
@@ -20,8 +43,8 @@ SweetBook 템플릿의 `parameters.definitions` 중 `binding`이 `rowGallery` �
 
 ### 영향 범위
 - `src/app/editor/page.jsx` — 인라인 편집 패널 내지 섹션에 갤러리 트레이 UI 추가
-- gallery 아이템에 `images: string[]` 프로퍼티 추가 (기존 `imageUrl` 단일 사진과 공존)
-- `contentPageData` 빌드 시 `page.images` 배열 그대로 API 전달 (기존 로직 호환)
+- gallery 아이템에 `images: { id, file, previewUrl }[]` 프로퍼티 추가 (기존 `imageUrl` 단일 사진과 공존)
+- `contentPageData` 빌드 시 `page.images` 배열의 File 객체를 Photos API로 업로드 후 URL 배열로 변환하여 전달
 
 ---
 
