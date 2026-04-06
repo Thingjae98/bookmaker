@@ -324,15 +324,16 @@ export default function EditorPage() {
       }
 
       // ── 내지 24장 (pages 배열 전체 — 표지에 빼앗기지 않음) ──
+      const svcKey = data.serviceType || 'archive';
       initialPages.forEach((p, i) => {
         items.push({
           id:          `init-${i}-${ts}`,
           file:        null,
-          previewUrl:  makePageUrl(p, `${data.serviceType}-${i}`),
+          previewUrl:  makePageUrl(p, `${svcKey}-${i}`),
           role:        'content',
-          title:       p.title       || '',
-          text:        p.text        || p.teacherComment || '',
-          date:        p.date        || new Date().toISOString().slice(0, 10),
+          title:       p.title || '',
+          text:        p.text  || '',
+          date:        p.date  || new Date().toISOString().slice(0, 10),
           templateUid: null,
           isLandscape: p.isLandscape || false,
           useSpread:   false,
@@ -1233,14 +1234,46 @@ export default function EditorPage() {
       }
       addLog(`📘 뒤표지 URL: ${coverBackUrl.slice(0, 70)}`);
 
+      // ── STEP 2-b: 갤러리 다중 사진(page.images) 사전 업로드 ──
+      // POST /contents 루프 전에, 로컬 File 객체를 모두 서버 URL로 변환해 둔다.
+      // 이렇게 하면 POST /contents 시점에는 모든 이미지가 서버 참조 가능한 URL이다.
+      const svcKey = session.serviceType || 'archive';
+
+      // 내지별 다중 사진 사전 업로드 맵: ci → string[]
+      const preUploadedImagesMap = {};
+      for (let ci = 0; ci < contentItems.length; ci++) {
+        const item = contentItems[ci];
+        if (item.images && item.images.length > 0) {
+          addLog(`🖼️ 내지 ${ci + 1}: 다중 사진 ${item.images.length}장 사전 업로드 중...`);
+          const urls = [];
+          for (const img of item.images) {
+            if (img.file) {
+              const url = await uploadFile(img.file, `내지 ${ci + 1} 갤러리`);
+              if (url) urls.push(url);
+            } else if (img.previewUrl?.startsWith('http')) {
+              urls.push(img.previewUrl);
+            }
+          }
+          if (urls.length > 0) {
+            preUploadedImagesMap[ci] = urls;
+            addLog(`✅ 내지 ${ci + 1}: 다중 사진 ${urls.length}장 사전 업로드 완료`);
+          }
+        }
+      }
+
       // ── 내지 사진 업로드 — contentFileMap[ci] 기준 (절대 인덱스 매핑) ──
       const contentPageData = [];
       addLog(`📄 내지 ${contentItems.length}장 처리 중...`);
 
+      // contentFileMap + preUploadedImagesMap 스냅샷 로그
+      console.log('[contentFileMap 스냅샷]', contentFileMap);
+      console.log('[preUploadedImagesMap 스냅샷]', preUploadedImagesMap);
+      try { console.table(Object.entries(contentFileMap).map(([k,v]) => ({ index: k, type: v?.constructor?.name, size: v?.size }))); } catch(e) { /* 빈 맵 */ }
+
       for (let ci = 0; ci < contentItems.length; ci++) {
         const item          = contentItems[ci];
         const fileToUpload  = contentFileMap[ci]; // 절대 인덱스로 파일 취득
-        const fallbackUrl   = `https://picsum.photos/seed/${session.serviceType}-c${ci}/600/600`;
+        const fallbackUrl   = `https://picsum.photos/seed/${svcKey}-c${ci}/600/600`;
 
         if (item.useSpread && item.isLandscape && fileToUpload) {
           // Canvas API 양면 분할 (가로형 사진 → 좌/우 2페이지)
@@ -1251,14 +1284,14 @@ export default function EditorPage() {
             const rightFile = new File([rb], 'spread-right.jpg', { type: 'image/jpeg' });
             const leftUrl   = (await uploadFile(leftFile,  `내지 ${ci + 1}-L`)) || fallbackUrl;
             const rightUrl  = (await uploadFile(rightFile, `내지 ${ci + 1}-R`)) || fallbackUrl;
-            contentPageData.push({ imageUrl: leftUrl,  text: item.text || '', title: item.title || '', date: item.date, isSpreadPage: true, params: item.params || {} });
-            contentPageData.push({ imageUrl: rightUrl, text: '',               title: '',               date: item.date, isSpreadPage: true, params: {} });
+            contentPageData.push({ imageUrl: leftUrl,  text: item.text || '', title: item.title || '', date: item.date || new Date().toISOString().slice(0, 10), isSpreadPage: true, params: item.params || {} });
+            contentPageData.push({ imageUrl: rightUrl, text: '',               title: '',               date: item.date || new Date().toISOString().slice(0, 10), isSpreadPage: true, params: {} });
             addLog(`✅ 양면 분할 완료 → 2페이지 (내지 ${ci + 1})`);
           } catch (e) {
             addLog(`⚠️ 양면 분할 실패(${e.message}) — 원본 단일 처리`);
             console.dir({ spreadSplitError: e, ci });
             const singleUrl = (await uploadFile(fileToUpload, `내지 ${ci + 1}`)) || fallbackUrl;
-            contentPageData.push({ imageUrl: singleUrl, text: item.text || '', title: item.title || '', date: item.date, params: item.params || {} });
+            contentPageData.push({ imageUrl: singleUrl, text: item.text || '', title: item.title || '', date: item.date || new Date().toISOString().slice(0, 10), params: item.params || {} });
           }
         } else {
           // 일반 내지: contentFileMap → previewUrl(http) → 빈 슬롯이면 null → 아니면 fallback
@@ -1276,26 +1309,10 @@ export default function EditorPage() {
             addLog(`📎 내지 ${ci + 1}: 파일 없음(isBlankSlot=${item.isBlankSlot}) → picsum fallback`);
           }
           // isBlankSlot = true 이면 imgUrl = null 유지 → TPL_TEXT_ONLY로 전송
-          // 다중 사진(images 배열) — 갤러리 바인딩용 URL 배열 구성
-          let imagesArr = null;
-          if (item.images && item.images.length > 0) {
-            addLog(`🖼️ 내지 ${ci + 1}: 다중 사진 ${item.images.length}장 업로드 중...`);
-            const uploadedUrls = [];
-            for (const img of item.images) {
-              if (img.file) {
-                // File 객체가 있으면 Photos API로 업로드
-                const url = await uploadFile(img.file, `내지 ${ci + 1} 갤러리`);
-                if (url) uploadedUrls.push(url);
-              } else if (img.previewUrl?.startsWith('http')) {
-                // 이미 http URL이면 그대로 사용 (더미/외부 URL)
-                uploadedUrls.push(img.previewUrl);
-              }
-            }
-            if (uploadedUrls.length > 0) {
-              imagesArr = uploadedUrls;
-              addLog(`✅ 내지 ${ci + 1}: 다중 사진 ${uploadedUrls.length}장 업로드 완료`);
-            }
-          }
+
+          // 사전 업로드된 다중 사진 URL 배열 연결
+          const imagesArr = preUploadedImagesMap[ci] || null;
+
           contentPageData.push({
             imageUrl:    imgUrl,
             images:      imagesArr,
@@ -1308,7 +1325,7 @@ export default function EditorPage() {
         }
       }
       setUploadingPhoto(false);
-      addLog(`✅ 내지 처리 완료 — 실제 페이지 ${contentPageData.length}개 (이미지 있음: ${contentPageData.filter(p => p.imageUrl).length}개)`);
+      addLog(`✅ 내지 처리 완료 — 실제 페이지 ${contentPageData.length}개 (이미지 있음: ${contentPageData.filter(p => p.imageUrl).length}개, 갤러리 있음: ${contentPageData.filter(p => p.images).length}개)`);
 
       // ── 판형 최소 페이지 충족 — pageMin + pageIncrement 수학적 준수 ──
       const specPageMin       = BOOK_SPECS[bookSpecUid]?.pageMin       || 24;
@@ -1415,7 +1432,7 @@ export default function EditorPage() {
         addLog('❌ 전송할 내지 페이지가 0장입니다 — 최종화가 실패할 수 있습니다.');
         console.error('[handleCreateBook] paddedPages가 비어있음. contentItems:', contentItems.length, 'contentPageData:', contentPageData.length);
       }
-      let contentsFailCount = 0;
+      let contentsSuccessCount = 0;
 
       for (let i = 0; i < paddedPages.length; i++) {
         const page = paddedPages[i];
@@ -1476,10 +1493,13 @@ export default function EditorPage() {
               else if (key === 'subTitle' || key === 'subtitle') params[key] = fd.bookDescription || service.subtitle || ' ';
               else params[key] = ' '; // required text 필드 빈값 방지 — 절대 undefined 전송 금지
             } else if (binding === 'rowGallery' || binding === 'collageGallery') {
-              // 갤러리 바인딩: 현재 페이지 스코프 내 사진만 배열로 전달
-              // page.images가 있으면 다중 사진 배열, 없으면 단일 사진을 배열로 감쌈
-              const images = page.images || (hasImage ? [page.imageUrl] : []);
+              // 갤러리 바인딩: 사전 업로드된 URL 배열 우선 사용, 없으면 단일 사진 배열 폴백
+              // SDK가 내부적으로 repeated FormData append 처리 (동일 key로 배열 요소 반복 전송)
+              const images = page.images && page.images.length > 0
+                ? page.images
+                : (hasImage ? [page.imageUrl] : [`https://picsum.photos/seed/${session.serviceType || 'archive'}-gallery-${i}/600/600`]);
               params[key] = images;
+              console.log(`[갤러리 바인딩] 페이지 ${i + 1} key=${key} binding=${binding} urls=${images.length}개`);
             } else {
               // 알 수 없는 바인딩 타입 → 빈 문자열로 안전 처리
               params[key] = ' ';
@@ -1503,40 +1523,28 @@ export default function EditorPage() {
         if (i === 0 || i % 5 === 0 || i === paddedPages.length - 1) {
           console.log(`[내지 ${i + 1}/${paddedPages.length}] tpl=${tplUid} hasImg=${hasImage} hasText=${hasText} paramKeys=[${Object.keys(params).join(',')}]`);
         }
-        try {
-          const r = await fetch(`/api/books/${uid}/contents`, {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ templateUid: tplUid, parameters: params, breakBefore: resolvedBreakBefore }),
-          });
-          const d = await r.json();
-          if (!d.success) {
-            contentsFailCount++;
-            const detail = d.details ? JSON.stringify(d.details) : '';
-            addLog(`⚠️ 페이지 ${i + 1} 실패: ${d.message} | tpl=${tplUid} hasImg=${hasImage} | ${detail}`);
-            console.dir({ contentsError: d, page, tplUid, params, pageIndex: i });
-          } else {
-            if (i === 0 || i % 5 === 0 || i === paddedPages.length - 1) {
-              addLog(`✅ 내지 ${i + 1}/${paddedPages.length} 전송 성공`);
-            }
-          }
-        } catch (err) {
-          contentsFailCount++;
-          addLog(`⚠️ 페이지 ${i + 1} 전송 예외: ${err.message}`);
-          console.dir({ contentsException: err, pageIndex: i });
+        // ── CRITICAL: 내지 전송 실패 시 즉시 throw — finalize 진입 차단 ──
+        const r = await fetch(`/api/books/${uid}/contents`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ templateUid: tplUid, parameters: params, breakBefore: resolvedBreakBefore }),
+        });
+        const d = await r.json();
+        if (!d.success) {
+          const detail = d.details ? JSON.stringify(d.details) : '';
+          addLog(`❌ 페이지 ${i + 1} 전송 실패 — 파이프라인 중단: ${d.message} | tpl=${tplUid} | ${detail}`);
+          console.dir({ contentsError: d, page, tplUid, params, pageIndex: i });
+          throw new Error(`내지 ${i + 1}페이지 전송 실패: ${d.message || 'unknown'}. 최종화를 진행할 수 없습니다.`);
+        }
+        contentsSuccessCount++;
+        if (i === 0 || i % 5 === 0 || i === paddedPages.length - 1) {
+          addLog(`✅ 내지 ${i + 1}/${paddedPages.length} 전송 성공`);
         }
       }
-      if (contentsFailCount > 0) {
-        addLog(`⚠️ 내지 전송 중 ${contentsFailCount}페이지 실패 (${paddedPages.length - contentsFailCount}페이지 성공)`);
-      } else {
-        addLog(`✅ 내지 ${paddedPages.length}페이지 모두 완료`);
-      }
+      // 모든 내지 전송 성공 (실패 시 위에서 throw됨)
+      addLog(`✅ 내지 ${contentsSuccessCount}/${paddedPages.length}페이지 모두 전송 완료`);
 
       // ── STEP 5: 최종화 ────────────────────────────────────────
-      if (contentsFailCount === paddedPages.length && paddedPages.length > 0) {
-        addLog(`❌ 내지 ${paddedPages.length}페이지 전부 실패 — 최종화를 시도하지만 400 에러가 예상됩니다.`);
-        console.error('[handleCreateBook] 모든 내지 전송 실패. tplMap:', tplMap, 'bookSpecUid:', bookSpecUid);
-      }
       addLog('🔒 최종화 중...');
       const finalRes  = await fetch(`/api/books/${uid}/finalize`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },

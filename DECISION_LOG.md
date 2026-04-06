@@ -5,6 +5,30 @@
 
 ---
 
+## 📋 2026-04-06 — 더미 데이터 정화 및 내지 전송 파이프라인 완전 복구
+
+### 증상
+- ARCHIVE 피벗 후에도 `POST /books/{bookUid}/finalize`에서 400 에러 지속
+- 낡은 더미 데이터 필드(`p.teacherComment` 등)가 새 템플릿 스펙과 충돌
+- 내지 `POST /contents` 일부 페이지 실패에도 finalize가 진행되어 빈 책에서 400
+
+### 근본 원인 (3가지)
+1. **낡은 더미 데이터 참조**: 갤러리 초기화에서 `p.teacherComment`(유치원 전용 필드) 참조 → 포트폴리오 더미에는 해당 필드 없음 → undefined 전송
+2. **갤러리 다중 사진 미업로드**: `page.images` 배열(rowGallery/collageGallery 바인딩용)에 대한 사전 업로드 로직 부재 → File 객체가 API에 직접 전달되어 실패
+3. **내지 실패 묵인**: `contentsFailCount++` 후 루프 계속 → 전체/부분 실패 상태에서 finalize 진입 → 400
+
+### 해결
+1. **더미 데이터 정화**: `p.teacherComment` → `p.text || ''`로 교체, `svcKey` 안전 폴백 추가
+2. **갤러리 사전 업로드 파이프라인**: `preUploadedImagesMap` 도입 — 내지 루프 진입 전 `item.images` 배열의 File 객체를 Photos API로 일괄 업로드, URL 배열로 변환 후 `contentPageData.images`에 연결. `console.table`로 매핑 검증 로그 출력
+3. **CRITICAL: 내지 전송 실패 즉시 throw**: `contentsFailCount++; continue` 패턴 제거 → `if (!d.success) throw Error(...)` 로 변경. 단 1페이지라도 실패하면 finalize 진입 자체를 차단하여 빈 책 400 에러를 원천 방지
+4. **갤러리 배열 직렬화 개선**: rowGallery/collageGallery 바인딩 시 사전 업로드된 URL 배열 우선 사용, 빈 배열 시 picsum fallback으로 안전 처리. 진단 로그(`console.log`) 추가
+
+### 교훈
+- "실패해도 계속 진행"은 UI 수준에서는 합리적이지만, API 트랜잭션 파이프라인에서는 치명적. 내지 전송은 all-or-nothing 시맨틱이 필요
+- 더미 데이터 필드명은 서비스 피벗 시 반드시 함께 마이그레이션해야 함
+
+---
+
 ## 📋 2026-04-06 — 동적 폼 도입 후 400 Finalize 에러: 내지 전송 루프 복구 및 최소 페이지 Padding 안전화
 
 ### 증상
