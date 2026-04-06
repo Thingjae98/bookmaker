@@ -5,6 +5,26 @@
 
 ---
 
+## 📋 2026-04-06 — 버그 H: 동적 폼 미표시 및 HTTP 500 에러 해결
+
+### 증상
+1. 동적 폼이 레거시 폼(제목/날짜/텍스트)으로 폴백되어 템플릿별 고유 필드가 표시되지 않음
+2. 내지 추가 시 HTTP 500 에러 대량 발생 (`tpl=1aHHt1g7uHjw`)
+
+### 근본 원인: definitions 누락 파이프라인
+- **데이터 플로우**: SweetBook API 목록 → sessionStorage → 비동기 보강(상세 조회) → categoryGroups → contentTpls 맵
+- **실패 지점**: 비동기 보강에서 일부 템플릿의 상세 조회가 실패/null 반환 → `parameters.definitions` 없이 categoryGroups에 등록 → `contentTpls[tplUid]`가 undefined → `getTextDefinitions()` 빈 배열 반환 → 레거시 폼 폴백
+- **500 에러 원인**: definitions 없는 템플릿에 레거시 params(`date`, `title`, `diaryText`, `photo1`)가 전송 → 실제 템플릿의 파라미터 스키마와 불일치 → SweetBook 서버 500
+
+### 해결: 3단계 definitions 탐색 + 온디맨드 보강
+1. **`findDefinitions(tplUid)` 함수**: contentTpls 맵 → catGroup.all 직접 탐색 → 전체 카테고리 순회, 3단계 폴백
+2. **레이아웃 선택 시 온디맨드 보강**: `renderLayoutThumbnails` onClick에서 definitions 없는 템플릿 선택 시 즉시 `GET /api/templates/{uid}` 호출하여 캐시 주입
+3. **handleCreateBook 온디맨드 보강**: 내지 추가 루프에서 definitions 비어있으면 API 직접 조회 → 올바른 파라미터 빌드
+4. **비동기 보강 실패 로깅**: 기존 silent catch → console.warn으로 상세 로그 출력
+5. **`getGalleryBindingInfo`도 `findDefinitions` 통일**: 갤러리 모드 감지 정확도 향상
+
+---
+
 ## 📋 2026-04-06 — 템플릿 definitions 기반 동적 폼 렌더링 도입
 
 ### 배경

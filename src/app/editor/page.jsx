@@ -210,8 +210,16 @@ export default function EditorPage() {
               try {
                 const res = await fetch(`/api/templates/${t.templateUid}`);
                 const d = await res.json();
-                return { ...t, parameters: (d?.data || d)?.parameters || null };
-              } catch { return t; }
+                const enriched = d?.data || d;
+                const params = enriched?.parameters || null;
+                if (!params?.definitions) {
+                  console.warn(`[템플릿 보강 실패] ${t.templateUid} — definitions 없음`, enriched);
+                }
+                return { ...t, parameters: params };
+              } catch (err) {
+                console.warn(`[템플릿 상세 조회 실패] ${t.templateUid}:`, err.message);
+                return t;
+              }
             })
           );
           const groups = buildCategoryGroups(detailed);
@@ -731,13 +739,29 @@ export default function EditorPage() {
               <button
                 key={tpl.templateUid}
                 type="button"
-                onClick={() => {
+                onClick={async () => {
                   const updates = { templateUid: tpl.templateUid };
+                  // ── 온디맨드 definitions 보강: tpl에 definitions 없으면 즉시 상세 조회 ──
+                  let resolvedDefs = tpl.parameters?.definitions;
+                  if (!resolvedDefs) {
+                    try {
+                      const res = await fetch(`/api/templates/${tpl.templateUid}`);
+                      const d = await res.json();
+                      const enrichedParams = (d?.data || d)?.parameters || null;
+                      if (enrichedParams?.definitions) {
+                        resolvedDefs = enrichedParams.definitions;
+                        // categoryGroups의 원본 템플릿 객체에 definitions 주입 (캐시 역할)
+                        tpl.parameters = enrichedParams;
+                        console.log(`[온디맨드 보강 성공] ${tpl.templateUid}:`, Object.keys(resolvedDefs));
+                      }
+                    } catch (err) {
+                      console.warn(`[온디맨드 보강 실패] ${tpl.templateUid}:`, err.message);
+                    }
+                  }
                   // 단일→다중 마이그레이션: 새 템플릿에 갤러리 바인딩이 있고,
                   // 현재 아이템에 단일 사진(previewUrl)은 있지만 images 배열이 없으면
                   // 기존 단일 사진을 images[0]으로 자동 이관
-                  const newDefs = activeCatGroup?.all?.find(t => t.templateUid === tpl.templateUid)?.parameters?.definitions;
-                  const hasGalleryBinding = newDefs && Object.values(newDefs).some(d => d.binding === 'rowGallery' || d.binding === 'collageGallery');
+                  const hasGalleryBinding = resolvedDefs && Object.values(resolvedDefs).some(d => d.binding === 'rowGallery' || d.binding === 'collageGallery');
                   const currentItem = gallery[idx];
                   if (hasGalleryBinding && currentItem?.previewUrl && (!currentItem.images || currentItem.images.length === 0)) {
                     updates.images = [{
@@ -781,12 +805,11 @@ export default function EditorPage() {
   // 반환: { isGallery: true, key: 'photos', type: 'rowGallery'|'collageGallery', max: number }
   //       또는 null (갤러리 바인딩 없음 = 일반 단일 사진 템플릿)
   const getGalleryBindingInfo = (item) => {
-    if (!item || !activeCatGroup) return null;
+    if (!item) return null;
     const tplUid = item.templateUid;
     if (!tplUid) return null;
-    // 1순위: 카테고리 tplMap의 contentTpls에서 definitions 조회
-    const tplMap = categoryToTplMap(activeCatGroup);
-    const defs = tplMap.contentTpls[tplUid];
+    // findDefinitions 다층 탐색 (contentTpls → catGroup.all → 전체 순회)
+    const defs = findDefinitions(tplUid);
     if (!defs) return null;
     // definitions 순회 — binding이 rowGallery 또는 collageGallery인 파라미터 키 탐색
     for (const [key, def] of Object.entries(defs)) {
@@ -800,19 +823,43 @@ export default function EditorPage() {
     return null;
   };
 
+  // ── 템플릿 UID → definitions 탐색 (다층 폴백) ──────────────────
+  // contentTpls 맵에 없더라도 catGroup.all에서 직접 찾아보는 안전망
+  const findDefinitions = (tplUid) => {
+    if (!tplUid) return null;
+    // 1순위: contentTpls 맵 (정상 경로)
+    if (activeCatGroup) {
+      const tplMap = categoryToTplMap(activeCatGroup);
+      if (tplMap.contentTpls[tplUid]) return tplMap.contentTpls[tplUid];
+      // 2순위: catGroup.all에서 직접 탐색 (비동기 보강 실패 대비)
+      const found = activeCatGroup.all?.find((t) => t.templateUid === tplUid);
+      if (found?.parameters?.definitions) return found.parameters.definitions;
+    }
+    // 3순위: 전체 카테고리 그룹 순회
+    for (const cat of Object.values(categoryGroups)) {
+      const found = cat.all?.find((t) => t.templateUid === tplUid);
+      if (found?.parameters?.definitions) return found.parameters.definitions;
+    }
+    return null;
+  };
+
   // ── 템플릿 definitions에서 텍스트 바인딩 필드 추출 ──────────────
-  // 현재 아이템의 templateUid → definitions → binding==='text'인 필드만 반환
   // file / rowGallery / collageGallery는 별도 UI(사진 업로드/갤러리 트레이)가 있으므로 제외
   const getTextDefinitions = (item) => {
-    if (!item || !activeCatGroup) return [];
+    if (!item) return [];
     const tplUid = item.templateUid;
     if (!tplUid) return [];
-    const tplMap = categoryToTplMap(activeCatGroup);
-    const defs = tplMap.contentTpls[tplUid];
+    const defs = findDefinitions(tplUid);
     if (!defs) return [];
     return Object.entries(defs)
       .filter(([, def]) => def.binding === 'text')
       .map(([key, def]) => ({ key, ...def }));
+  };
+
+  // ── 템플릿 definitions에서 모든 필드(file 포함) 추출 ──────────
+  const getAllDefinitions = (tplUid) => {
+    const defs = findDefinitions(tplUid);
+    return defs ? Object.entries(defs) : [];
   };
 
   // ── 텍스트 바인딩 키 → 사용자 친화적 라벨 매핑 ──────────────────
@@ -1299,7 +1346,7 @@ export default function EditorPage() {
       }
       addLog(`🎨 표지 추가 중... (템플릿: ${coverTplUid})`);
       // 표지 파라미터를 definitions 기반으로 빌드
-      const coverDefs = tplMap.contentTpls[coverTplUid] || {};
+      const coverDefs = tplMap.contentTpls[coverTplUid] || findDefinitions(coverTplUid) || {};
       const dateRange = fd.period || fd.semester
         ? `${fd.year || new Date().getFullYear()}년 ${fd.semester || fd.period}`
         : String(new Date().getFullYear());
@@ -1376,8 +1423,20 @@ export default function EditorPage() {
         } else {
           tplUid = tplMap.textOnly;
         }
-        // definitions 기반 파라미터 빌드
-        const contentDefs = tplMap.contentTpls[tplUid] || {};
+        // definitions 기반 파라미터 빌드 — findDefinitions 다층 탐색 + 온디맨드 보강
+        let contentDefs = tplMap.contentTpls[tplUid] || findDefinitions(tplUid) || {};
+        // 온디맨드 보강: definitions가 여전히 비어있으면 API에서 직접 조회
+        if (Object.keys(contentDefs).length === 0 && tplUid) {
+          try {
+            const tplRes = await fetch(`/api/templates/${tplUid}`);
+            const tplData = await tplRes.json();
+            const fetchedDefs = (tplData?.data || tplData)?.parameters?.definitions;
+            if (fetchedDefs && Object.keys(fetchedDefs).length > 0) {
+              contentDefs = fetchedDefs;
+              addLog(`🔧 템플릿 ${tplUid} definitions 온디맨드 보강 성공 (${Object.keys(fetchedDefs).length}개 필드)`);
+            }
+          } catch (e) { /* 무시 — 레거시 폴백 */ }
+        }
         const params = {};
         if (Object.keys(contentDefs).length > 0) {
           Object.entries(contentDefs).forEach(([key, def]) => {
