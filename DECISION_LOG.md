@@ -178,6 +178,47 @@ SweetBook Photos API는 `fileName`(`photo260404064434599.PNG`)을 반환. 이것
 
 ---
 
+## ADR-09 — 로컬 이미지 경로 안전 처리 (Preview 흰 화면 수정)
+
+### 문제
+더미 데이터 또는 로컬 이미지(`/images/portfolio/...`)를 사용한 페이지가 최종화 후 미리보기(preview)에서 흰 화면으로 표시. 텍스트만 렌더링되고 이미지 영역이 비어 있음.
+
+### 근본 원인
+두 곳의 URL 검증 함수가 로컬 경로(`/`로 시작)를 유효하지 않은 URL로 거부:
+- `resolveImageUrl()` (preview/page.jsx): `^(https?:|blob:|data:)` 정규식에 `/images/...` 불매칭 → null 반환
+- `safePreviewUrl()` (editor/page.jsx): 동일 정규식 → 에디터에서 미리보기 데이터 저장 시 로컬 경로 누락
+
+### 결정
+두 함수 모두에 `|| src.startsWith('/')` 조건 추가:
+```javascript
+if (/^(https?:|blob:|data:)/i.test(src) || src.startsWith('/')) return src;
+```
+
+### 결과
+로컬 이미지 + picsum + 업로드 이미지 모두 미리보기에서 정상 렌더링.
+
+---
+
+## ADR-10 — Gemini 기반 페이지별 AI 텍스트 생성
+
+### 배경
+24페이지의 회고/캡션 텍스트를 사용자가 직접 작성하는 것은 높은 진입 장벽. Create 페이지에서 입력한 프로젝트 정보를 활용해 AI가 초안을 생성해 주는 기능 필요.
+
+### 결정
+- `/api/generate-page-text` API Route 신설 — Google Gemini API 호출
+- 모델 폴백 체인: `gemini-flash-lite-latest` → `gemini-2.5-flash` → 규칙 기반 폴백 텍스트
+- 프롬프트 컨텍스트: bookTitle, authorName, role, techStack, period, bookDescription + 페이지 제목/인덱스
+- 에디터 편집 패널에 `AI TEXT` 버튼 추가 — 레거시 textarea와 동적 long text 필드 모두 지원
+- 생성된 텍스트는 사용자가 자유롭게 수정 가능 (비파괴적)
+
+### UI
+편집 패널 내 텍스트 입력 필드 옆에 `AI TEXT` 버튼 (로딩 시 `AI...` 표시). 클릭 시 해당 페이지의 텍스트 필드에 AI 생성 텍스트 자동 입력.
+
+### 결과
+한 번의 클릭으로 프로젝트 맥락에 맞는 2~3문장 회고 텍스트 자동 생성. 전 템플릿 카테고리 호환.
+
+---
+
 ## 이전 디버깅 기록 요약
 
 | 버그 | 원인 | 해결 |

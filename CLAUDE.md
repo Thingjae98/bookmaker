@@ -32,6 +32,7 @@
 | 프론트엔드 | React | 18.x |
 | 스타일링 | Tailwind CSS | 3.x |
 | API 클라이언트 | bookprintapi-nodejs-sdk | 1.x |
+| AI 텍스트 생성 | Google Gemini API (@google/generative-ai) | latest |
 
 ### 사용하면 안 되는 것
 - TypeScript, 외부 상태관리 라이브러리, DB
@@ -52,7 +53,7 @@ bookmaker/
 │   │   ├── preview/page.jsx     # 미리보기 & 견적
 │   │   ├── order/page.jsx       # 배송지 + 주문
 │   │   ├── orders/page.jsx      # 주문 내역
-│   │   └── api/                 # 백엔드 API 프록시
+│   │   └── api/                 # 백엔드 API 프록시 + AI 텍스트 생성
 │   ├── components/              # Header, StepIndicator, Toast 등
 │   ├── lib/                     # sweetbook.js, constants.js, fetchWithRetry.js
 │   └── data/dummy.js            # 포트폴리오 더미 데이터 (24p)
@@ -86,6 +87,8 @@ bookmaker/
 - `breakBefore` 안전 기본값: `'page'` — 1 content = 1 물리적 페이지 보장
 - **Auto Compose**: 갤러리 이미지를 자동으로 표지/내지 배치 (24~130p, 빈 슬롯 자동 패딩)
 - **로컬 이미지 지원**: `public/images/portfolio/` 경로 → 프리뷰 표시 + API 업로드 시 fetch→File 변환
+- **AI 텍스트 생성**: 에디터 내 `AI TEXT` 버튼 → `/api/generate-page-text` → Gemini API로 페이지별 회고/캡션 자동 작성
+- **로컬 경로 안전 처리**: `resolveImageUrl()` + `safePreviewUrl()` — `/images/...` 로컬 경로도 유효 URL로 인정
 
 ### 판형 (BookSpec)
 - `SQUAREBOOK_HC` — 243×248mm, 하드커버, PUR 무선철, 24~130p (**기본**)
@@ -137,7 +140,8 @@ bookmaker/
 
 ### P2 — 면접 후 개선
 - [x] Auto Compose — 이미지 기반 자동 페이지 구성 (규칙 기반 배치, 24~130p 지원)
-- [ ] AI 텍스트 생성 — 에디터 내 페이지별 회고/캡션 AI 자동 작성 (Vision API 활용)
+- [x] AI 텍스트 생성 — 에디터 내 페이지별 회고/캡션 Gemini AI 자동 작성 (AI TEXT 버튼)
+- [x] 로컬 이미지 미리보기 수정 — resolveImageUrl + safePreviewUrl 로컬 경로(`/`) 지원
 - [ ] 임시저장 & 이어서 편집 (localStorage/IndexedDB → Orders 페이지 연동)
 - [ ] Webhook 상태 동기화 로직
 - [ ] 사용자 인증 (NextAuth)

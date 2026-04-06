@@ -1083,6 +1083,50 @@ export default function EditorPage() {
   const isDateField = (key) =>
     ['date', 'dateLabel', 'dayLabel'].includes(key);
 
+  // ── AI 텍스트 생성 (Gemini API) ────────────────────────────
+  const [aiTextLoading, setAiTextLoading] = useState(null); // 로딩 중인 idx
+  const handleGenerateAiText = async (item, idx) => {
+    setAiTextLoading(idx);
+    try {
+      const fd = session?.formData || {};
+      const contentItems = gallery.filter(g => g.role === 'content');
+      const pageIndex = contentItems.indexOf(item);
+      const res = await fetch('/api/generate-page-text', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bookTitle:       fd.bookTitle || '',
+          authorName:      fd.authorName || '',
+          bookDescription: fd.bookDescription || '',
+          techStack:       fd.techStack || '',
+          role:            fd.role || '',
+          period:          fd.period || '',
+          pageTitle:       item.title || '',
+          pageIndex:       pageIndex >= 0 ? pageIndex : idx,
+          totalPages:      contentItems.length || 24,
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.text) {
+        // 레거시 text 필드 + params 동적 필드 동시 업데이트
+        const textKey = getTextDefinitions(item).find(d => isLongTextField(d.key))?.key;
+        const updates = { text: data.text };
+        if (textKey) {
+          updates.params = { ...item.params, [textKey]: data.text };
+        }
+        updateGalleryItem(idx, updates);
+        toast.success('AI 텍스트가 생성됐습니다');
+      } else {
+        toast.error(data.message || 'AI 텍스트 생성 실패');
+      }
+    } catch (err) {
+      console.error('AI 텍스트 생성 오류:', err);
+      toast.error('AI 텍스트 생성 중 오류가 발생했습니다');
+    } finally {
+      setAiTextLoading(null);
+    }
+  };
+
   // ── 동적 폼 렌더링 — 선택된 템플릿의 text binding 필드를 자동 입력창으로 변환 ──
   const renderDynamicTextFields = (item, idx) => {
     const textDefs = getTextDefinitions(item);
@@ -1113,10 +1157,19 @@ export default function EditorPage() {
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-ink-700 mb-1">
-              텍스트
-              <span className="ml-1 font-normal text-ink-400">(선택 — 입력 시 텍스트+사진 템플릿 적용)</span>
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-medium text-ink-700">
+                텍스트
+                <span className="ml-1 font-normal text-ink-400">(선택 — 입력 시 텍스트+사진 템플릿 적용)</span>
+              </label>
+              <button
+                onClick={() => handleGenerateAiText(item, idx)}
+                disabled={aiTextLoading === idx}
+                className="text-[10px] font-mono font-medium px-2 py-0.5 bg-neutral-900 text-white hover:bg-neutral-700 disabled:opacity-50 transition-colors"
+              >
+                {aiTextLoading === idx ? 'AI...' : 'AI TEXT'}
+              </button>
+            </div>
             <textarea
               className="input-field min-h-[80px] text-sm"
               placeholder="이 페이지에 들어갈 텍스트를 입력하세요"
@@ -1172,7 +1225,16 @@ export default function EditorPage() {
           if (isLongTextField(key)) {
             return (
               <div key={key}>
-                <label className="block text-xs font-medium text-ink-700 mb-1">{label}</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-medium text-ink-700">{label}</label>
+                  <button
+                    onClick={() => handleGenerateAiText(item, idx)}
+                    disabled={aiTextLoading === idx}
+                    className="text-[10px] font-mono font-medium px-2 py-0.5 bg-neutral-900 text-white hover:bg-neutral-700 disabled:opacity-50 transition-colors"
+                  >
+                    {aiTextLoading === idx ? 'AI...' : 'AI TEXT'}
+                  </button>
+                </div>
                 <textarea
                   className="input-field min-h-[80px] text-sm"
                   placeholder={`${label}을(를) 입력하세요`}
@@ -1912,8 +1974,8 @@ export default function EditorPage() {
         // fileName은 SweetBook 내부 참조용이며 브라우저가 직접 렌더링할 수 없음 (404 발생)
         const safePreviewUrl = (apiUrl, uiUrl) => {
           if (!apiUrl) return uiUrl || null;
-          // http/https/blob/data 로 시작하면 브라우저 렌더링 가능
-          if (/^(https?:|blob:|data:)/i.test(apiUrl)) return apiUrl;
+          // http/https/blob/data 또는 로컬 경로(/) 로 시작하면 브라우저 렌더링 가능
+          if (/^(https?:|blob:|data:)/i.test(apiUrl) || apiUrl.startsWith('/')) return apiUrl;
           // 순수 fileName이면 UI 원본 URL로 대체
           return uiUrl || null;
         };

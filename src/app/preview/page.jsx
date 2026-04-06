@@ -17,8 +17,8 @@ import StepIndicator from '@/components/StepIndicator';
 const resolveImageUrl = (src) => {
   if (!src) return null;
   if (typeof src === 'string') {
-    // http/https, blob:, data: 로 시작하는 문자열만 렌더링 가능한 URL
-    if (/^(https?:|blob:|data:)/i.test(src)) return src;
+    // http/https, blob:, data: 또는 로컬 절대경로(/) 로 시작하는 문자열만 렌더링 가능
+    if (/^(https?:|blob:|data:)/i.test(src) || src.startsWith('/')) return src;
     // 그 외 순수 fileName (예: "photo~.PNG") → 브라우저 404 방지
     return null;
   }

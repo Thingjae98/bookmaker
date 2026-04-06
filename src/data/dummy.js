@@ -45,7 +45,7 @@ const IMG = {
 export const archiveDummy = {
   meta: {
     bookTitle:       '2025 Developer Archive',
-    authorName:      'Myungjae Park',
+    authorName:      'Myeongjae Weon',
     role:            'Full-Stack Developer',
     techStack:       'React, Next.js, Node.js, Python, PostgreSQL',
     period:          '2025.01 — 2025.12',

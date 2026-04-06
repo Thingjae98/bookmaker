@@ -35,6 +35,12 @@
 - 목표 페이지 수 설정 (24~130p, 2 단위) → 부족분 빈 슬롯 자동 패딩
 - 구성 후 자유롭게 수정 가능 — 역할 재지정, 순서 변경, 텍스트 추가
 
+### 6. AI 텍스트 생성 — Gemini 기반 페이지별 회고 자동 작성
+- 에디터 편집 패널에서 **AI TEXT** 버튼 클릭 → Google Gemini API로 회고/캡션 텍스트 자동 생성
+- Create 페이지에서 입력한 프로젝트 정보(제목, 저자, 역할, 기술 스택, 기간, 설명)를 컨텍스트로 활용
+- 모델 폴백 체인: `gemini-flash-lite-latest` → `gemini-2.5-flash` → 규칙 기반 폴백 텍스트
+- 레거시 텍스트 필드 + 동적 파라미터 long text 필드 모두 지원
+
 ---
 
 ## 실행 방법
@@ -104,6 +110,7 @@ npm run dev
 | Claude (Anthropic) | 프로젝트 아키텍처 설계, 프론트엔드/백엔드 코드 작성, API 연동 |
 | Claude (Anthropic) | SweetBook API 문서 분석, 트러블슈팅 (breakBefore, Decorative File) |
 | Claude (Anthropic) | README, DECISION_LOG, CLAUDE.md 작성 |
+| Gemini (Google) | 에디터 내 페이지별 회고/캡션 텍스트 AI 자동 생성 |
 
 ---
 
@@ -130,6 +137,7 @@ Book Print API의 본질은 **디지털→물리적 변환**입니다. 개발자
 |------|------|
 | 프레임워크 | Next.js 14 (App Router) |
 | 프론트엔드 | React 18, Tailwind CSS |
+| AI 텍스트 | Google Gemini API (@google/generative-ai) |
 | 백엔드 | Next.js API Routes |
 | API 클라이언트 | bookprintapi-nodejs-sdk |
 | 파일 업로드 | HTML5 File API + Drag & Drop + FormData |
@@ -153,6 +161,7 @@ bookmaker/
 │   │       ├── templates/                    #   Templates API
 │   │       ├── book-specs/                   #   BookSpecs API
 │   │       ├── credits/                      #   Credits API
+│   │       ├── generate-page-text/            #   AI 텍스트 생성 (Gemini)
 │   │       └── webhooks/sweetbook/           #   Webhook 수신
 │   ├── components/                           # UI 컴포넌트
 │   ├── lib/                                  # 유틸리티 (sweetbook.js, fetchWithRetry)
