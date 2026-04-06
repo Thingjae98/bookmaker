@@ -757,6 +757,63 @@ export default function EditorPage() {
     );
   };
 
+  // ── 갤러리 바인딩 감지 — 선택된 템플릿의 binding 타입(file vs rowGallery/collageGallery) 판별 ──
+  const getGalleryBindingInfo = (item) => {
+    if (!item || !activeCatGroup) return null;
+    const tplUid = item.templateUid;
+    if (!tplUid) return null;
+    const tplMap = categoryToTplMap(activeCatGroup);
+    const defs = tplMap.contentTpls[tplUid];
+    if (!defs) return null;
+    for (const [key, def] of Object.entries(defs)) {
+      if (def.binding === 'rowGallery' || def.binding === 'collageGallery') {
+        return { key, binding: def.binding, maxImages: def.binding === 'collageGallery' ? 9 : 50 };
+      }
+    }
+    return null;
+  };
+
+  // ── 다중 사진 누적 업로드 핸들러 (갤러리 바인딩용) ──────────────
+  const handleMultiPhotoAppend = (galleryIdx, files) => {
+    if (!files || files.length === 0) return;
+    const arr = Array.from(files).filter((f) => f.type.startsWith('image/'));
+    if (arr.length === 0) return;
+
+    const item = gallery[galleryIdx];
+    const bindingInfo = getGalleryBindingInfo(item);
+    const maxImages = bindingInfo?.maxImages || 50;
+    const existing = item.images || [];
+    const total = existing.length + arr.length;
+
+    if (total > maxImages) {
+      toast.warn(`${bindingInfo?.binding || 'gallery'} 템플릿은 최대 ${maxImages}장까지 가능합니다. 초과분 ${total - maxImages}장은 제외됩니다.`);
+    }
+
+    const newImages = arr.slice(0, maxImages - existing.length).map((file) => ({
+      id: `mi-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      file,
+      previewUrl: URL.createObjectURL(file),
+    }));
+
+    if (newImages.length === 0) return;
+
+    updateGalleryItem(galleryIdx, {
+      images: [...existing, ...newImages],
+    });
+    toast.success(`${newImages.length}장이 추가됐습니다 (총 ${existing.length + newImages.length}장)`);
+  };
+
+  // ── 다중 사진 개별 삭제 핸들러 ──────────────────────────────────
+  const handleMultiPhotoRemove = (galleryIdx, imageId) => {
+    const item = gallery[galleryIdx];
+    if (!item?.images) return;
+    const removed = item.images.find((img) => img.id === imageId);
+    if (removed?.previewUrl?.startsWith('blob:')) URL.revokeObjectURL(removed.previewUrl);
+    updateGalleryItem(galleryIdx, {
+      images: item.images.filter((img) => img.id !== imageId),
+    });
+  };
+
   // ── 책 생성 API — 선 구성 후 순차 처리 (트랜잭션 방식) ───────
   const handleCreateBook = async () => {
     if (!isReady) {
@@ -975,8 +1032,29 @@ export default function EditorPage() {
             addLog(`📎 내지 ${ci + 1}: 파일 없음(isBlankSlot=${item.isBlankSlot}) → picsum fallback`);
           }
           // isBlankSlot = true 이면 imgUrl = null 유지 → TPL_TEXT_ONLY로 전송
+          // 다중 사진(images 배열) — 갤러리 바인딩용 URL 배열 구성
+          let imagesArr = null;
+          if (item.images && item.images.length > 0) {
+            addLog(`🖼️ 내지 ${ci + 1}: 다중 사진 ${item.images.length}장 업로드 중...`);
+            const uploadedUrls = [];
+            for (const img of item.images) {
+              if (img.file) {
+                // File 객체가 있으면 Photos API로 업로드
+                const url = await uploadFile(img.file, `내지 ${ci + 1} 갤러리`);
+                if (url) uploadedUrls.push(url);
+              } else if (img.previewUrl?.startsWith('http')) {
+                // 이미 http URL이면 그대로 사용 (더미/외부 URL)
+                uploadedUrls.push(img.previewUrl);
+              }
+            }
+            if (uploadedUrls.length > 0) {
+              imagesArr = uploadedUrls;
+              addLog(`✅ 내지 ${ci + 1}: 다중 사진 ${uploadedUrls.length}장 업로드 완료`);
+            }
+          }
           contentPageData.push({
             imageUrl: imgUrl,
+            images:  imagesArr,
             text:  item.text  || '',
             title: item.title || '',
             date:  item.date  || new Date().toISOString().slice(0, 10),
@@ -1595,6 +1673,13 @@ export default function EditorPage() {
                         </div>
                       )}
 
+                      {/* 다중 사진 배지 */}
+                      {item.images && item.images.length > 0 && (
+                        <div className="absolute bottom-5 right-0.5 text-[9px] bg-violet-600 text-white px-1 py-0.5 rounded leading-none font-bold">
+                          {item.images.length}장
+                        </div>
+                      )}
+
                       {/* 내지 텍스트 유무 (빈 슬롯 제외) */}
                       {item.role === 'content' && !item.isBlankSlot && (
                         <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-[10px] py-0.5 text-center leading-none">
@@ -1820,6 +1905,78 @@ export default function EditorPage() {
 
                       {/* 세부 레이아웃(템플릿) 선택 */}
                       {renderLayoutThumbnails(modalItem, selectedIdx)}
+
+                      {/* 다중 사진 트레이 — 갤러리 바인딩(rowGallery/collageGallery) 감지 시 표시 */}
+                      {(() => {
+                        const bindingInfo = getGalleryBindingInfo(modalItem);
+                        if (!bindingInfo) return null;
+                        const currentImages = modalItem.images || [];
+                        return (
+                          <div className="p-3 bg-violet-50 border border-violet-200 rounded-xl space-y-3">
+                            <div className="flex items-center justify-between">
+                              <p className="text-xs font-bold text-violet-800">
+                                🖼️ 다중 사진 ({bindingInfo.binding === 'collageGallery' ? '콜라주' : '행 갤러리'})
+                              </p>
+                              <span className="text-[10px] text-violet-500">
+                                {currentImages.length} / {bindingInfo.maxImages}장
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-violet-600 leading-relaxed">
+                              이 템플릿은 한 페이지에 여러 장의 사진을 배치합니다.
+                              사진을 추가하면 기존 사진에 누적됩니다.
+                            </p>
+
+                            {/* 업로드 버튼 */}
+                            <label
+                              className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg border-2 border-dashed border-violet-300 hover:border-violet-500 hover:bg-violet-100 cursor-pointer transition-all text-sm text-violet-700 font-medium"
+                            >
+                              <input
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                className="hidden"
+                                onChange={(e) => {
+                                  handleMultiPhotoAppend(selectedIdx, e.target.files);
+                                  e.target.value = '';
+                                }}
+                              />
+                              📸 사진 추가 ({bindingInfo.maxImages - currentImages.length}장 추가 가능)
+                            </label>
+
+                            {/* 썸네일 격자 */}
+                            {currentImages.length > 0 && (
+                              <div className="grid grid-cols-4 gap-1.5">
+                                {currentImages.map((img) => (
+                                  <div key={img.id} className="relative aspect-square rounded-lg overflow-hidden border border-violet-200 group">
+                                    <img
+                                      src={img.previewUrl}
+                                      alt=""
+                                      className="w-full h-full object-cover"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => handleMultiPhotoRemove(selectedIdx, img.id)}
+                                      className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm hover:bg-red-600"
+                                      title="이 사진 제거"
+                                    >
+                                      ✕
+                                    </button>
+                                    <div className="absolute bottom-0 inset-x-0 bg-black/40 text-white text-[8px] text-center py-0.5">
+                                      {currentImages.indexOf(img) + 1}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {currentImages.length === 0 && (
+                              <p className="text-[10px] text-violet-400 text-center py-2">
+                                아직 사진이 없습니다. 위 버튼을 클릭해 사진을 추가하세요.
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })()}
 
                       {/* 양면(Spread) 분할 옵션 */}
                       {modalItem.isLandscape && (

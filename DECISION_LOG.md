@@ -5,6 +5,26 @@
 
 ---
 
+## 🎨 2026-04-06 — 갤러리 템플릿(rowGallery, collageGallery) 지원을 위한 다중 사진 업로드 UI 개편
+
+### 배경
+SweetBook 템플릿의 `parameters.definitions` 중 `binding`이 `rowGallery` 또는 `collageGallery`인 파라미터는 단일 이미지 URL이 아니라 **이미지 URL 배열**을 요구한다. 기존 에디터 우측 편집 패널은 사진 1장 교체(Replace) 방식만 지원하여, 갤러리 템플릿을 사용하면 배열에 사진이 1장만 들어가는 문제가 있었다.
+
+### 결정
+우측 사진 편집 패널 UI를 **'단일 덮어쓰기(Replace)'에서 '다중 누적형(Append) 트레이'로 개편**.
+
+1. **동적 UI 전환**: 선택된 페이지의 templateUid → definitions → binding 타입을 실시간 판별하여, `file` 바인딩이면 기존 단일 사진 교체 UI, `rowGallery`/`collageGallery` 바인딩이면 다중 누적 트레이 UI를 자동 표시
+2. **누적(Append) 방식**: `<input type="file" multiple>` → `images = [...기존, ...신규]` 로 배열 누적
+3. **썸네일 격자 + 개별 삭제**: 현재 배열의 사진을 작은 그리드로 표시, 각 썸네일 우측 상단에 `[X]` 삭제 버튼 배치
+4. **collageGallery 9장 제한**: 배열 길이 9장 초과 시 토스트 경고 + 초과분 자동 절삭
+
+### 영향 범위
+- `src/app/editor/page.jsx` — 인라인 편집 패널 내지 섹션에 갤러리 트레이 UI 추가
+- gallery 아이템에 `images: string[]` 프로퍼티 추가 (기존 `imageUrl` 단일 사진과 공존)
+- `contentPageData` 빌드 시 `page.images` 배열 그대로 API 전달 (기존 로직 호환)
+
+---
+
 ## 🐛 2026-04-06 — 갤러리 템플릿 자동 병합(Batching) 오류 수정 — 1:1 페이지 렌더링 규칙 복구
 
 ### 문제

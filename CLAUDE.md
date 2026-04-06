@@ -418,6 +418,7 @@ try {
 - [x] 페이지별 세부 레이아웃(템플릿) 선택 — `renderLayoutThumbnails(item, idx)` 함수로 선택된 카테고리 내 content 템플릿 썸네일 카드 표시, 개별 `templateUid` 변경 가능
 - [x] 사진 클릭 시 편집 패널 자동 스크롤 — `editPanelRef` + `useEffect([selectedIdx])` → `scrollIntoView({ behavior: 'smooth' })`
 - [x] API 로그 레이아웃 하단 이동 — 갤러리·편집 패널 사이에서 제거, 전체 그리드 밖 컨테이너 최하단으로 이동
+- [x] 다중 사진 업로드 UI(Gallery Dropzone) 구현 — 갤러리 템플릿(rowGallery/collageGallery) binding 감지 → 단일/다중 자동 전환, 누적형 썸네일 트레이 + 개별 삭제, collageGallery 9장 제한
 - [ ] Skeleton UI 로딩 (현재 spinner만 있음)
 - [ ] 에디터 전체 플로우 E2E 검증 영상 녹화 (더미 채우기 → 책 생성 → 주문 완료)
 - [ ] 모바일 반응형 최종 점검 (640px 이하)
