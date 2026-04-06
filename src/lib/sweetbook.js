@@ -94,6 +94,15 @@ export async function cancelOrder(orderUid, cancelReason) {
   return ok(data);
 }
 
+export async function updateShipping(orderUid, shippingInfo) {
+  // SDK가 PATCH /orders/{uid}/shipping 미지원 → sweetFetch로 직접 호출
+  const json = await sweetFetch(`/orders/${orderUid}/shipping`, {}, {
+    method: 'PATCH',
+    body: JSON.stringify(shippingInfo),
+  });
+  return ok(json?.data || json);
+}
+
 // ─── Credits API ─────────────────────────────────────────────
 
 export async function getCredits() {
@@ -106,13 +115,19 @@ export async function getCredits() {
 const API_BASE = process.env.SWEETBOOK_API_BASE_URL || 'https://api-sandbox.sweetbook.com/v1';
 const API_KEY = process.env.SWEETBOOK_API_KEY;
 
-async function sweetFetch(path, params = {}) {
+async function sweetFetch(path, params = {}, options = {}) {
   const qs = new URLSearchParams(
     Object.entries(params).filter(([, v]) => v !== undefined && v !== null)
   ).toString();
   const url = `${API_BASE}${path}${qs ? `?${qs}` : ''}`;
+  const { method = 'GET', body } = options;
   const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${API_KEY}` },
+    method,
+    headers: {
+      Authorization: `Bearer ${API_KEY}`,
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+    },
+    ...(body ? { body } : {}),
   });
   const json = await res.json();
   if (!res.ok) {

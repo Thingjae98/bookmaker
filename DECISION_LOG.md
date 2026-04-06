@@ -5,6 +5,31 @@
 
 ---
 
+## 📋 2026-04-06 — CS 방어: 주문 취소 범위 확장 및 배송지 변경 기능 풀스택 구현
+
+### 배경
+Orders API Gap 분석 후, 고객 문의(CS) 대응을 위해 PAID(20)에서만 허용되던 주문 취소를 PDF_READY(25) 상태까지 확장하고, 발송 전(CONFIRMED 이하) 배송지 변경 기능을 API + UI 풀스택으로 구현.
+
+### 변경 내역
+
+#### [0] 주문번호 UI 개선
+- **문제**: 주문목록/상세에 raw UID(`ord_AbCdXxXxXx`)가 그대로 노출 → 사용자 혼란
+- **해결**: `formatOrderId()` 함수 도입 — `ord_` 접두사 제거 후 마지막 8자리를 `#XXXXXXXX` 형태로 변환
+- 상세 모달에는 "복사" 버튼 추가(전체 UID를 클립보드로 복사 — CS 대응용)
+
+#### [1] 주문 취소 상태 범위 확장 (Gap 1 해결)
+- `constants.js`에 `PDF_READY: 25` 추가 (cyan 배지)
+- 취소 버튼 조건: `orderStatus === 20` → `[20, 25].includes(orderStatus)`
+- **이유**: SweetBook 스펙상 PDF 생성 완료 후 제작 확정(CONFIRMED=30) 이전까지 취소 가능. 현장 CS 사례 대응.
+
+#### [2] 배송지 변경 기능 풀스택 구현 (Gap 2 해결)
+- **sweetbook.js**: `updateShipping(orderUid, shippingInfo)` 함수 추가. SDK 미지원이므로 `sweetFetch`를 `PATCH` 메서드 지원으로 확장.
+- **API 라우트**: `src/app/api/orders/[orderUid]/shipping/route.js` 신규 생성. 필수 필드 서버 검증 후 SweetBook API 프록시.
+- **UI**: 주문 상세 모달 배송지 섹션에 "배송지 변경" 버튼 추가 (상태 20·25·30만 노출). 클릭 시 배송지 편집 모달(z-[60]) 오픈, 현재 값 pre-fill, 저장 후 상세 즉시 갱신.
+- **허용 상태**: PAID(20) · PDF_READY(25) · CONFIRMED(30) — 발송완료(SHIPPED=60) 이전까지 변경 가능하다는 스펙 기준.
+
+---
+
 ## 📋 2026-04-06 — Orders API 스펙 대비 구현 Gap 분석 및 Webhook 연동 사전 계획
 
 ### 배경

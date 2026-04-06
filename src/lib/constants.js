@@ -156,6 +156,7 @@ export const BOOK_SPEC_LABELS = {
 // 주문 상태 매핑
 export const ORDER_STATUS = {
   20: { key: 'PAID', label: '결제완료', color: 'blue' },
+  25: { key: 'PDF_READY', label: 'PDF 준비완료', color: 'cyan' },
   30: { key: 'CONFIRMED', label: '제작확정', color: 'indigo' },
   40: { key: 'IN_PRODUCTION', label: '제작중', color: 'yellow' },
   50: { key: 'PRODUCTION_COMPLETE', label: '제작완료', color: 'green' },

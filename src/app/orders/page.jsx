@@ -11,6 +11,19 @@ export default function OrdersPage() {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
+  // 배송지 변경 모달 state
+  const [shippingModal, setShippingModal] = useState(false);
+  const [shippingForm, setShippingForm] = useState({
+    recipientName: '',
+    recipientPhone: '',
+    postalCode: '',
+    address1: '',
+    address2: '',
+    shippingMemo: '',
+  });
+  const [shippingLoading, setShippingLoading] = useState(false);
+  const [shippingError, setShippingError] = useState(null);
+
   useEffect(() => {
     fetchOrders();
   }, []);
@@ -68,13 +81,61 @@ export default function OrdersPage() {
     }
   };
 
+  // 배송지 변경 모달 열기 — 현재 주문 정보 pre-fill
+  const openShippingModal = () => {
+    if (!selectedOrder) return;
+    setShippingForm({
+      recipientName: selectedOrder.recipientName || '',
+      recipientPhone: selectedOrder.recipientPhone || '',
+      postalCode: selectedOrder.postalCode || '',
+      address1: selectedOrder.address1 || '',
+      address2: selectedOrder.address2 || '',
+      shippingMemo: selectedOrder.shippingMemo || '',
+    });
+    setShippingError(null);
+    setShippingModal(true);
+  };
+
+  const handleShippingSubmit = async (e) => {
+    e.preventDefault();
+    setShippingLoading(true);
+    setShippingError(null);
+    try {
+      const res = await fetch(`/api/orders/${selectedOrder.orderUid}/shipping`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(shippingForm),
+      });
+      const data = await res.json();
+      if (data.success) {
+        // 모달 닫고, 상세 정보 갱신
+        setShippingModal(false);
+        await fetchOrderDetail(selectedOrder.orderUid);
+        alert('배송지가 변경되었습니다.');
+      } else {
+        setShippingError(data.message || '배송지 변경에 실패했습니다.');
+      }
+    } catch (err) {
+      setShippingError(err.message);
+    } finally {
+      setShippingLoading(false);
+    }
+  };
+
   const formatPrice = (n) => (n ? n.toLocaleString('ko-KR') : '—');
   const formatDate = (d) => d ? new Date(d).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+  // raw UID(예: ord_AbCdEfGhIjKl)를 사용자 친화적 짧은 주문번호로 변환
+  const formatOrderId = (uid) => {
+    if (!uid) return '—';
+    const clean = uid.replace(/^[a-z]+_/i, ''); // ord_ 같은 접두사 제거
+    return `#${clean.slice(-8).toUpperCase()}`; // 마지막 8자리만 대문자로
+  };
 
   const getStatusBadge = (status) => {
     const info = ORDER_STATUS[status] || { label: `상태 ${status}`, color: 'gray' };
     const colorMap = {
       blue: 'bg-blue-100 text-blue-700',
+      cyan: 'bg-cyan-100 text-cyan-700',
       indigo: 'bg-indigo-100 text-indigo-700',
       yellow: 'bg-yellow-100 text-yellow-700',
       green: 'bg-green-100 text-green-700',
@@ -84,7 +145,7 @@ export default function OrdersPage() {
       gray: 'bg-gray-100 text-gray-700',
     };
     return (
-      <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${colorMap[info.color]}`}>
+      <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${colorMap[info.color] || colorMap.gray}`}>
         {info.label}
       </span>
     );
@@ -141,7 +202,7 @@ export default function OrdersPage() {
               <div className="flex items-start justify-between">
                 <div>
                   <div className="flex items-center gap-3 mb-2">
-                    <span className="font-mono text-sm text-ink-600">{order.orderUid}</span>
+                    <span className="font-bold text-sm text-ink-900">주문 {formatOrderId(order.orderUid)}</span>
                     {getStatusBadge(order.orderStatus)}
                     {order.isTest && (
                       <span className="text-xs bg-ink-100 text-ink-600 px-2 py-0.5 rounded-full">Sandbox</span>
@@ -173,9 +234,18 @@ export default function OrdersPage() {
                   </div>
 
                   <div className="space-y-4">
-                    <div className="flex justify-between text-sm">
+                    <div className="flex justify-between text-sm items-center">
                       <span className="text-ink-400">주문번호</span>
-                      <span className="font-mono text-ink-800">{selectedOrder.orderUid}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-ink-900">{formatOrderId(selectedOrder.orderUid)}</span>
+                        <button
+                          onClick={() => navigator.clipboard.writeText(selectedOrder.orderUid)}
+                          title="전체 주문번호 복사"
+                          className="text-xs text-ink-400 hover:text-ink-700 border border-ink-200 rounded px-1.5 py-0.5 transition-colors"
+                        >
+                          복사
+                        </button>
+                      </div>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-ink-400">상태</span>
@@ -216,14 +286,25 @@ export default function OrdersPage() {
                     </div>
 
                     <div className="border-t border-ink-100 pt-4">
-                      <p className="text-xs text-ink-400 mb-2">배송지</p>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs text-ink-400">배송지</p>
+                        {/* 배송지 변경 버튼: PAID(20)·PDF_READY(25)·CONFIRMED(30) 이하에서만 노출 */}
+                        {[20, 25, 30].includes(selectedOrder.orderStatus) && (
+                          <button
+                            onClick={openShippingModal}
+                            className="text-xs text-blue-600 hover:text-blue-800 border border-blue-200 rounded px-2 py-0.5 transition-colors"
+                          >
+                            배송지 변경
+                          </button>
+                        )}
+                      </div>
                       <p className="text-sm text-ink-800">{selectedOrder.recipientName} ({selectedOrder.recipientPhone})</p>
                       <p className="text-sm text-ink-600">[{selectedOrder.postalCode}] {selectedOrder.address1} {selectedOrder.address2}</p>
                       {selectedOrder.shippingMemo && <p className="text-sm text-ink-400 mt-1">메모: {selectedOrder.shippingMemo}</p>}
                     </div>
 
-                    {/* 취소 버튼 (PAID 상태일 때만) */}
-                    {selectedOrder.orderStatus === 20 && (
+                    {/* 취소 버튼 (PAID·PDF_READY 상태: 제작 확정 전까지 가능) */}
+                    {[20, 25].includes(selectedOrder.orderStatus) && (
                       <button
                         onClick={() => handleCancel(selectedOrder.orderUid)}
                         className="w-full mt-4 py-2.5 border border-red-200 text-red-600 rounded-lg text-sm hover:bg-red-50 transition-colors"
@@ -234,6 +315,109 @@ export default function OrdersPage() {
                   </div>
                 </>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* 배송지 변경 모달 */}
+        {shippingModal && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={() => setShippingModal(false)}>
+            <div className="bg-white rounded-2xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-5">
+                <h3 className="font-display font-bold text-lg text-ink-900">배송지 변경</h3>
+                <button onClick={() => setShippingModal(false)} className="text-ink-400 hover:text-ink-800 text-xl">✕</button>
+              </div>
+
+              <form onSubmit={handleShippingSubmit} className="space-y-3">
+                <div>
+                  <label className="block text-xs text-ink-500 mb-1">수령인 <span className="text-red-500">*</span></label>
+                  <input
+                    type="text"
+                    value={shippingForm.recipientName}
+                    onChange={(e) => setShippingForm((f) => ({ ...f, recipientName: e.target.value }))}
+                    required
+                    className="input-field w-full text-sm"
+                    placeholder="홍길동"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-ink-500 mb-1">연락처 <span className="text-red-500">*</span></label>
+                  <input
+                    type="tel"
+                    value={shippingForm.recipientPhone}
+                    onChange={(e) => setShippingForm((f) => ({ ...f, recipientPhone: e.target.value }))}
+                    required
+                    className="input-field w-full text-sm"
+                    placeholder="010-0000-0000"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-ink-500 mb-1">우편번호 <span className="text-red-500">*</span></label>
+                  <input
+                    type="text"
+                    value={shippingForm.postalCode}
+                    onChange={(e) => setShippingForm((f) => ({ ...f, postalCode: e.target.value }))}
+                    required
+                    className="input-field w-full text-sm"
+                    placeholder="12345"
+                    maxLength={6}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-ink-500 mb-1">주소 <span className="text-red-500">*</span></label>
+                  <input
+                    type="text"
+                    value={shippingForm.address1}
+                    onChange={(e) => setShippingForm((f) => ({ ...f, address1: e.target.value }))}
+                    required
+                    className="input-field w-full text-sm"
+                    placeholder="기본 주소"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-ink-500 mb-1">상세 주소</label>
+                  <input
+                    type="text"
+                    value={shippingForm.address2}
+                    onChange={(e) => setShippingForm((f) => ({ ...f, address2: e.target.value }))}
+                    className="input-field w-full text-sm"
+                    placeholder="동/호수 등"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-ink-500 mb-1">배송 메모</label>
+                  <input
+                    type="text"
+                    value={shippingForm.shippingMemo}
+                    onChange={(e) => setShippingForm((f) => ({ ...f, shippingMemo: e.target.value }))}
+                    className="input-field w-full text-sm"
+                    placeholder="예) 문 앞에 놓아주세요"
+                  />
+                </div>
+
+                {shippingError && (
+                  <div className="p-3 bg-red-50 border border-red-100 rounded-lg text-xs text-red-600">
+                    {shippingError}
+                  </div>
+                )}
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShippingModal(false)}
+                    className="flex-1 py-2.5 border border-ink-200 text-ink-600 rounded-lg text-sm hover:bg-ink-50 transition-colors"
+                  >
+                    취소
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={shippingLoading}
+                    className="flex-1 py-2.5 btn-primary text-sm disabled:opacity-50"
+                  >
+                    {shippingLoading ? '변경 중...' : '저장'}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}
