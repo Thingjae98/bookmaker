@@ -5,6 +5,27 @@
 
 ---
 
+## 📋 2026-04-06 — 템플릿 definitions 기반 동적 폼 렌더링 도입
+
+### 배경
+에디터 우측 편집 패널이 모든 템플릿에 대해 동일한 '제목/날짜/텍스트' 3개 하드코딩 필드만 보여주던 문제. 일기장 A 템플릿의 `weather`, `meal`, 알림장 B의 `teacherComment` 등 템플릿별 고유 필드가 UI에 노출되지 않아 사용자가 해당 값을 입력할 수 없었음.
+
+### 해결: definitions 기반 동적 폼(Dynamic Form)
+1. **`getTextDefinitions(item)`**: 현재 아이템의 `templateUid`에 해당하는 definitions에서 `binding === 'text'`인 필드만 추출. `file` / `rowGallery` / `collageGallery`는 별도 사진 UI가 처리하므로 제외.
+2. **`renderDynamicTextFields(item, idx)`**: 추출된 텍스트 필드를 순회하며 입력창 자동 생성.
+   - 키 이름 → 한글 라벨 매핑(`TEXT_FIELD_LABELS`: title→제목, weather→날씨, meal→식단 등)
+   - `isLongTextField()` 판별: `diaryText`, `content`, `memo` 등은 `<textarea>`, 나머지는 `<input>`
+   - `isDateField()` 판별: `date`, `dateLabel` 등은 `<input type="date">`
+3. **`item.params` 객체**: 갤러리 아이템에 `params: {}` 필드 추가. 동적 폼 입력값은 `params[key]`에 저장되며, `title`/`text`/`date` 레거시 필드와 양방향 동기화.
+4. **`handleCreateBook` 연동**: text binding 파라미터 빌드 시 `page.params[key]` 1순위 → 레거시 필드 2순위 폴백. 사용자가 동적 폼에서 입력한 값이 API로 정확히 전달됨.
+5. **폴백**: 템플릿 미선택 또는 text 필드 없는 템플릿 → 기존 제목/날짜/텍스트 3-필드 레거시 UI 유지.
+
+### 효과
+- 레이아웃별로 필요한 텍스트 입력 필드(날짜, 날씨, 식사, 코멘트 등)가 자동으로 UI에 표시
+- 템플릿 추가/변경 시 코드 수정 없이 definitions만으로 UI가 자동 확장
+
+---
+
 ## 📋 2026-04-06 — 주문 상태 전이 처리 정책 확립 및 Webhook 수신 라우트 개통
 
 ### 배경

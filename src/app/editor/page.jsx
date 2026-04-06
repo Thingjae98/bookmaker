@@ -167,7 +167,7 @@ export default function EditorPage() {
   const [selectedCategory, setSelectedCategory] = useState(null);  // 현재 선택된 카테고리명
 
   // ── 갤러리 state ─────────────────────────────────────────────
-  // item shape: { id, file, previewUrl, role, title, text, date, templateUid, isLandscape, useSpread }
+  // item shape: { id, file, previewUrl, role, title, text, date, templateUid, isLandscape, useSpread, params }
   const [gallery, setGallery]               = useState([]);
   const [selectedIdx, setSelectedIdx]       = useState(null);   // 인라인 편집 패널 대상 인덱스
   const [galleryDragIdx, setGalleryDragIdx] = useState(null);
@@ -299,7 +299,7 @@ export default function EditorPage() {
           id: `init-front-${ts}`, file: null,
           previewUrl: makePageUrl(frontCoverData, `${data.serviceType}-cover-front`),
           role: 'front', title: frontCoverData.title || '', text: '', date: new Date().toISOString().slice(0, 10),
-          templateUid: null, isLandscape: false, useSpread: false,
+          templateUid: null, isLandscape: false, useSpread: false, params: {},
         });
       }
 
@@ -309,7 +309,7 @@ export default function EditorPage() {
           id: `init-back-${ts}`, file: null,
           previewUrl: makePageUrl(backCoverData, `${data.serviceType}-cover-back`),
           role: 'back', title: backCoverData.title || '', text: '', date: new Date().toISOString().slice(0, 10),
-          templateUid: null, isLandscape: false, useSpread: false,
+          templateUid: null, isLandscape: false, useSpread: false, params: {},
         });
       }
 
@@ -326,6 +326,7 @@ export default function EditorPage() {
           templateUid: null,
           isLandscape: p.isLandscape || false,
           useSpread:   false,
+          params:      {},
         });
       });
 
@@ -401,6 +402,7 @@ export default function EditorPage() {
           templateUid: null,
           isLandscape: await detectLandscape(file),
           useSpread:   false,
+          params:      {},
         };
       })
     );
@@ -491,6 +493,7 @@ export default function EditorPage() {
     isLandscape: false,
     useSpread:   false,
     isBlankSlot: true,
+    params:      {},
   });
 
   // 스프레드 1장(2페이지) 추가 — pageIncrement: 2 규격 준수
@@ -797,6 +800,172 @@ export default function EditorPage() {
     return null;
   };
 
+  // ── 템플릿 definitions에서 텍스트 바인딩 필드 추출 ──────────────
+  // 현재 아이템의 templateUid → definitions → binding==='text'인 필드만 반환
+  // file / rowGallery / collageGallery는 별도 UI(사진 업로드/갤러리 트레이)가 있으므로 제외
+  const getTextDefinitions = (item) => {
+    if (!item || !activeCatGroup) return [];
+    const tplUid = item.templateUid;
+    if (!tplUid) return [];
+    const tplMap = categoryToTplMap(activeCatGroup);
+    const defs = tplMap.contentTpls[tplUid];
+    if (!defs) return [];
+    return Object.entries(defs)
+      .filter(([, def]) => def.binding === 'text')
+      .map(([key, def]) => ({ key, ...def }));
+  };
+
+  // ── 텍스트 바인딩 키 → 사용자 친화적 라벨 매핑 ──────────────────
+  const TEXT_FIELD_LABELS = {
+    title:      '제목',
+    bookTitle:  '책 제목',
+    date:       '날짜',
+    dateLabel:  '날짜 라벨',
+    dayLabel:   '요일 라벨',
+    dayNum:     '일',
+    monthNum:   '월',
+    month:      '월',
+    year:       '연도',
+    weather:    '날씨',
+    meal:       '식단',
+    memo:       '메모',
+    diaryText:  '본문 텍스트',
+    text:       '텍스트',
+    content:    '내용',
+    spineTitle: '책등 제목',
+    subTitle:   '부제목',
+    author:     '저자',
+    location:   '장소',
+    comment:    '코멘트',
+    teacherComment: '선생님 코멘트',
+    description: '설명',
+  };
+
+  // 키 이름으로 input type 결정 (긴 텍스트면 textarea)
+  const isLongTextField = (key) =>
+    ['diaryText', 'text', 'content', 'memo', 'comment', 'teacherComment', 'description'].includes(key);
+
+  // 키 이름으로 date input 결정
+  const isDateField = (key) =>
+    ['date', 'dateLabel', 'dayLabel'].includes(key);
+
+  // ── 동적 폼 렌더링 — 선택된 템플릿의 text binding 필드를 자동 입력창으로 변환 ──
+  const renderDynamicTextFields = (item, idx) => {
+    const textDefs = getTextDefinitions(item);
+
+    // 템플릿이 선택되지 않았거나 text 필드가 없으면 레거시 폴백 (제목/날짜/텍스트)
+    if (textDefs.length === 0) {
+      return (
+        <>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs font-medium text-ink-700 mb-1">페이지 제목</label>
+              <input
+                type="text"
+                className="input-field text-sm"
+                placeholder="예) 첫 미소"
+                value={item.title}
+                onChange={(e) => updateGalleryItem(idx, { title: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-ink-700 mb-1">날짜</label>
+              <input
+                type="date"
+                className="input-field text-sm"
+                value={item.date}
+                onChange={(e) => updateGalleryItem(idx, { date: e.target.value })}
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-ink-700 mb-1">
+              텍스트
+              <span className="ml-1 font-normal text-ink-400">(선택 — 입력 시 텍스트+사진 템플릿 적용)</span>
+            </label>
+            <textarea
+              className="input-field min-h-[80px] text-sm"
+              placeholder="이 페이지에 들어갈 텍스트를 입력하세요"
+              value={item.text}
+              onChange={(e) => updateGalleryItem(idx, { text: e.target.value })}
+            />
+          </div>
+        </>
+      );
+    }
+
+    // ── 동적 폼: definitions의 text binding 필드를 순회하며 입력창 생성 ──
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-[10px] font-bold text-violet-700 bg-violet-100 px-2 py-0.5 rounded-full">
+            동적 필드 · {textDefs.length}개
+          </span>
+        </div>
+        {textDefs.map(({ key }) => {
+          const label = TEXT_FIELD_LABELS[key] || key;
+          // 값 읽기: item.params[key] → 레거시 필드 폴백 (title/text/date)
+          const currentVal = item.params?.[key]
+            ?? (key === 'title' ? item.title : undefined)
+            ?? (key === 'diaryText' || key === 'text' || key === 'content' ? item.text : undefined)
+            ?? (key === 'date' || key === 'dateLabel' || key === 'dayLabel' ? item.date : undefined)
+            ?? '';
+
+          const handleChange = (val) => {
+            // params 객체에 저장 + 레거시 필드 동기화 (handleCreateBook 호환)
+            const newParams = { ...item.params, [key]: val };
+            const legacyUpdates = {};
+            if (key === 'title') legacyUpdates.title = val;
+            if (key === 'diaryText' || key === 'text' || key === 'content') legacyUpdates.text = val;
+            if (key === 'date' || key === 'dateLabel') legacyUpdates.date = val;
+            updateGalleryItem(idx, { params: newParams, ...legacyUpdates });
+          };
+
+          if (isDateField(key)) {
+            return (
+              <div key={key}>
+                <label className="block text-xs font-medium text-ink-700 mb-1">{label}</label>
+                <input
+                  type="date"
+                  className="input-field text-sm"
+                  value={currentVal}
+                  onChange={(e) => handleChange(e.target.value)}
+                />
+              </div>
+            );
+          }
+
+          if (isLongTextField(key)) {
+            return (
+              <div key={key}>
+                <label className="block text-xs font-medium text-ink-700 mb-1">{label}</label>
+                <textarea
+                  className="input-field min-h-[80px] text-sm"
+                  placeholder={`${label}을(를) 입력하세요`}
+                  value={currentVal}
+                  onChange={(e) => handleChange(e.target.value)}
+                />
+              </div>
+            );
+          }
+
+          return (
+            <div key={key}>
+              <label className="block text-xs font-medium text-ink-700 mb-1">{label}</label>
+              <input
+                type="text"
+                className="input-field text-sm"
+                placeholder={`${label}을(를) 입력하세요`}
+                value={currentVal}
+                onChange={(e) => handleChange(e.target.value)}
+              />
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   // ── 다중 사진 누적 업로드 핸들러 (갤러리 바인딩용) ──────────────
   const handleMultiPhotoAppend = (galleryIdx, files) => {
     if (!files || files.length === 0) return;
@@ -1032,14 +1201,14 @@ export default function EditorPage() {
             const rightFile = new File([rb], 'spread-right.jpg', { type: 'image/jpeg' });
             const leftUrl   = (await uploadFile(leftFile,  `내지 ${ci + 1}-L`)) || fallbackUrl;
             const rightUrl  = (await uploadFile(rightFile, `내지 ${ci + 1}-R`)) || fallbackUrl;
-            contentPageData.push({ imageUrl: leftUrl,  text: item.text || '', title: item.title || '', date: item.date, isSpreadPage: true });
-            contentPageData.push({ imageUrl: rightUrl, text: '',               title: '',               date: item.date, isSpreadPage: true });
+            contentPageData.push({ imageUrl: leftUrl,  text: item.text || '', title: item.title || '', date: item.date, isSpreadPage: true, params: item.params || {} });
+            contentPageData.push({ imageUrl: rightUrl, text: '',               title: '',               date: item.date, isSpreadPage: true, params: {} });
             addLog(`✅ 양면 분할 완료 → 2페이지 (내지 ${ci + 1})`);
           } catch (e) {
             addLog(`⚠️ 양면 분할 실패(${e.message}) — 원본 단일 처리`);
             console.dir({ spreadSplitError: e, ci });
             const singleUrl = (await uploadFile(fileToUpload, `내지 ${ci + 1}`)) || fallbackUrl;
-            contentPageData.push({ imageUrl: singleUrl, text: item.text || '', title: item.title || '', date: item.date });
+            contentPageData.push({ imageUrl: singleUrl, text: item.text || '', title: item.title || '', date: item.date, params: item.params || {} });
           }
         } else {
           // 일반 내지: contentFileMap → previewUrl(http) → 빈 슬롯이면 null → 아니면 fallback
@@ -1084,6 +1253,7 @@ export default function EditorPage() {
             text:  item.text  || '',
             title: item.title || '',
             date:  item.date  || new Date().toISOString().slice(0, 10),
+            params: item.params || {},
           });
         }
       }
@@ -1111,6 +1281,7 @@ export default function EditorPage() {
           text:  srcPage.text  || '',
           title: srcPage.title || '',
           date:  srcPage.date  || new Date().toISOString().slice(0, 10),
+          params: srcPage.params || {},
         });
         ri++;
       }
@@ -1214,7 +1385,12 @@ export default function EditorPage() {
               // 단일 사진: imageUrl 사용, 없으면 picsum fallback
               params[key] = hasImage ? page.imageUrl : `https://picsum.photos/seed/${session.serviceType}-p${i}/600/600`;
             } else if (def.binding === 'text') {
-              if (key === 'date' || key === 'dayLabel' || key === 'dateLabel') params[key] = page.date || new Date().toISOString().slice(0, 10);
+              // 1순위: 사용자가 동적 폼에서 직접 입력한 params[key]
+              if (page.params && page.params[key] !== undefined && page.params[key] !== '') {
+                params[key] = page.params[key];
+              }
+              // 2순위: 레거시 필드 폴백 + 자동 생성 로직
+              else if (key === 'date' || key === 'dayLabel' || key === 'dateLabel') params[key] = page.date || new Date().toISOString().slice(0, 10);
               else if (key === 'title') params[key] = page.title || `페이지 ${i + 1}`;
               else if (key === 'diaryText') params[key] = (page.text || '').trim() || ' ';
               else if (key === 'monthNum' || key === 'month') params[key] = String(new Date(page.date || Date.now()).getMonth() + 1);
@@ -1966,45 +2142,8 @@ export default function EditorPage() {
                         </div>
                       )}
 
-                      {/* 제목 + 날짜 */}
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-xs font-medium text-ink-700 mb-1">페이지 제목</label>
-                          <input
-                            type="text"
-                            className="input-field text-sm"
-                            placeholder="예) 첫 미소"
-                            value={modalItem.title}
-                            onChange={(e) => updateGalleryItem(selectedIdx, { title: e.target.value })}
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-ink-700 mb-1">날짜</label>
-                          <input
-                            type="date"
-                            className="input-field text-sm"
-                            value={modalItem.date}
-                            onChange={(e) => updateGalleryItem(selectedIdx, { date: e.target.value })}
-                          />
-                        </div>
-                      </div>
-
-                      {/* 텍스트 */}
-                      <div>
-                        <label className="block text-xs font-medium text-ink-700 mb-1">
-                          텍스트
-                          <span className="ml-1 font-normal text-ink-400">(선택 — 입력 시 텍스트+사진 템플릿 적용)</span>
-                        </label>
-                        <textarea
-                          className="input-field min-h-[80px] text-sm"
-                          placeholder="이 페이지에 들어갈 텍스트를 입력하세요"
-                          value={modalItem.text}
-                          onChange={(e) => updateGalleryItem(selectedIdx, { text: e.target.value })}
-                        />
-                        <p className={`text-xs mt-1 ${modalItem.text.trim() ? 'text-green-600' : 'text-ink-400'}`}>
-                          {modalItem.text.trim() ? '✓ 사진+텍스트 템플릿 적용 예정' : '이미지 전용 템플릿 적용 예정'}
-                        </p>
-                      </div>
+                      {/* 동적 텍스트 입력 필드 — 선택된 템플릿의 definitions 기반 자동 생성 */}
+                      {renderDynamicTextFields(modalItem, selectedIdx)}
 
                       {/* 세부 레이아웃(템플릿) 선택 */}
                       {renderLayoutThumbnails(modalItem, selectedIdx)}
