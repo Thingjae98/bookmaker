@@ -232,6 +232,18 @@ Authorization: Bearer {SWEETBOOK_API_KEY}
 - **삭제 버튼**: 내지 아이템일 때 "스프레드 삭제 (2p)" 레이블로 `removeSpreadPair()` 호출; 표지 아이템은 기존 "이 사진 삭제" 유지
 - 빈 슬롯은 갤러리 그리드에서 회색 📄 자리표시자 렌더링; API 전송 시 `TPL_TEXT_ONLY` 자동 적용
 
+### ✅ 해결된 버그 (2026-04-06 추가)
+
+#### 버그 H — 유령 템플릿 400 에러 (카테고리 변경 시 이전 UID 잔존) → **해결**
+- 증상: 구글포토북A 카테고리 선택 시 finalize 400 에러 — 일기장A 전용 `vHA59XPPKqak` UID가 잔존
+- 원인: `categoryToTplMap`의 textOnly 폴백이 글로벌 상수(`TPL_TEXT_ONLY_FALLBACK`)를 참조 + 카테고리 변경 시 갤러리 아이템의 templateUid 미초기화
+- 해결: 3중 방어 — (1) 글로벌 상수 폴백 완전 제거 (2) `useEffect([selectedCategory])`로 카테고리 변경 시 갤러리 templateUid 교차검증 후 null 초기화 (3) `handleCreateBook` 내지 전송 시 `validUids.has()` 검증
+
+#### 버그 I — 에디터→Create 뒤로가기 시 폼 데이터 유실 → **해결**
+- 증상: 에디터에서 브라우저 뒤로가기로 Create 페이지 복귀 시 입력했던 폼 데이터가 사라짐
+- 원인: Create 제출 시 `saveDraft()` debounce(500ms) 타이머가 router.push 전에 완료되지 않아 DRAFT 미저장
+- 해결: `handleSubmit`에서 debounce 없이 `sessionStorage.setItem(DRAFT_KEY, ...)` 즉시 저장 + Create 마운트 시 DRAFT_KEY → bookmaker_session 이중 복원 로직 추가
+
 ### ✅ 해결된 버그 (2026-04-05 추가)
 
 #### 버그 G — 업로드 응답 fileName에 의한 미리보기 404 크래시 → **해결**
@@ -395,6 +407,9 @@ try {
 - [x] 최종화 에러 100% 해결 — 모든 내지 전송 성공 보장 + 최종화 실패 시 `console.dir(finalizeError)` 상세 로깅
 - [x] 사진 업로드 인덱스 매핑 최종 동기화 — `stagedFilesRef` (useRef, itemId→File) 도입으로 gallery state와 독립적으로 파일 이중 보관. `handleCreateBook` 시작 시 `contentFileMap[ci]` 스냅샷으로 절대 내지 인덱스 기준 파일 매핑. `uploadFile()` 헬퍼에 instanceof 타입 체크 + `console.log` 진단 로그 추가
 - [x] 동적 템플릿 판형 필터링 버그 픽스 완료 — `resolveTemplates()` 엄격 필터링 적용. `t.bookSpecUid === bookSpecUid` 정확 일치만 허용, `bookSpecUids` 배열도 호환. 다른 판형 UID 혼입으로 인한 전체 400 에러 해결
+- [x] 유령 템플릿 3중 방어 — `categoryToTplMap` 글로벌 상수 폴백 제거 + `validUids` Set 도입, 카테고리 변경 시 갤러리 templateUid 완전 교체(Replace), `handleCreateBook` validUids 교차검증
+- [x] URL Query 파라미터(`?isNew=true`) 기반 스마트 상태 초기화/복원 — ARCHIVE_EDITOR_STATE에 gallery + selectedCategory 자동 저장, Create 페이지 Draft 이중 복원(DRAFT_KEY → bookmaker_session 폴백)
+- [x] 더미 데이터 고도화 — picsum → Unsplash 큐레이션 URL, Tommy/D-Lab 페르소나, 실제 프로젝트 경험 텍스트 (Gemini AI 활용)
 
 ### P0 — API 스펙 Gap 수정 (마감: 4/8 화 23:59, 순서대로 진행)
 - [x] **1순위: Idempotency 적용** — fetchWithRetry에 Idempotency-Key 헤더 자동 주입 + 409 Conflict 안전 처리, 주문/책 생성에 `crypto.randomUUID()` 기반 고유 referenceId 적용 (`/concepts/idempotency/`)

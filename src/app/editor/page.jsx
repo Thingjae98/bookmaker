@@ -13,6 +13,9 @@ import StepIndicator from '@/components/StepIndicator';
 import { toast } from '@/lib/toast';
 import { fetchWithRetry } from '@/lib/fetchWithRetry';
 
+// sessionStorage 자동 저장 키 — 에디터 갤러리 상태 보존
+const ARCHIVE_EDITOR_STATE_KEY = 'ARCHIVE_EDITOR_STATE';
+
 // ─── 검증된 폴백 상수 (SQUAREBOOK_HC 기준) ─────────────────────────
 const COVER_TEMPLATE_FALLBACK = '79yjMH3qRPly';
 const TPL_WITH_PHOTO_FALLBACK = '3FhSEhJ94c0T';
@@ -104,7 +107,7 @@ const buildCategoryGroups = (apiTemplates) => {
 };
 
 // 카테고리 그룹 → handleCreateBook용 tplMap 변환
-// { cover, photoText, photoOnly, textOnly, spread, source, coverParams, contentParamsMap }
+// { cover, photoText, photoOnly, textOnly, spread, blankPad, source, coverParams, contentParamsMap }
 const categoryToTplMap = (catGroup) => {
   if (!catGroup) {
     return {
@@ -113,6 +116,7 @@ const categoryToTplMap = (catGroup) => {
       photoOnly: TPL_WITH_PHOTO_FALLBACK,
       textOnly:  TPL_TEXT_ONLY_FALLBACK,
       spread:    TPL_WITH_PHOTO_FALLBACK,
+      blankPad:  null,  // 패딩 전용 blank 템플릿 (없으면 null → photoText로 대체)
       source:    'fallback',
       coverTpl:  null,
       contentTpls: {},
@@ -123,10 +127,21 @@ const categoryToTplMap = (catGroup) => {
   const photoText = catGroup.withPhoto[0]?.templateUid || TPL_WITH_PHOTO_FALLBACK;
   // withPhoto에 2번째가 있으면 photoOnly로 사용, 없으면 photoText 공유
   const photoOnly = (catGroup.withPhoto[1] || catGroup.withPhoto[0])?.templateUid || TPL_WITH_PHOTO_FALLBACK;
-  const textOnly  = catGroup.textOnly[0]?.templateUid  || TPL_TEXT_ONLY_FALLBACK;
 
-  // UID 유일성 안전망: textOnly가 photoText와 같으면 폴백
-  const finalTextOnly = (textOnly === photoText) ? TPL_TEXT_ONLY_FALLBACK : textOnly;
+  // ── 유령 템플릿 완전 퇴마: 현재 카테고리 내 UID만 사용 (글로벌 상수 fallback 절대 금지) ──
+  // 타 카테고리 전용 UID(예: 일기장A의 vHA59XPPKqak)가 구글포토북에 혼입되면 400 에러 발생
+  const textOnlyRaw = catGroup.textOnly[0]?.templateUid || null;
+  const blankTpl    = catGroup.blank[0]?.templateUid    || null;
+  // 우선순위: 현재 카테고리 textOnly → blank → photoOnly (절대 글로벌 상수 참조 금지)
+  const finalTextOnly = (textOnlyRaw && textOnlyRaw !== photoText)
+    ? textOnlyRaw
+    : (blankTpl || photoOnly);
+
+  // blankPad: 패딩 전용 — blank 우선, 없으면 photoText (현재 카테고리 내 UID만)
+  const blankPad = blankTpl || photoText;
+
+  // ── 카테고리 내 유효 UID 집합 — handleCreateBook에서 교차검증용 ──
+  const validUids = new Set(catGroup.all.map((t) => t.templateUid));
 
   // 개별 템플릿의 parameter definitions + 메타데이터 맵 (UID → definitions)
   // tplMeta: UID → { templateKind, breakBefore } (동적 레이아웃 제어용)
@@ -145,6 +160,8 @@ const categoryToTplMap = (catGroup) => {
   return {
     cover, photoText, photoOnly, textOnly: finalTextOnly,
     spread: photoOnly,
+    blankPad,  // 패딩 페이지 전용: 현재 카테고리 blank[0] 우선, 없으면 photoText
+    validUids, // 현재 카테고리의 유효 UID 집합 — 타 카테고리 UID 차단용
     source: 'category:' + catGroup.name,
     coverTpl: catGroup.covers[0] || null,
     contentTpls,
@@ -194,6 +211,18 @@ export default function EditorPage() {
 
   // ── 세션 복원 + 더미/AI 데이터 → 갤러리로 변환 ──────────────
   useEffect(() => {
+    // ── ?isNew=true 감지: URL 파라미터로 "신규 시작"과 "뒤로가기 복원"을 구분 ──
+    const urlParams = new URLSearchParams(window.location.search);
+    const isNew = urlParams.get('isNew') === 'true';
+    if (isNew) {
+      // 신규 시작 — 이전 에디터 갤러리 상태 완전 삭제
+      try { sessionStorage.removeItem(ARCHIVE_EDITOR_STATE_KEY); } catch (e) {}
+      // URL에서 isNew 파라미터 제거 (history 오염 방지)
+      const cleanUrl = new URL(window.location.href);
+      cleanUrl.searchParams.delete('isNew');
+      window.history.replaceState({}, '', cleanUrl.toString());
+    }
+
     const raw = sessionStorage.getItem('bookmaker_session');
     if (!raw) { router.push('/'); return; }
     const data = JSON.parse(raw);
@@ -276,6 +305,33 @@ export default function EditorPage() {
       })();
     }
 
+    // ── 갤러리 초기화 분기: isNew vs 뒤로가기/새로고침 복원 ──
+    if (!isNew) {
+      // 뒤로가기/새로고침 — 자동 저장된 갤러리 + 카테고리 상태 복원
+      try {
+        const savedState = sessionStorage.getItem(ARCHIVE_EDITOR_STATE_KEY);
+        if (savedState) {
+          const parsed = JSON.parse(savedState);
+          const savedGallery = parsed.gallery;
+          const savedCategory = parsed.selectedCategory;
+          if (savedGallery && savedGallery.length > 0) {
+            // File 객체는 직렬화 불가 → null로 복원 (previewUrl은 유지)
+            setGallery(savedGallery.map((item) => ({ ...item, file: null })));
+            // 저장된 카테고리가 있으면 복원 (카테고리 그룹 로딩 완료 후 덮어쓰기 방지용 ref)
+            if (savedCategory) {
+              setSelectedCategory(savedCategory);
+              prevCategoryRef.current = savedCategory; // 복원 시 카테고리 변경 이벤트 방지
+            }
+            console.log('[ARCHIVE_EDITOR_STATE 복원]', savedGallery.length, '개 아이템, 카테고리:', savedCategory);
+            return; // dummy 데이터 로드 스킵
+          }
+        }
+      } catch (e) {
+        console.warn('[ARCHIVE_EDITOR_STATE 복원 실패]', e);
+      }
+    }
+
+    // isNew=true이거나 저장된 상태가 없으면 → AI/더미 데이터로 초기화 (기존 로직)
     // AI 동화 페이지 or 더미 데이터 로드
     const aiRaw = sessionStorage.getItem('bookmaker_ai_pages');
     let initialPages = [];
@@ -598,6 +654,52 @@ export default function EditorPage() {
       editPanelRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
   }, [selectedIdx]);
+
+  // ── 갤러리 자동 저장 (Auto-save to ARCHIVE_EDITOR_STATE) ──────────────────────────
+  // File 객체는 직렬화 불가 → 제외, previewUrl/role/text 등 직렬화 가능 필드만 저장
+  // selectedCategory도 함께 저장 → 뒤로가기/새로고침 시 카테고리 복원
+  const autoSaveTimerRef = useRef(null);
+  useEffect(() => {
+    if (!session) return; // 세션 로드 전에는 저장 안 함
+    if (gallery.length === 0) return; // 빈 갤러리 덮어쓰기 방지
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      try {
+        const serializable = gallery.map(({ file, ...rest }) => rest); // File 제외
+        sessionStorage.setItem(ARCHIVE_EDITOR_STATE_KEY, JSON.stringify({
+          gallery: serializable,
+          selectedCategory: selectedCategory || null,
+        }));
+        console.log('[Auto-save] 갤러리 저장:', serializable.length, '개, 카테고리:', selectedCategory);
+      } catch (e) {
+        console.warn('[Auto-save 실패]', e);
+      }
+    }, 800);
+    return () => clearTimeout(autoSaveTimerRef.current);
+  }, [gallery, session, selectedCategory]);
+
+  // ── 카테고리 변경 시 갤러리 templateUid 전체 초기화 (유령 템플릿 퇴마) ──
+  // 이전 카테고리의 UID가 gallery item에 남아있으면 400 에러 유발 → 완전 교체(Replace)
+  const prevCategoryRef = useRef(null);
+  useEffect(() => {
+    if (!selectedCategory || selectedCategory === prevCategoryRef.current) return;
+    if (prevCategoryRef.current !== null) {
+      // 카테고리가 실제로 변경된 경우에만 갤러리 templateUid 초기화
+      const newCatGroup = categoryGroups[selectedCategory];
+      const newValidUids = newCatGroup ? new Set(newCatGroup.all.map((t) => t.templateUid)) : new Set();
+      setGallery((prev) =>
+        prev.map((item) => {
+          // 현재 카테고리에 존재하지 않는 templateUid → null로 초기화
+          if (item.templateUid && !newValidUids.has(item.templateUid)) {
+            return { ...item, templateUid: null };
+          }
+          return item;
+        })
+      );
+      console.log(`[카테고리 변경] ${prevCategoryRef.current} → ${selectedCategory} | 유효 UID ${newValidUids.size}개로 갤러리 정리`);
+    }
+    prevCategoryRef.current = selectedCategory;
+  }, [selectedCategory, categoryGroups]);
 
   // ── 카테고리 스위처 (Category Switcher) ─────────────────────────
   const catNames = useMemo(() => Object.keys(categoryGroups), [categoryGroups]);
@@ -1375,24 +1477,19 @@ export default function EditorPage() {
 
       // 패딩 페이지 — picsum fallback URL 사용으로 API 400 방지
       const paddedPages = [...contentPageData];
-      let ri = 0;
       while (paddedPages.length < targetContentCount) {
         const pIdx = paddedPages.length;
-        // ★ contentPageData가 비어있으면 소스 페이지를 처음부터 생성 (division-by-zero 방지)
-        const srcPage = contentPageData.length > 0
-          ? contentPageData[ri % contentPageData.length]
-          : null;
         // 패딩 페이지는 반드시 이미지 URL 확보 (null 이미지로 API 전송 시 400 위험)
-        const padImgUrl = srcPage?.imageUrl
-          || `https://picsum.photos/seed/${session.serviceType || 'archive'}-pad${pIdx}/600/600`;
+        const padImgUrl = `https://picsum.photos/seed/${session.serviceType || 'archive'}-pad${pIdx}/600/600`;
         paddedPages.push({
-          imageUrl: padImgUrl,
-          text:  srcPage?.text  || '',
-          title: srcPage?.title || `Page ${pIdx + 1}`,
-          date:  srcPage?.date  || new Date().toISOString().slice(0, 10),
-          params: srcPage?.params || {},
+          imageUrl:    padImgUrl,
+          text:        '',           // 패딩은 항상 텍스트 없음
+          title:       `Page ${pIdx + 1}`,
+          date:        new Date().toISOString().slice(0, 10),
+          params:      {},
+          templateUid: tplMap.blankPad || null,  // 현재 카테고리 blank 템플릿 명시
+          isBlankSlot: true,         // 파라미터 없는 blank 처리
         });
-        ri++;
       }
       if (paddedPages.length > contentPageData.length) {
         const padded = paddedPages.length - contentPageData.length;
@@ -1478,8 +1575,9 @@ export default function EditorPage() {
         const hasText     = !!(page.text || '').trim();
         // templateKind 검증: 내지에 content 템플릿만 사용
         // 사용자가 에디터에서 직접 선택한 templateUid가 있으면 우선 사용
+        // ★ 유령 템플릿 방어: 현재 카테고리 validUids에 없는 UID는 무시
         let tplUid;
-        if (page.templateUid && tplMap.contentTpls[page.templateUid]) {
+        if (page.templateUid && tplMap.validUids?.has(page.templateUid) && tplMap.contentTpls[page.templateUid]) {
           tplUid = page.templateUid;
         } else if (page.isSpreadPage) {
           tplUid = tplMap.spread;

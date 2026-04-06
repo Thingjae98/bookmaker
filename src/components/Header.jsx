@@ -7,8 +7,9 @@ import { useRouter } from 'next/navigation';
 // 새 아카이브 시작 시 에디터 잔여 상태를 초기화
 function clearEditorState() {
   try {
-    ['bookmaker_session', 'bookmaker_preview'].forEach((k) => sessionStorage.removeItem(k));
-    console.log('[Clean Slate] Header에서 에디터 상태 초기화');
+    ['bookmaker_session', 'bookmaker_preview', 'ARCHIVE_EDITOR_STATE', 'BOOK_DRAFT_archive']
+      .forEach((k) => sessionStorage.removeItem(k));
+    console.log('[Clean Slate] 에디터 상태 전체 초기화');
   } catch (e) { /* SSR 무시 */ }
 }
 

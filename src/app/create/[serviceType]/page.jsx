@@ -33,14 +33,16 @@ export default function CreatePage() {
   const [allTemplates, setAllTemplates] = useState([]);
 
   // ── 마운트 시 Draft 복원 (1회) ──────────────────────────────
-  // 에디터에서 뒤로 온 경우(bookmaker_session 존재)에는 토스트를 표시하지 않음
+  // 복원 우선순위: 1) DRAFT_KEY (폼 자동 저장), 2) bookmaker_session (에디터에서 뒤로 온 경우)
   useEffect(() => {
+    let restored = false;
     try {
       const raw = sessionStorage.getItem(DRAFT_KEY);
       if (raw) {
         const draft = JSON.parse(raw);
         if (draft.formData && Object.keys(draft.formData).length > 0) {
           setFormData(draft.formData);
+          restored = true;
         }
         if (draft.selectedSpec) {
           setSelectedSpec(draft.selectedSpec);
@@ -49,16 +51,40 @@ export default function CreatePage() {
         if (draft.useDummy) {
           setUseDummy(true);
         }
-        setDraftRestored(true);
-        // 에디터→뒤로가기 시에는 이미 세션이 있으므로 "복원" 토스트 불필요
-        const hasEditorSession = sessionStorage.getItem('bookmaker_session');
-        if (!hasEditorSession) {
-          toast.info('이전에 입력한 내용이 복원되었습니다');
-        }
         console.log(`[Draft 복원] ${serviceType}:`, draft);
       }
     } catch (err) {
       console.warn('[Draft 복원 실패]', err);
+    }
+    // DRAFT_KEY에 formData가 없으면 bookmaker_session에서 폴백 복원
+    if (!restored) {
+      try {
+        const sessionRaw = sessionStorage.getItem('bookmaker_session');
+        if (sessionRaw) {
+          const sess = JSON.parse(sessionRaw);
+          if (sess.formData && Object.keys(sess.formData).length > 0) {
+            setFormData(sess.formData);
+            restored = true;
+          }
+          if (sess.bookSpecUid) {
+            setSelectedSpec(sess.bookSpecUid);
+            restoredSpecRef.current = sess.bookSpecUid;
+          }
+          if (sess.useDummy) {
+            setUseDummy(true);
+          }
+          console.log(`[Session 폴백 복원] ${serviceType}:`, sess);
+        }
+      } catch (err) {
+        console.warn('[Session 폴백 복원 실패]', err);
+      }
+    }
+    if (restored) {
+      setDraftRestored(true);
+      const hasEditorSession = sessionStorage.getItem('bookmaker_session');
+      if (!hasEditorSession) {
+        toast.info('이전에 입력한 내용이 복원되었습니다');
+      }
     }
   }, [DRAFT_KEY, serviceType]);
 
@@ -181,8 +207,11 @@ export default function CreatePage() {
       useDummy,
     };
     sessionStorage.setItem('bookmaker_session', JSON.stringify(sessionData));
-    sessionStorage.removeItem(DRAFT_KEY);
-    router.push('/editor');
+    // DRAFT 즉시 저장 (debounce 대기 없이) — 에디터에서 back 시 폼 데이터 100% 복원 보장
+    try {
+      sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ formData, selectedSpec, useDummy }));
+    } catch (e) { /* 무시 */ }
+    router.push('/editor?isNew=true');  // isNew=true: 에디터에서 이전 갤러리 상태를 초기화하고 새로 시작
   };
 
   return (

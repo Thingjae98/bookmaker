@@ -4,9 +4,10 @@ import { useRouter } from 'next/navigation';
 
 // 에디터/세션 관련 sessionStorage 키 — 새 아카이브 시작 시 초기화 대상
 const EDITOR_SESSION_KEYS = [
-  'bookmaker_session',  // 에디터 워크플로우 세션
-  'bookmaker_preview',  // 미리보기 스프레드 데이터
-  // 주의: BOOK_DRAFT_{serviceType}는 Create 페이지 초안이므로 여기서 지우지 않음
+  'bookmaker_session',    // 에디터 워크플로우 세션
+  'bookmaker_preview',    // 미리보기 스프레드 데이터
+  'ARCHIVE_EDITOR_STATE', // 에디터 갤러리 자동 저장
+  'BOOK_DRAFT_archive',   // Create 페이지 폼 초안 (메인에서 새로 시작 시 초기화)
 ];
 
 // 새 아카이브 시작 시 이전 에디터 상태를 완전히 초기화하는 헬퍼

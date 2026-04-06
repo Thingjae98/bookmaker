@@ -5,6 +5,43 @@
 
 ---
 
+## 📋 2026-04-06 — 유령 템플릿 400 에러 해결 및 URL 기반 스마트 상태 복원 도입
+
+### 증상
+- 구글포토북A 카테고리 선택 시 finalize 400 에러: textOnly 템플릿(`vHA59XPPKqak`)이 일기장A 전용 UID라 구글포토북 카테고리에서 거부됨
+- 패딩 페이지가 소스 페이지의 templateUid를 복사하여 잘못된 카테고리 템플릿 전송
+- Main → Create 라우팅 시 이전 세션 데이터 잔존 / Editor → back → Create 시 폼 데이터 유실
+- 카테고리 변경 후에도 이전 카테고리의 templateUid가 갤러리 아이템에 잔존 → 400 에러
+
+### 결정 및 해결
+
+#### 유령 템플릿 퇴마 (3중 방어)
+1. **`categoryToTplMap` 글로벌 상수 참조 완전 제거**: textOnly 폴백에서 `TPL_TEXT_ONLY_FALLBACK` 제거
+   - 폴백 순서: 현재 카테고리 textOnly → blank → photoOnly (글로벌 상수 절대 불참조)
+   - `validUids` Set 추가: 현재 카테고리의 모든 templateUid 집합 반환
+2. **카테고리 변경 시 갤러리 templateUid 전체 교체**: `prevCategoryRef` + `useEffect([selectedCategory])`
+   - 이전 카테고리에서 지정된 templateUid가 새 카테고리에 존재하지 않으면 null로 초기화
+   - `...prev` 병합 대신 `validUids.has()` 검증 후 완전 교체(Replace)
+3. **`handleCreateBook` 내지 전송 시 `validUids` 교차 검증**: `page.templateUid`가 현재 카테고리에 없으면 무시
+- `blankPad` 필드: 패딩 전용 blank 템플릿 UID (카테고리 내 blank[0] 우선)
+- 패딩 루프: `srcPage` 복사 대신 `blankPad` 명시 + `isBlankSlot: true`로 파라미터 없는 blank 전송
+
+#### URL Query 파라미터 기반 스마트 상태 관리
+- `ARCHIVE_EDITOR_STATE` sessionStorage 키: 에디터 갤러리 + selectedCategory를 800ms 디바운스로 자동 저장
+- Create 페이지 제출 → `/editor?isNew=true` 이동 + DRAFT 즉시 저장 (debounce 대기 없이)
+- 에디터 마운트 시 `window.location.search`에서 `isNew` 감지:
+  - `isNew=true`: ARCHIVE_EDITOR_STATE 삭제 + URL param 제거 → AI/더미 데이터로 신규 초기화
+  - `isNew` 없음: ARCHIVE_EDITOR_STATE에서 gallery + selectedCategory 복원 → 뒤로가기/새로고침 상태 보존
+- Create 페이지 Draft 복원 이중화: DRAFT_KEY 우선 → bookmaker_session 폴백 → 에디터→back 시 100% 복원 보장
+- Main/Header의 `clearEditorState()`: 4개 키 전체 삭제 (bookmaker_session, bookmaker_preview, ARCHIVE_EDITOR_STATE, BOOK_DRAFT_archive)
+
+#### 더미 데이터 고도화 (Gemini AI 활용)
+- picsum 랜덤 이미지 → Unsplash 큐레이션 고정 URL로 교체 (Minimal & Tech 테마)
+- 페르소나 업데이트: Tommy (D-Lab Instructor) / Software Engineer & Educator
+- 실제 프로젝트 경험 기반 텍스트 (Sweetbook, AWS EC2, USACO 커리큘럼 등)
+
+---
+
 ## 📋 2026-04-06 — 메인 페이지 진입 시 에디터 상태 초기화 및 400 에러 상세 로깅
 
 ### 증상
