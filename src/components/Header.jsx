@@ -2,9 +2,26 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+
+// 새 아카이브 시작 시 에디터 잔여 상태를 초기화
+function clearEditorState() {
+  try {
+    ['bookmaker_session', 'bookmaker_preview'].forEach((k) => sessionStorage.removeItem(k));
+    console.log('[Clean Slate] Header에서 에디터 상태 초기화');
+  } catch (e) { /* SSR 무시 */ }
+}
 
 export default function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const router = useRouter();
+
+  const handleNewArchive = (e) => {
+    e.preventDefault();
+    clearEditorState();
+    setMenuOpen(false);
+    router.push('/create/archive');
+  };
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-b border-neutral-200">
@@ -21,9 +38,9 @@ export default function Header() {
 
         {/* Desktop Navigation */}
         <nav className="hidden md:flex items-center gap-8">
-          <Link href="/create/archive" className="text-sm text-neutral-600 hover:text-neutral-900 transition-colors">
+          <button onClick={handleNewArchive} className="text-sm text-neutral-600 hover:text-neutral-900 transition-colors">
             New Archive
-          </Link>
+          </button>
           <Link href="/orders" className="text-sm text-neutral-600 hover:text-neutral-900 transition-colors">
             Orders
           </Link>
@@ -63,9 +80,9 @@ export default function Header() {
       {/* Mobile Menu */}
       {menuOpen && (
         <div className="md:hidden bg-white border-t border-neutral-200 px-6 py-4 space-y-3">
-          <Link href="/create/archive" onClick={() => setMenuOpen(false)} className="block text-sm text-neutral-600 py-2">
+          <button onClick={handleNewArchive} className="block text-sm text-neutral-600 py-2 w-full text-left">
             New Archive
-          </Link>
+          </button>
           <Link href="/orders" onClick={() => setMenuOpen(false)} className="block text-sm text-neutral-600 py-2">
             Orders
           </Link>

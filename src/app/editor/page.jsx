@@ -1554,11 +1554,21 @@ export default function EditorPage() {
             }
           });
         } else {
-          // definitions 없는 레거시 폴백
+          // definitions 없는 레거시 폴백 (blank 템플릿 포함)
+          // ⚠️ 빈 파라미터({}) 전송 시 API 400 방어 — 항상 최소 필드 보장
           params.date      = page.date  || new Date().toISOString().slice(0, 10);
           params.title     = page.title || `Page ${i + 1}`;
           params.diaryText = (page.text || '').trim() || ' ';
-          if (hasImage) params.photo1 = page.imageUrl;
+          // photo 바인딩: blob: URL 차단, fileName/http URL만 허용
+          if (hasImage) {
+            const safeRef = !String(page.imageUrl).startsWith('blob:') ? page.imageUrl : null;
+            if (safeRef) params.photo1 = safeRef;
+          }
+          // blank 템플릿은 빈 파라미터가 와도 최소 text 필드로 400 방어
+          if (Object.keys(params).filter(k => params[k] && String(params[k]).trim()).length === 0) {
+            params.diaryText = ' ';
+          }
+          console.log(`[레거시 폴백] 페이지 ${i + 1} tpl=${tplUid} params:`, params);
         }
 
         // breakBefore 동적 제어: 템플릿 정의에 명시된 값 우선, 없으면 'none' (API 기본 플로우)
@@ -1597,6 +1607,27 @@ export default function EditorPage() {
       const finalRes  = await fetch(`/api/books/${uid}/finalize`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
       });
+
+      // 응답 HTTP 상태 먼저 로깅 — 4xx/5xx 포함
+      if (!finalRes.ok) {
+        let errBody = {};
+        try { errBody = await finalRes.json(); } catch (e) { errBody = { raw: await finalRes.text().catch(() => '') }; }
+        console.error('최종화 실패 상세 사유:', {
+          status:    finalRes.status,
+          bookUid:   uid,
+          pageCount: paddedPages.length,
+          body:      errBody,
+          // 어떤 파라미터가 문제인지 추적용
+          tplMapSnapshot: { ...tplMap },
+          bookSpecUid,
+        });
+        addLog(`❌ 최종화 HTTP ${finalRes.status}: ${errBody?.message || errBody?.error || JSON.stringify(errBody).slice(0, 200)}`);
+        if (errBody?.details) addLog(`   상세: ${JSON.stringify(errBody.details).slice(0, 300)}`);
+        toast.warn(`최종화 실패 (${finalRes.status}): ${errBody?.message || '응답 확인 필요'}`);
+        sessionStorage.setItem('bookmaker_session', JSON.stringify({ ...session, bookUid: uid }));
+        return; // catch 없이 early-return — finally에서 로딩 해제
+      }
+
       const finalData = await finalRes.json();
 
       if (finalData.success) {
@@ -1635,9 +1666,17 @@ export default function EditorPage() {
         };
         sessionStorage.setItem('bookmaker_preview', JSON.stringify(previewData));
       } else {
+        // finalRes.ok였지만 success:false인 케이스 (SDK 레벨 오류)
         const finalDetail = finalData.details ? ` | 상세: ${JSON.stringify(finalData.details)}` : '';
-        addLog(`❌ 최종화 실패: ${finalData.message}${finalDetail}`);
-        console.dir({ finalizeError: finalData, uid, paddedPagesCount: paddedPages.length });
+        addLog(`❌ 최종화 실패(SDK): ${finalData.message}${finalDetail}`);
+        console.error('최종화 실패 상세 사유:', {
+          status:    finalRes.status,
+          bookUid:   uid,
+          pageCount: paddedPages.length,
+          body:      finalData,
+          tplMapSnapshot: { ...tplMap },
+          bookSpecUid,
+        });
         toast.warn(`최종화 실패: ${finalData.message}`);
         sessionStorage.setItem('bookmaker_session', JSON.stringify({ ...session, bookUid: uid }));
       }

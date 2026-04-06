@@ -1,6 +1,33 @@
-import Link from 'next/link';
+'use client';
+
+import { useRouter } from 'next/navigation';
+
+// 에디터/세션 관련 sessionStorage 키 — 새 아카이브 시작 시 초기화 대상
+const EDITOR_SESSION_KEYS = [
+  'bookmaker_session',  // 에디터 워크플로우 세션
+  'bookmaker_preview',  // 미리보기 스프레드 데이터
+  // 주의: BOOK_DRAFT_{serviceType}는 Create 페이지 초안이므로 여기서 지우지 않음
+];
+
+// 새 아카이브 시작 시 이전 에디터 상태를 완전히 초기화하는 헬퍼
+function clearEditorState() {
+  try {
+    EDITOR_SESSION_KEYS.forEach((key) => sessionStorage.removeItem(key));
+    console.log('[Clean Slate] 에디터 상태 초기화 완료:', EDITOR_SESSION_KEYS);
+  } catch (e) {
+    // SSR 환경에서 sessionStorage 접근 실패 — 무시
+  }
+}
 
 export default function HomePage() {
+  const router = useRouter();
+
+  const handleStartNew = (e) => {
+    e.preventDefault();
+    clearEditorState();
+    router.push('/create/archive');
+  };
+
   return (
     <div className="min-h-screen bg-white">
       {/* Hero — Full-screen Black & White */}
@@ -27,15 +54,15 @@ export default function HomePage() {
             한 권의 프리미엄 아카이브로 남기세요.
           </p>
 
-          <Link
-            href="/create/archive"
+          <button
+            onClick={handleStartNew}
             className="group inline-flex items-center gap-3 px-8 py-4 bg-neutral-900 text-white text-sm font-medium tracking-wider uppercase transition-all hover:bg-neutral-800 opacity-0 animate-fade-up delay-300"
           >
             Start Archiving
             <svg className="w-4 h-4 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
             </svg>
-          </Link>
+          </button>
         </div>
       </section>
 
@@ -100,15 +127,15 @@ export default function HomePage() {
           <p className="text-neutral-500 mb-10">
             더미 데이터로 즉시 체험하거나, 실제 프로젝트 정보를 입력해 시작할 수 있습니다.
           </p>
-          <Link
-            href="/create/archive"
+          <button
+            onClick={handleStartNew}
             className="inline-flex items-center gap-3 px-8 py-4 bg-neutral-900 text-white text-sm font-medium tracking-wider uppercase transition-all hover:bg-neutral-800"
           >
             Create Archive
             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
             </svg>
-          </Link>
+          </button>
         </div>
       </section>
 

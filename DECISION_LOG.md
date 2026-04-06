@@ -5,6 +5,33 @@
 
 ---
 
+## 📋 2026-04-06 — 메인 페이지 진입 시 에디터 상태 초기화 및 400 에러 상세 로깅
+
+### 증상
+- 메인 페이지에서 "Start Archiving" 클릭 시 이전 작업의 `bookmaker_session`이 잔존 → 에디터가 이전 데이터로 오염되어 진입
+- finalize 400 에러 발생 시 `console.dir({...})` 출력이 `Object`로만 찍혀 SweetBook API의 정확한 에러 원인 파악 불가
+- blank 템플릿(definitions 없음) 페이지에서 빈 파라미터(`{}`) 전송 → 일부 카테고리에서 400
+
+### 결정 및 해결
+
+#### 에디터 Clean Slate 초기화
+- `src/app/page.jsx`를 `'use client'`로 전환. `Link` → `<button>` 으로 변경하고 `onClick`에서 `clearEditorState()` 호출
+- `clearEditorState()` 함수: `bookmaker_session` + `bookmaker_preview` 두 키를 `sessionStorage.removeItem`으로 명시적 삭제
+- 헤더의 "New Archive" 링크도 동일 로직 적용 (진입점 일원화)
+- **보존 대상**: `BOOK_DRAFT_{serviceType}` (Create 페이지 초안), `bookmaker_ai_pages` (AI 생성 데이터) — 에디터 내 뒤로가기/새로고침 시 자동 저장 로직은 그대로 유지
+
+#### Finalize 에러 상세 로깅
+- `fetch(/api/finalize)` 직후 `finalRes.ok` 체크를 먼저 수행
+- HTTP 4xx/5xx 시 응답 body를 `console.error("최종화 실패 상세 사유:", { status, body, tplMapSnapshot, bookSpecUid })` 형태로 출력 → SweetBook API가 어떤 파라미터를 거부했는지 추적 가능
+- SDK 레벨 오류(`success:false`)도 동일 구조로 상세 로깅
+
+#### blank 템플릿 파라미터 폴백 강화
+- definitions 없는 레거시/blank 템플릿에서 `{}` 전송 방지
+- 항상 `params.diaryText = ' '` 최소 필드 보장
+- `photo1` 바인딩 시 `blob:` URL 차단 — 서버 fileName 또는 http URL만 전달
+
+---
+
 ## 📋 2026-04-06 — 더미 데이터 정화 및 내지 전송 파이프라인 완전 복구
 
 ### 증상
