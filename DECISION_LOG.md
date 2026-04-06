@@ -5,6 +5,52 @@
 
 ---
 
+## 📋 2026-04-06 — Orders API 스펙 대비 구현 Gap 분석 및 Webhook 연동 사전 계획
+
+### 배경
+에디터 + Books API 안정화 후, 실제 결제·배송이 일어나는 Orders API 구현 현황을 SweetBook 공식 스펙과 1:1 대조 점검. 다음 단계인 Webhook 연동을 위한 사전 기반도 함께 분석.
+
+### 분석 결과 — 구현 현황 매트릭스
+
+| API 엔드포인트 | 스펙 | 구현 상태 | 비고 |
+|---------------|------|----------|------|
+| `POST /orders` (주문 생성) | 필수 | ✅ 완료 | `externalRef: bookmaker-order-${uuid}` 자동 생성. `Idempotency-Key` 헤더 적용. 409 Conflict 안전 처리 |
+| `POST /orders/estimate` (견적) | 필수 | ✅ 완료 | items 배열만으로 예상 금액 조회 |
+| `GET /orders` (목록) | 필수 | ✅ 완료 | limit/offset 페이지네이션 + status 필터 |
+| `GET /orders/{orderUid}` (상세) | 필수 | ✅ 완료 | 상품금액/배송비/포장비 분리 표시 |
+| `POST /orders/{orderUid}/cancel` (취소) | 필수 | ⚠️ 부분 | PAID(20) 상태에서만 UI 버튼 표시. PDF_READY 상태 미지원 |
+| `PATCH /orders/{orderUid}/shipping` (배송지 변경) | 선택 | ❌ 미구현 | API 라우트·UI 모두 부재 |
+| `externalUserId` 전달 | 선택 | ❌ 미사용 | Webhook 매칭에 유용하나 현재 인증 시스템 없어 불필요 |
+| Webhook 수신 라우트 | 선택 | ❌ 미구현 | `/api/webhooks/sweetbook` 라우트 필요 |
+
+### Gap 상세
+
+#### Gap 1: 주문 취소 상태 범위
+- **현재**: `orderStatus === 20` (PAID)에서만 취소 버튼 표시
+- **스펙**: PAID(20)와 PDF_READY 상태에서 모두 취소 가능 (CONFIRMED(30) 이전)
+- **보완**: ORDER_STATUS 상수에 PDF_READY 코드 추가 + 취소 버튼 조건 확장
+
+#### Gap 2: 배송지 변경 미구현
+- **스펙**: `PATCH /v1/orders/{orderUid}/shipping`으로 CONFIRMED(30) 이전 배송지 수정 가능
+- **필요 작업**: API 라우트(`src/app/api/orders/[orderUid]/shipping/route.js`) 신규 생성 + SDK 래퍼 함수 추가 + 주문 상세 UI에 "배송지 수정" 버튼 추가
+
+#### Gap 3: Webhook 수신 인프라 부재
+- **스펙**: SweetBook이 주문 상태 변경 시 등록된 URL로 POST 콜백 전송
+- **필요 작업**:
+  1. `src/app/api/webhooks/sweetbook/route.js` — POST 수신 라우트 (서명 검증 포함)
+  2. 수신된 이벤트의 `externalRef`로 내부 주문 매칭
+  3. 상태 업데이트 → UI 반영 (현재 DB 없으므로 sessionStorage 또는 실시간 폴링 대체 가능)
+  4. SweetBook 대시보드에서 Webhook URL 등록 (배포 URL 필요)
+
+#### Gap 4: externalUserId 미사용
+- 현재 사용자 인증 시스템이 없으므로 당장 불필요
+- NextAuth 도입 시 사용자별 주문 필터링에 `externalUserId` 활용 예정
+
+### 결론
+핵심 주문 플로우(생성·견적·조회·기본 취소)는 완전 구현 상태. 배송지 변경과 Webhook은 면접 후 개선 단계에서 순차 구현 예정. `externalRef` UUID 기반 추적은 Webhook 매칭의 기반으로 이미 준비됨.
+
+---
+
 ## 🔧 2026-04-06 — 템플릿 definitions의 binding 속성 기반 단일/다중 사진 UI 초정밀 분기 리팩토링
 
 ### 배경

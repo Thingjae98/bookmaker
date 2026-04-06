@@ -424,12 +424,23 @@ try {
 - [ ] 모바일 반응형 최종 점검 (640px 이하)
 
 ### P2 — 시간 여유 시 / 면접 후 개선
+
+#### Orders API 보완
+- [ ] 주문 취소 상태 범위 확장 — 현재 PAID(20)만 → PDF_READY 상태 추가, ORDER_STATUS 상수에 PDF_READY 코드 등록
+- [ ] 배송지 변경 기능 — `PATCH /v1/orders/{orderUid}/shipping` 라우트 신규 생성 (`src/app/api/orders/[orderUid]/shipping/route.js`), SDK `updateShipping()` 함수 추가, 주문 상세 UI에 "배송지 수정" 버튼 (CONFIRMED 이전 상태에서만 활성화)
+- [ ] `externalUserId` 전달 — NextAuth 도입 후 사용자별 주문 필터링에 활용 예정
+
+#### Webhook 연동 (주문 상태 실시간 동기화)
+- [ ] Webhook 수신 라우트 — `src/app/api/webhooks/sweetbook/route.js` POST 핸들러 생성, SweetBook 서명 검증(`X-Webhook-Signature` 헤더), `externalRef`로 내부 주문 매칭
+- [ ] 상태 동기화 로직 — 수신 이벤트의 `orderStatus` 변경을 캐시/세션에 반영 (DB 없으므로 인메모리 또는 폴링 대체 가능), 주문 내역 UI 자동 갱신
+- [ ] SweetBook 대시보드에서 Webhook URL 등록 (배포 URL 확보 후)
+
+#### 기타
 - [ ] Element Grouping — `visible` 파라미터 토글 UI (아이콘 숨기기, 코멘트 끄기 등), `shiftUpOnHide` 자동 레이아웃 조정 (`/concepts/element-grouping/`)
 - [ ] Column Templates — 1/2/3단 레이아웃 선택 UI (UID: `cnH0Ud1nl1f9`, `4G5qpFLebGKd`, `2Ec6Dp8duR3z`) (`/concepts/column/`)
 - [ ] Dynamic Layout 고급 — `splittable` 긴 텍스트 자동 분할, `isDynamic` 동적 높이, `lanes` X범위 독립 Y-flow (`/concepts/dynamic-layout/`)
 - [ ] Text Processing — 서버 텍스트 높이 계산 API 연동 (`/concepts/text-processing/`)
 - [ ] Base Layer — odd/even 페이지 구분 콘텐츠 차별화 (`/concepts/base-layer/`)
-- [ ] 웹훅 연동 (주문 상태 변경 실시간 알림)
 - [ ] 사용자 인증 (NextAuth)
 - [ ] 다크 모드
 - [ ] Vercel/Netlify 배포 (심사 편의를 위한 라이브 데모 URL 제공)

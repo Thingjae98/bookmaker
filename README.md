@@ -228,8 +228,8 @@ SweetBook API 공식 문서(10개 Concepts 페이지)를 전수 검토하여 구
 
 ### 완전 구현 (9개 영역)
 - **Books API** — 생성, 사진 업로드, 표지, 내지, 최종화 전체 워크플로우
-- **Orders API** — 견적, 주문 생성, 목록/상세 조회, 취소
-- **Template Engine** — theme(카테고리) 기반 필터링, templateKind 분리, 파라미터 바인딩 자동 감지
+- **Orders API** — 견적, 주문 생성, 목록/상세 조회, 취소 (externalRef UUID 기반 추적, Idempotency-Key 적용)
+- **Template Engine** — theme(카테고리) 기반 필터링, templateKind 분리, 파라미터 바인딩 자동 감지 (rowGallery/collageGallery 다중 사진 UI 포함)
 - **Base Layer** — 썸네일 odd/even 폴백 체인 적용
 - **Cover Spread** — 앞+뒤표지 통합 API 호출
 - **Photo Upload** — multipart Drag & Drop, 갤러리 관리
@@ -237,16 +237,16 @@ SweetBook API 공식 문서(10개 Concepts 페이지)를 전수 검토하여 구
 - **페이지 규격 검증** — pageMin/pageIncrement 실시간 체크 + 자동 패딩
 
 ### 부분 구현 / 개선 예정
-- **Gallery 배열** (`/concepts/gallery/`) — 단일 사진 배열만 지원, 다중 사진 갤러리(collageGallery/rowGallery) 개선 예정
-- **Dynamic Layout** (`/concepts/dynamic-layout/`) — breakBefore 'page' 고정, 조건부 제어 개선 예정
-- **Special Page Rules** (`/concepts/special-page-rules/`) — PUR 제본 첫 내지 Right 배치 미리보기 반영 예정
-- **Idempotency** (`/concepts/idempotency/`) — 409 Conflict 처리 및 referenceId 적용 예정
+- **주문 취소 상태 범위** — 현재 PAID(20) 상태에서만 취소 가능. PDF_READY 상태 취소 지원 예정
+- **배송지 변경** (`PATCH /orders/{orderUid}/shipping`) — CONFIRMED 이전 단계에서 수정 가능한 API 라우트 + UI 개발 예정
+- **Webhook 기반 주문 상태 동기화** — SweetBook Webhook으로 주문 상태 변경 이벤트를 실시간 수신하는 `/api/webhooks/sweetbook` 라우트 개발 예정. `externalRef`로 내부 주문 매칭, 서명 검증(`X-Webhook-Signature`) 포함
 
 ### 의도적 미구현 (서버 측 자동 처리 또는 고급 UX)
 - Element Grouping (visible 토글, shiftUpOnHide)
 - Column Templates (2/3단 레이아웃)
 - Text Processing (서버 측 자동 처리)
 - Dynamic Layout 고급 기능 (splittable, isDynamic, lanes)
+- `externalUserId` — 사용자 인증(NextAuth) 도입 시 활용 예정
 
 > 상세 분석: `DECISION_LOG.md` "2026-04-06 — SweetBook API 문서 전수 검토 & Gap 분석" 참조
 
