@@ -1234,49 +1234,83 @@ export default function EditorPage() {
       }
       addLog(`📘 뒤표지 URL: ${coverBackUrl.slice(0, 70)}`);
 
-      // ── STEP 2-b: 갤러리 다중 사진(page.images) 사전 업로드 ──
-      // POST /contents 루프 전에, 로컬 File 객체를 모두 서버 URL로 변환해 둔다.
-      // 이렇게 하면 POST /contents 시점에는 모든 이미지가 서버 참조 가능한 URL이다.
+      // ── STEP 2-b: 모든 내지 사진 일괄 사전 업로드 ──
+      // POST /contents 루프 전에, 모든 로컬 File 객체를 서버에 업로드하여 fileName/URL로 변환
+      // 이렇게 하면 POST /contents 시점에는 모든 이미지가 서버 참조 가능한 값이다.
       const svcKey = session.serviceType || 'archive';
 
-      // 내지별 다중 사진 사전 업로드 맵: ci → string[]
+      // 내지별 사전 업로드 결과 맵: ci → string (단일 서버 참조) 또는 string[] (다중 사진)
       const preUploadedImagesMap = {};
+      addLog(`📸 내지 ${contentItems.length}장 사진 일괄 사전 업로드 시작...`);
+
       for (let ci = 0; ci < contentItems.length; ci++) {
         const item = contentItems[ci];
+        const fileToUpload = contentFileMap[ci]; // stagedFilesRef 또는 item.file
+
+        // ── Case 1: 다중 사진(item.images) — rowGallery/collageGallery 바인딩용 ──
         if (item.images && item.images.length > 0) {
-          addLog(`🖼️ 내지 ${ci + 1}: 다중 사진 ${item.images.length}장 사전 업로드 중...`);
           const urls = [];
           for (const img of item.images) {
-            if (img.file) {
-              const url = await uploadFile(img.file, `내지 ${ci + 1} 갤러리`);
+            if (img.file || img instanceof File || img instanceof Blob) {
+              const f = img.file || img;
+              const url = await uploadFile(f, `내지 ${ci + 1} 갤러리`);
               if (url) urls.push(url);
+            } else if (typeof img === 'string' && img.startsWith('http')) {
+              urls.push(img);
             } else if (img.previewUrl?.startsWith('http')) {
               urls.push(img.previewUrl);
             }
           }
           if (urls.length > 0) {
             preUploadedImagesMap[ci] = urls;
-            addLog(`✅ 내지 ${ci + 1}: 다중 사진 ${urls.length}장 사전 업로드 완료`);
+            addLog(`✅ 내지 ${ci + 1}: 다중 사진 ${urls.length}장 업로드 완료`);
           }
         }
+        // ── Case 2: 단일 사진 (File/Blob) — 가장 일반적인 케이스 ──
+        else if (fileToUpload) {
+          const serverRef = await uploadFile(fileToUpload, `내지 ${ci + 1}`);
+          if (serverRef) {
+            preUploadedImagesMap[ci] = serverRef;
+          } else {
+            addLog(`⚠️ 내지 ${ci + 1} 업로드 실패 — picsum fallback 적용`);
+            preUploadedImagesMap[ci] = `https://picsum.photos/seed/${svcKey}-c${ci}/600/600`;
+          }
+        }
+        // ── Case 3: 파일 없음 — previewUrl(http)이 있으면 그대로 사용 ──
+        else if (item.previewUrl?.startsWith('http')) {
+          preUploadedImagesMap[ci] = item.previewUrl;
+        }
+        // ── Case 4: 빈 슬롯이 아닌데 파일도 URL도 없음 → fallback ──
+        else if (!item.isBlankSlot) {
+          preUploadedImagesMap[ci] = `https://picsum.photos/seed/${svcKey}-c${ci}/600/600`;
+        }
+        // Case 5: isBlankSlot = true → 맵에 넣지 않음 (TPL_TEXT_ONLY로 처리)
       }
 
-      // ── 내지 사진 업로드 — contentFileMap[ci] 기준 (절대 인덱스 매핑) ──
+      // ── 사전 업로드 결과 검증 로그 ──
+      console.log('[contentFileMap 스냅샷]', contentFileMap);
+      console.log('업로드 매핑 결과:', preUploadedImagesMap);
+      const mapEntries = Object.entries(preUploadedImagesMap).map(([k, v]) => ({
+        index: k,
+        type: Array.isArray(v) ? `array[${v.length}]` : typeof v,
+        value: Array.isArray(v) ? v.map(u => u?.slice?.(0, 40)).join(', ') : String(v)?.slice(0, 60),
+      }));
+      try { console.table(mapEntries); } catch(e) { /* 빈 맵 */ }
+      addLog(`📸 사전 업로드 완료: ${Object.keys(preUploadedImagesMap).length}/${contentItems.length}장 매핑됨`);
+
+      // ── 내지 contentPageData 조립 — preUploadedImagesMap 참조 (업로드 없음) ──
       const contentPageData = [];
       addLog(`📄 내지 ${contentItems.length}장 처리 중...`);
 
-      // contentFileMap + preUploadedImagesMap 스냅샷 로그
-      console.log('[contentFileMap 스냅샷]', contentFileMap);
-      console.log('[preUploadedImagesMap 스냅샷]', preUploadedImagesMap);
-      try { console.table(Object.entries(contentFileMap).map(([k,v]) => ({ index: k, type: v?.constructor?.name, size: v?.size }))); } catch(e) { /* 빈 맵 */ }
-
       for (let ci = 0; ci < contentItems.length; ci++) {
-        const item          = contentItems[ci];
-        const fileToUpload  = contentFileMap[ci]; // 절대 인덱스로 파일 취득
-        const fallbackUrl   = `https://picsum.photos/seed/${svcKey}-c${ci}/600/600`;
+        const item         = contentItems[ci];
+        const fileToUpload = contentFileMap[ci];
+        const fallbackUrl  = `https://picsum.photos/seed/${svcKey}-c${ci}/600/600`;
+        const uploaded     = preUploadedImagesMap[ci]; // 사전 업로드 결과 (string | string[] | undefined)
 
         if (item.useSpread && item.isLandscape && fileToUpload) {
           // Canvas API 양면 분할 (가로형 사진 → 좌/우 2페이지)
+          // 양면 분할은 특수 케이스 — 사전 업로드 결과 대신 직접 분할 후 재업로드
           addLog(`↔️ 양면 분할: 내지 ${ci + 1} (itemId: ${item.id})`);
           try {
             const [lb, rb]  = await splitImageHalves(fileToUpload);
@@ -1290,28 +1324,30 @@ export default function EditorPage() {
           } catch (e) {
             addLog(`⚠️ 양면 분할 실패(${e.message}) — 원본 단일 처리`);
             console.dir({ spreadSplitError: e, ci });
-            const singleUrl = (await uploadFile(fileToUpload, `내지 ${ci + 1}`)) || fallbackUrl;
+            // 분할 실패 시 사전 업로드 결과 사용
+            const singleUrl = (typeof uploaded === 'string' ? uploaded : null) || fallbackUrl;
             contentPageData.push({ imageUrl: singleUrl, text: item.text || '', title: item.title || '', date: item.date || new Date().toISOString().slice(0, 10), params: item.params || {} });
           }
         } else {
-          // 일반 내지: contentFileMap → previewUrl(http) → 빈 슬롯이면 null → 아니면 fallback
-          let imgUrl = null;
-          if (fileToUpload) {
-            imgUrl = await uploadFile(fileToUpload, `내지 ${ci + 1}`);
-            if (!imgUrl) {
-              addLog(`⚠️ 내지 ${ci + 1} 업로드 실패 — picsum fallback 적용`);
-              imgUrl = fallbackUrl;
-            }
-          } else if (item.previewUrl?.startsWith('http')) {
-            imgUrl = item.previewUrl; // 더미/AI 데이터 picsum URL (직접 참조)
-          } else if (!item.isBlankSlot) {
-            imgUrl = fallbackUrl; // 파일도 previewUrl도 없는 일반 아이템 → fallback
-            addLog(`📎 내지 ${ci + 1}: 파일 없음(isBlankSlot=${item.isBlankSlot}) → picsum fallback`);
-          }
-          // isBlankSlot = true 이면 imgUrl = null 유지 → TPL_TEXT_ONLY로 전송
+          // ── 일반 내지: preUploadedImagesMap에서 서버 참조값 취득 (업로드 없음) ──
+          let imgUrl    = null;  // 단일 이미지 서버 참조
+          let imagesArr = null;  // 다중 사진 서버 참조 배열
 
-          // 사전 업로드된 다중 사진 URL 배열 연결
-          const imagesArr = preUploadedImagesMap[ci] || null;
+          if (Array.isArray(uploaded)) {
+            // 다중 사진 (rowGallery/collageGallery 바인딩용)
+            imagesArr = uploaded;
+            imgUrl    = uploaded[0] || fallbackUrl; // 대표 이미지는 첫 번째
+          } else if (typeof uploaded === 'string') {
+            // 단일 사진 (가장 일반적인 케이스)
+            imgUrl = uploaded;
+          } else if (item.isBlankSlot) {
+            // 빈 슬롯 → imgUrl = null 유지 → TPL_TEXT_ONLY로 전송
+            imgUrl = null;
+          } else {
+            // 사전 업로드 맵에도 없고 빈 슬롯도 아님 — fallback
+            imgUrl = fallbackUrl;
+            addLog(`📎 내지 ${ci + 1}: preUploadedImagesMap 미등록 → picsum fallback`);
+          }
 
           contentPageData.push({
             imageUrl:    imgUrl,
@@ -1473,8 +1509,11 @@ export default function EditorPage() {
           Object.entries(contentDefs).forEach(([key, def]) => {
             const binding = def?.binding || 'text';
             if (binding === 'file') {
-              // 단일 사진: imageUrl 사용, 없으면 picsum fallback
-              params[key] = hasImage ? page.imageUrl : `https://picsum.photos/seed/${session.serviceType || 'archive'}-p${i}/600/600`;
+              // 단일 사진: 사전 업로드된 서버 참조(fileName/URL)만 사용
+              // ⚠️ blob: URL이 여기에 들어오면 API 실패 — 반드시 서버 참조값만 전달
+              const fileRef = hasImage ? page.imageUrl : null;
+              const isSafeRef = fileRef && !String(fileRef).startsWith('blob:');
+              params[key] = isSafeRef ? fileRef : `https://picsum.photos/seed/${session.serviceType || 'archive'}-p${i}/600/600`;
             } else if (binding === 'text') {
               // 1순위: 사용자가 동적 폼에서 직접 입력한 params[key]
               const userVal = page.params?.[key];
@@ -1493,13 +1532,22 @@ export default function EditorPage() {
               else if (key === 'subTitle' || key === 'subtitle') params[key] = fd.bookDescription || service.subtitle || ' ';
               else params[key] = ' '; // required text 필드 빈값 방지 — 절대 undefined 전송 금지
             } else if (binding === 'rowGallery' || binding === 'collageGallery') {
-              // 갤러리 바인딩: 사전 업로드된 URL 배열 우선 사용, 없으면 단일 사진 배열 폴백
-              // SDK가 내부적으로 repeated FormData append 처리 (동일 key로 배열 요소 반복 전송)
-              const images = page.images && page.images.length > 0
-                ? page.images
-                : (hasImage ? [page.imageUrl] : [`https://picsum.photos/seed/${session.serviceType || 'archive'}-gallery-${i}/600/600`]);
+              // 갤러리 바인딩: preUploadedImagesMap에서 전달된 서버 참조 배열만 사용
+              // ⚠️ blob: URL 절대 전송 금지 — 모든 값은 서버 fileName 또는 http URL이어야 함
+              let images;
+              if (page.images && page.images.length > 0) {
+                // 사전 업로드 완료된 서버 참조 배열 — blob: 필터링
+                images = page.images.filter(u => typeof u === 'string' && !u.startsWith('blob:'));
+              }
+              if (!images || images.length === 0) {
+                // 폴백: 단일 사진 서버 참조를 배열로 감싸기
+                const singleRef = hasImage && !String(page.imageUrl).startsWith('blob:') ? page.imageUrl : null;
+                images = singleRef
+                  ? [singleRef]
+                  : [`https://picsum.photos/seed/${session.serviceType || 'archive'}-gallery-${i}/600/600`];
+              }
               params[key] = images;
-              console.log(`[갤러리 바인딩] 페이지 ${i + 1} key=${key} binding=${binding} urls=${images.length}개`);
+              console.log(`[갤러리 바인딩] 페이지 ${i + 1} key=${key} binding=${binding} urls=${images.length}개:`, images);
             } else {
               // 알 수 없는 바인딩 타입 → 빈 문자열로 안전 처리
               params[key] = ' ';

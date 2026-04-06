@@ -33,6 +33,7 @@ export default function CreatePage() {
   const [allTemplates, setAllTemplates] = useState([]);
 
   // ── 마운트 시 Draft 복원 (1회) ──────────────────────────────
+  // 에디터에서 뒤로 온 경우(bookmaker_session 존재)에는 토스트를 표시하지 않음
   useEffect(() => {
     try {
       const raw = sessionStorage.getItem(DRAFT_KEY);
@@ -49,7 +50,11 @@ export default function CreatePage() {
           setUseDummy(true);
         }
         setDraftRestored(true);
-        toast.info('이전에 입력한 내용이 복원되었습니다');
+        // 에디터→뒤로가기 시에는 이미 세션이 있으므로 "복원" 토스트 불필요
+        const hasEditorSession = sessionStorage.getItem('bookmaker_session');
+        if (!hasEditorSession) {
+          toast.info('이전에 입력한 내용이 복원되었습니다');
+        }
         console.log(`[Draft 복원] ${serviceType}:`, draft);
       }
     } catch (err) {
