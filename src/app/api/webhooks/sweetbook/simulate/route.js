@@ -36,12 +36,23 @@ export async function POST(request) {
     let nextStatus = targetStatus;
     if (!nextStatus && currentStatus !== undefined) {
       const currentIdx = STATUS_FLOW.findIndex((s) => s.status === currentStatus);
-      if (currentIdx >= 0 && currentIdx < STATUS_FLOW.length - 1) {
-        nextStatus = STATUS_FLOW[currentIdx + 1].status;
+      if (currentIdx < 0) {
+        return NextResponse.json(
+          { success: false, message: `알 수 없는 상태 코드입니다: ${currentStatus}` },
+          { status: 400 }
+        );
       }
+      if (currentIdx >= STATUS_FLOW.length - 1) {
+        const lastLabel = STATUS_FLOW[STATUS_FLOW.length - 1].label;
+        return NextResponse.json(
+          { success: false, message: `이미 최종 상태(${lastLabel})입니다. 더 이상 전이할 상태가 없습니다.` },
+          { status: 400 }
+        );
+      }
+      nextStatus = STATUS_FLOW[currentIdx + 1].status;
     }
     if (!nextStatus) {
-      nextStatus = 30; // 기본: CONFIRMED
+      nextStatus = 30; // 기본: CONFIRMED (currentStatus 미제공 시)
     }
 
     // Webhook 이벤트 페이로드 구성

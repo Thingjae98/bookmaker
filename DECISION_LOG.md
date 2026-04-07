@@ -279,3 +279,76 @@ ngrok http 3000
 | 갤러리 배열 병합 오류 | 1:1 원칙 위반 (look-ahead) | consumed Set 삭제, 페이지 스코프 제한 |
 | 더미 데이터 pageMin 위반 | 표지/내지 미분리 | frontCover/backCover 속성 분리 |
 | Create→back 폼 유실 | debounce 대기 중 navigate | 즉시 저장 + 이중 복원 |
+| DELIVERED(70) 시뮬레이션 오작동 | 경계 검사 누락 → CONFIRMED(30) 폴백 | `currentIdx >= STATUS_FLOW.length - 1` 명시적 400 처리 |
+| 주문 모달 시뮬레이션 버튼 잘림 | `max-h-[80vh]`로 740px 뷰포트 초과 | `max-h-[90vh]`로 확장 |
+
+---
+
+## BUG-W1 — Webhook 시뮬레이션 DELIVERED(70) 폴백 버그
+
+### 증상
+`currentStatus: 70` (DELIVERED, STATUS_FLOW 마지막 항목)으로 시뮬레이션 요청 시
+`"시뮬레이션 완료: CONFIRMED (30)"` 응답 반환 — 이미 최종 상태임에도 무한 루프 가능.
+
+### 원인
+```javascript
+// 버그가 있던 코드 (simulate/route.js)
+const currentIdx = STATUS_FLOW.findIndex((s) => s.status === currentStatus);
+nextStatus = STATUS_FLOW[currentIdx + 1].status; // currentIdx = 7 (마지막), [8]은 undefined
+// → nextStatus = undefined
+if (!nextStatus) {
+  nextStatus = 30; // 기본값 CONFIRMED(30)으로 폴백! ← 버그
+}
+```
+
+`currentIdx + 1`이 배열 범위를 벗어나 `STATUS_FLOW[8]`이 `undefined` → `nextStatus`가 `undefined` → `if (!nextStatus)` 조건에 걸려 기본값 30(CONFIRMED)으로 폴백.
+
+### 해결
+경계 검사를 `nextStatus` 할당 전에 명시적으로 수행:
+
+```javascript
+if (currentIdx >= STATUS_FLOW.length - 1) {
+  const lastLabel = STATUS_FLOW[STATUS_FLOW.length - 1].label;
+  return NextResponse.json(
+    { success: false, message: `이미 최종 상태(${lastLabel})입니다. 더 이상 전이할 상태가 없습니다.` },
+    { status: 400 }
+  );
+}
+nextStatus = STATUS_FLOW[currentIdx + 1].status;
+```
+
+### 검증
+```bash
+# DELIVERED에서 다음 상태 요청 → 400 오류 반환 확인
+curl -X POST http://localhost:3000/api/webhooks/sweetbook/simulate \
+  -H "Content-Type: application/json" \
+  -d '{"orderUid":"Y2TZAJ8W","currentStatus":70}'
+# → {"success":false,"message":"이미 최종 상태(DELIVERED)입니다. 더 이상 전이할 상태가 없습니다."}
+
+# SHIPPED(60) → DELIVERED(70) 정상 전이 확인
+curl -X POST http://localhost:3000/api/webhooks/sweetbook/simulate \
+  -H "Content-Type: application/json" \
+  -d '{"orderUid":"Y2TZAJ8W","currentStatus":60}'
+# → {"success":true,"message":"시뮬레이션 완료: DELIVERED (70)",...}
+```
+
+---
+
+## BUG-W2 — 주문 상세 모달 하단 버튼 잘림
+
+### 증상
+740px 이하 높이 뷰포트(예: 노트북 화면)에서 주문 상세 모달의 "Webhook 시뮬레이션" 섹션 및 "다음 상태로 전이" 버튼이 모달 하단 밖으로 잘려 접근 불가.
+
+### 원인
+모달 컨테이너에 `max-h-[80vh]` 적용 — 740px 뷰포트 기준 80% = 592px. 주문 상세 내용(주문번호, 상태, 항목, 배송지, 취소 버튼, 시뮬레이션 버튼)이 592px 초과 → 하단 잘림.
+
+### 해결
+`src/app/orders/page.jsx`의 모달 컨테이너 클래스 변경:
+```jsx
+// Before
+<div className="bg-white rounded-2xl max-w-lg w-full max-h-[80vh] overflow-y-auto p-6 modal-enter"
+// After
+<div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 modal-enter"
+```
+
+90vh = 740px 뷰포트 기준 666px — 전체 모달 내용 + 시뮬레이션 섹션 포함 가능.

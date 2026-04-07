@@ -437,7 +437,7 @@ export default function OrdersPage() {
         {/* 주문 상세 모달 */}
         {selectedOrder && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setSelectedOrder(null)}>
-            <div className="bg-white rounded-2xl max-w-lg w-full max-h-[80vh] overflow-y-auto p-6 modal-enter" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 modal-enter" onClick={(e) => e.stopPropagation()}>
               {detailLoading ? (
                 <div className="space-y-4 py-4">
                   <div className="flex justify-between"><div className="skeleton-heading" style={{ width: '120px' }} /><div className="skeleton-circle" style={{ width: '24px', height: '24px' }} /></div>
