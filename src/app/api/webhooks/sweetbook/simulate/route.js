@@ -6,6 +6,7 @@
 // 내부적으로 /api/webhooks/sweetbook POST를 호출하여 동일한 로직 경유.
 
 import { NextResponse } from 'next/server';
+import crypto from 'crypto';
 
 // SweetBook 주문 상태 코드 & 전이 순서
 const STATUS_FLOW = [
@@ -65,10 +66,27 @@ export async function POST(request) {
     const protocol = origin?.startsWith('https') ? 'https' : 'http';
     const baseUrl = origin?.startsWith('http') ? origin : `${protocol}://${origin}`;
 
+    const rawBody = JSON.stringify(webhookPayload);
+
+    // HMAC-SHA256 서명 생성 (SWEETBOOK_WEBHOOK_SECRET 설정 시)
+    const headers = { 'Content-Type': 'application/json' };
+    const secret = process.env.SWEETBOOK_WEBHOOK_SECRET;
+    if (secret) {
+      const timestamp = Math.floor(Date.now() / 1000).toString();
+      const signature = 'sha256=' + crypto
+        .createHmac('sha256', secret)
+        .update(`${timestamp}.${rawBody}`)
+        .digest('hex');
+      headers['x-webhook-signature'] = signature;
+      headers['x-webhook-timestamp'] = timestamp;
+      headers['x-webhook-event'] = 'order.status.changed';
+      headers['x-webhook-delivery'] = `sim_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    }
+
     const webhookRes = await fetch(`${baseUrl}/api/webhooks/sweetbook`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(webhookPayload),
+      headers,
+      body: rawBody,
     });
     const webhookResult = await webhookRes.json();
 

@@ -49,7 +49,7 @@
 - 주문 내역 페이지에서 Webhook 이벤트 로그 실시간 표시 (30초 폴링)
 - **ngrok 연동**: 주문 내역 페이지 Webhook 설정 패널에서 ngrok URL 입력 → `PUT /webhooks/config` → SweetBook에 자동 등록
 - **테스트 이벤트**: 설정 패널에서 `order.created` / `production.confirmed` / `shipping.departed` 테스트 전송
-- **로컬 시연용 시뮬레이터**: `POST /api/webhooks/sweetbook/simulate` — ngrok 없이도 상태 전이 수동 시뮬레이션
+- **로컬 시연용 시뮬레이터**: `POST /api/webhooks/sweetbook/simulate` — ngrok 없이도 상태 전이 수동 시뮬레이션 (HMAC 서명 자동 생성으로 시크릿 설정 환경에서도 정상 작동)
 
 ---
 
@@ -153,6 +153,7 @@ Book Print API의 본질은 **디지털→물리적 변환**입니다. 개발자
 | 백엔드 | Next.js API Routes |
 | API 클라이언트 | bookprintapi-nodejs-sdk |
 | 파일 업로드 | HTML5 File API + Drag & Drop + FormData |
+| 이미지 전처리 | sharp (포트폴리오 스크린샷 → 판형 비율 리사이징) |
 | 폰트 | JetBrains Mono, Noto Serif KR |
 
 ### 프로젝트 구조
