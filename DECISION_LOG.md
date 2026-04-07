@@ -21,7 +21,7 @@ AI Vision 분석 없이 **규칙 기반 자동 배치** 채택 (이미지 분석
 갤러리 상단에 `AUTO COMPOSE` 버튼 (이미지 1장 이상 업로드 시 노출) → 클릭 시 페이지 수 입력 패널 확장 (24~130p) → `COMPOSE` 버튼으로 즉시 실행.
 
 ### 로컬 이미지 지원
-dummy.js 및 `public/images/portfolio/` 로컬 경로(`/images/...`) 지원 추가:
+dummy.js 및 `public/images/kidcanvas/` 로컬 경로(`/images/...`) 지원 추가:
 - `makePageUrl()`: `startsWith('/')` 조건 추가로 로컬 경로 프리뷰 허용
 - `handleCreateBook`: 로컬 경로 이미지를 `fetch()` → `Blob` → `File` 변환 후 Photos API 업로드
 
@@ -184,10 +184,17 @@ ARCHIVE는 기술적으로 완성도 높았으나, **감성+기술+비즈니스*
 | 디자인 | B&W neutral → 따뜻한 파스텔(peach/butter/mint), 둥근 UI |
 | 폰트 | JetBrains Mono → Nanum Pen Script (손글씨 느낌) |
 | AI 프롬프트 | 개발자 회고 → 미술관 큐레이터 스타일 아이 그림 해설 |
-| 더미 데이터 | 포트폴리오 → 아이 그림 24장 시나리오 |
+| 더미 데이터 | 포트폴리오 → Gemini 생성 아이 그림 26장(+커버 2장) 시나리오 |
 | 추천 템플릿 | `구글포토북A` → `일기장B` (동화책 스타일) |
 
 엔진 코드(sweetbook.js, API 라우트, 에디터 핵심 로직)는 전면 무변경.
+
+### 더미 데이터 고급화 (2026-04-07)
+- picsum.photos 플레이스홀더 → **Gemini 생성 아이 그림 이미지 28장**으로 교체
+- 이미지 경로: `public/images/kidcanvas/` (cover_front/back.png + row-{1~4}-column-{1~7}.png)
+- date 포맷: `YYYY-MM` → `YYYY-MM-DD` (템플릿 date/dayLabel/dateLabel 바인딩 완전 호환)
+- 페이지 수: 24p → 26p (이미지 26장 전량 활용)
+- 각 이미지 내용에 맞는 제목 + 미술관 큐레이터 스타일 해설 텍스트 재작성
 
 ### 템플릿 선택 근거
 | 카테고리 | 적합도 | 근거 |
@@ -283,6 +290,36 @@ ngrok http 3000
 ### 한계
 - 인메모리 → 서버 재시작 시 로그 초기화 (프로덕션: DB/Redis 필요)
 - 시뮬레이션은 UI 전용 — SweetBook API 실제 상태 미변경
+
+---
+
+## ADR-12 — API 검증 파이프라인: 업로드/최종화 이중 검증
+
+### 배경
+책 생성 파이프라인에서 사진 업로드와 최종화가 성공했다고 가정만 하고, 실제 서버 상태를 검증하지 않았음. 업로드 누락이나 최종화 이상이 있어도 감지 불가.
+
+### 결정
+2개의 기존 미사용 API를 파이프라인에 추가:
+
+**검증 1 — 사진 업로드 검증** (STEP 2-c):
+- 모든 사진 업로드 완료 후 `GET /api/books/{bookUid}/photos` 호출
+- API 서버에 등록된 사진 수 vs 로컬 전송 수를 교차검증
+- 누락 시 API 로그에 경고 표시
+
+**검증 2 — 책 상태 검증** (STEP 6):
+- 최종화 완료 후 `GET /api/books/{bookUid}` 호출
+- 실제 책 상태(status), 페이지 수, 제목, 판형 확인
+- sessionStorage에 `bookStatus` 저장
+
+### 구현
+- `sweetbook.js`: `getBook(bookUid)` 함수 추가 (`client.books.get()`)
+- `GET /api/books/[bookUid]/route.js`: 신규 API 라우트
+- `editor/page.jsx`: 사진 업로드 후 + 최종화 후 2회 검증 호출
+
+### 결과
+- 사진 누락을 최종화 전에 조기 감지 가능
+- 최종화 후 실제 서버 상태를 확인하여 신뢰도 향상
+- API 활용 깊이 증가 (Books API 5개 엔드포인트 사용)
 
 ---
 

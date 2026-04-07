@@ -1607,6 +1607,22 @@ export default function EditorPage() {
       try { console.table(mapEntries); } catch(e) { /* 빈 맵 */ }
       addLog(`📸 사전 업로드 완료: ${Object.keys(preUploadedImagesMap).length}/${contentItems.length}장 매핑됨`);
 
+      // ── STEP 2-c: 사진 업로드 검증 (listPhotos API) ──────────────
+      try {
+        const photosRes = await fetch(`/api/books/${uid}/photos`);
+        const photosData = await photosRes.json();
+        if (photosData.success) {
+          const photoList = Array.isArray(photosData.data) ? photosData.data
+            : (photosData.data?.photos || photosData.data?.items || []);
+          addLog(`🔍 업로드 검증: API 서버에 ${photoList.length}장 등록 확인 (로컬 전송 ${totalPhotos}장)`);
+          if (photoList.length < totalPhotos) {
+            addLog(`⚠️ 일부 사진 누락 가능 — API ${photoList.length}장 < 전송 ${totalPhotos}장`);
+          }
+        }
+      } catch (e) {
+        addLog(`⚠️ 사진 검증 스킵: ${e.message}`);
+      }
+
       // ── 내지 contentPageData 조립 — preUploadedImagesMap 참조 (업로드 없음) ──
       const contentPageData = [];
       addLog(`📄 내지 ${contentItems.length}장 처리 중...`);
@@ -1971,10 +1987,27 @@ export default function EditorPage() {
 
       if (finalData.success) {
         addLog(`✅ 최종화 완료! (${finalData.data?.pageCount || '?'}페이지)`);
+
+        // ── STEP 6: 책 상태 검증 (getBook API) ────────────────────
+        let bookStatus = null;
+        try {
+          const bookRes2 = await fetch(`/api/books/${uid}`);
+          const bookDetail = await bookRes2.json();
+          if (bookDetail.success && bookDetail.data) {
+            const bd = bookDetail.data;
+            bookStatus = bd.status || bd.bookStatus || null;
+            addLog(`🔍 책 상태 검증: ${bookStatus || '확인됨'} | 페이지: ${bd.pageCount || finalData.data?.pageCount || '?'}p`);
+            if (bd.title) addLog(`   제목: ${bd.title}`);
+            if (bd.bookSpecUid) addLog(`   판형: ${bd.bookSpecUid}`);
+          }
+        } catch (e) {
+          addLog(`⚠️ 책 상태 검증 스킵: ${e.message}`);
+        }
+
         setBookCreated(true);
         toast.success(`책 생성 완료! ${finalData.data?.pageCount || ''}페이지 포토북이 준비됐습니다.`);
         sessionStorage.setItem('bookmaker_session',
-          JSON.stringify({ ...session, bookUid: uid, pageCount: finalData.data?.pageCount }));
+          JSON.stringify({ ...session, bookUid: uid, pageCount: finalData.data?.pageCount, bookStatus }));
 
         // 미리보기 페이지용 스프레드 데이터 저장
         // ⚠️ 핵심: API 전송용 fileName(photo~.PNG)이 아닌, 원본 UI previewUrl을 사용

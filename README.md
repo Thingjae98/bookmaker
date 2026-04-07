@@ -42,7 +42,12 @@
 - 미술관 큐레이터의 시선으로 아이의 순수한 표현을 따뜻하게 해석
 - 모델 폴백 체인: `gemini-flash-lite-latest` → `gemini-2.5-flash` → 규칙 기반 폴백 텍스트
 
-### 7. Webhook 주문 상태 실시간 추적
+### 7. API 검증 파이프라인 — 업로드/최종화 이중 검증
+- 사진 업로드 완료 후 `GET /books/{bookUid}/photos` 호출 → 서버 등록 수량 vs 로컬 전송 수량 교차검증
+- 최종화 완료 후 `GET /books/{bookUid}` 호출 → 실제 책 상태(status), 페이지 수, 판형 확인
+- API 로그에 검증 결과 실시간 표시 — 누락 사진 조기 감지
+
+### 8. Webhook 주문 상태 실시간 추적
 - SweetBook 서버 → `POST /api/webhooks/sweetbook` — 주문 상태 변경 이벤트 수신
 - **HMAC-SHA256 서명 검증** + 중복 방지
 - **ngrok 연동** + **로컬 시뮬레이터** 지원
@@ -92,7 +97,9 @@ npm run dev
 | API | 메서드 | 엔드포인트 | 용도 |
 |-----|--------|-----------|------|
 | Books | `POST` | `/v1/books` | 책 생성 (draft) |
+| Books | `GET` | `/v1/books/{bookUid}` | 책 상세 조회 (최종화 후 상태 검증) |
 | Books | `POST` | `/v1/books/{bookUid}/photos` | 사진 업로드 (multipart) |
+| Books | `GET` | `/v1/books/{bookUid}/photos` | 사진 목록 조회 (업로드 검증) |
 | Books | `POST` | `/v1/books/{bookUid}/cover` | 표지 추가 |
 | Books | `POST` | `/v1/books/{bookUid}/contents` | 내지 페이지 추가 |
 | Books | `POST` | `/v1/books/{bookUid}/finalization` | 최종화 |
@@ -120,6 +127,7 @@ npm run dev
 | Claude (Anthropic) | SweetBook API 문서 분석, 트러블슈팅 (breakBefore, Decorative File) |
 | Claude (Anthropic) | README, DECISION_LOG, CLAUDE.md 작성, 서비스 기획 |
 | Gemini (Google) | 에디터 내 아이 그림 작품 해설 텍스트 AI 자동 생성 |
+| Gemini (Google) | 더미 데이터용 아이 그림 이미지 28장 AI 생성 |
 
 ---
 
@@ -176,8 +184,8 @@ bookmaker/
 │   │       └── webhooks/sweetbook/           #   Webhook 수신
 │   ├── components/                           # UI 컴포넌트
 │   ├── lib/                                  # 유틸리티 (sweetbook.js, fetchWithRetry)
-│   └── data/dummy.js                         # 아이 그림 작품집 더미 데이터 (24p)
-├── public/images/portfolio/                  # 샘플 이미지 (시연용)
+│   └── data/dummy.js                         # 아이 그림 작품집 더미 데이터 (26p, Gemini 생성)
+├── public/images/kidcanvas/                  # Gemini 생성 아이 그림 이미지 28장
 └── .env.example                              # 환경변수 템플릿
 ```
 
@@ -189,7 +197,7 @@ bookmaker/
 - **Books API** — 생성 → 사진 업로드 → 표지 → 내지 → 최종화 풀 파이프라인
 - **Orders API** — 견적 → 주문 → 조회 → 취소 → 배송지 변경 (Idempotency-Key)
 - **Template Engine** — theme 기반 카테고리 필터링, definitions 바인딩 자동 감지, breakBefore 동적 제어
-- **Photo Upload** — multipart Drag & Drop, 갤러리 관리, 사전 업로드 파이프라인
+- **Photo Upload** — multipart Drag & Drop, 갤러리 관리, 사전 업로드 파이프라인, listPhotos 검증
 - **Retry / Backoff** — 5xx 3회 재시도, 지수 백오프
 - **페이지 규격** — pageMin/pageIncrement 실시간 검증 + 자동 패딩
 - **Special Page Rules** — PUR 제본 첫 내지 Right 배치, spineTitle 자동 바인딩

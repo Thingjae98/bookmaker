@@ -17,7 +17,7 @@
 2. **백엔드 프록시** — 프론트엔드에서 api.sweetbook.com 직접 호출 금지
 3. **API Key 보안** — .env로만 관리
 4. **모노레포** — 프론트엔드 + 백엔드 단일 저장소
-5. **더미 데이터** — src/data/dummy.js에 24페이지 아이 그림 작품집 시나리오
+5. **더미 데이터** — src/data/dummy.js에 26페이지 아이 그림 작품집 시나리오 (Gemini 생성 이미지 28장)
 
 ### 서비스 차별화
 - **감성**: 아이 그림은 시간이 지나면 버려지지만, 책으로 남기고 싶은 욕구가 매우 강함
@@ -62,8 +62,8 @@ bookmaker/
 │   │   └── api/                 # 백엔드 API 프록시 + AI 텍스트 생성
 │   ├── components/              # Header, StepIndicator, Toast 등
 │   ├── lib/                     # sweetbook.js, constants.js, fetchWithRetry.js
-│   └── data/dummy.js            # 아이 그림 작품집 더미 데이터 (24p)
-└── public/images/portfolio/     # 샘플 이미지 (시연용)
+│   └── data/dummy.js            # 아이 그림 작품집 더미 데이터 (26p, Gemini 생성)
+└── public/images/kidcanvas/     # Gemini 생성 아이 그림 이미지 28장 (커버 2 + 내지 26)
 ```
 
 ---
@@ -80,7 +80,7 @@ bookmaker/
 1. 에디터 갤러리에 아이 그림 사진 업로드
 2. 썸네일 클릭 → 인라인 편집 패널에서 역할 지정 + AI 해설 생성
 3. 구성 미리보기에서 확인
-4. [최종 생성 및 주문] → POST /books → /photos → /cover → /contents → /finalization
+4. [최종 생성 및 주문] → POST /books → /photos → GET /photos(검증) → /cover → /contents → /finalization → GET /books/{uid}(검증)
 5. POST /orders/estimate → POST /orders
 ```
 
@@ -103,10 +103,12 @@ bookmaker/
 - `categoryToTplMap()` — 카테고리 그룹 → 템플릿 UID 매핑
 - `DECORATIVE_FILE_KEYS` — 장식용 파일 바인딩(`lineVertical`, `pencilIcon` 등) 분리
 - `breakBefore` 안전 기본값: `'page'` — 1 content = 1 물리적 페이지 보장
-- **Auto Compose**: 갤러리 이미지를 자동으로 표지/내지 배치 (24~130p, 빈 슬롯 자동 패딩)
-- **로컬 이미지 지원**: `public/images/portfolio/` 경로 → 프리뷰 표시 + API 업로드 시 fetch→File 변환
+- **Auto Compose**: 갤러리 이미지를 자동으로 표지/내지 배치 (24~130p, 2p 단위, 빈 슬롯 자동 패딩)
+- **로컬 이미지 지원**: `public/images/kidcanvas/` 경로 → 프리뷰 표시 + API 업로드 시 fetch→File 변환
 - **AI 텍스트 생성**: 에디터 내 `AI TEXT` 버튼 → `/api/generate-page-text` → Gemini API로 아이 그림 작품 해설 자동 작성
 - **로컬 경로 안전 처리**: `resolveImageUrl()` + `safePreviewUrl()` — `/images/...` 로컬 경로도 유효 URL로 인정
+- **Gemini 생성 더미 이미지**: AI 생성 아이 그림 28장, date(YYYY-MM-DD) 포맷 + 제목 + 해설 완비
+- **API 검증 파이프라인**: 사진 업로드 후 `GET /photos` 카운트 검증 + 최종화 후 `GET /books/{uid}` 상태 확인
 
 ### 판형 (BookSpec)
 - `SQUAREBOOK_HC` — 243×248mm, 하드커버, PUR 무선철, 24~130p (**기본**)
@@ -192,6 +194,7 @@ bookmaker/
 - [x] 로컬 이미지 미리보기 — resolveImageUrl + safePreviewUrl 로컬 경로(`/`) 지원
 - [x] Webhook 완전 구현 — 수신 + HMAC 서명 검증 + ngrok 연동 + 로컬 시뮬레이션
 - [x] 서비스 피벗 — ARCHIVE → KidCanvas (따뜻한 파스텔 디자인 + 아이 그림 작품집)
+- [x] 더미 데이터 고급화 — Gemini 생성 아이 그림 이미지 28장 + YYYY-MM-DD date + 작품 해설
 
 ### 향후 개선 (면접 후)
 - [ ] 사용자 인증 (NextAuth)

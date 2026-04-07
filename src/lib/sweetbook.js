@@ -34,6 +34,11 @@ export async function listBooks({ limit = 20, offset = 0 } = {}) {
   return ok(data);
 }
 
+export async function getBook(bookUid) {
+  const data = await getClient().books.get(bookUid);
+  return ok(data);
+}
+
 export async function addCover(bookUid, { templateUid, parameters }) {
   const data = await getClient().covers.create(bookUid, templateUid, parameters || {});
   return ok(data);
