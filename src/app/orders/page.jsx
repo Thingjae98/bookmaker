@@ -14,6 +14,8 @@ export default function OrdersPage() {
   // Webhook 이벤트 로그
   const [webhookEvents, setWebhookEvents] = useState([]);
   const [simulatingOrder, setSimulatingOrder] = useState(null);
+  // 모달 내 시뮬레이션 진행 상태 (실제 SweetBook 상태와 별개로 추적)
+  const [simulatedStatus, setSimulatedStatus] = useState(null);
 
   // Webhook 설정 (ngrok URL 등록)
   const [showWebhookConfig, setShowWebhookConfig] = useState(false);
@@ -161,6 +163,11 @@ export default function OrdersPage() {
       });
       const data = await res.json();
       if (data.success) {
+        // 시뮬레이션된 상태를 추적 — 다음 클릭 시 이 상태에서 이어서 진행
+        const nextSimulatedStatus = data.simulatedEvent?.status;
+        if (nextSimulatedStatus !== undefined) {
+          setSimulatedStatus(nextSimulatedStatus);
+        }
         // 이벤트 로그 즉시 갱신 + 주문 목록 갱신
         await Promise.all([fetchWebhookEvents(), fetchOrders()]);
         if (selectedOrder?.orderUid === orderUid) {
@@ -436,7 +443,7 @@ export default function OrdersPage() {
 
         {/* 주문 상세 모달 */}
         {selectedOrder && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setSelectedOrder(null)}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => { setSelectedOrder(null); setSimulatedStatus(null); }}>
             <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 modal-enter" onClick={(e) => e.stopPropagation()}>
               {detailLoading ? (
                 <div className="space-y-4 py-4">
@@ -448,7 +455,7 @@ export default function OrdersPage() {
                 <>
                   <div className="flex items-center justify-between mb-6">
                     <h2 className="font-display font-bold text-xl text-ink-900">주문 상세</h2>
-                    <button onClick={() => setSelectedOrder(null)} className="text-ink-400 hover:text-ink-800 text-xl">✕</button>
+                    <button onClick={() => { setSelectedOrder(null); setSimulatedStatus(null); }} className="text-ink-400 hover:text-ink-800 text-xl">✕</button>
                   </div>
 
                   <div className="space-y-4">
@@ -532,25 +539,29 @@ export default function OrdersPage() {
                     )}
 
                     {/* Webhook 시뮬레이션 (로컬 시연용) */}
-                    {selectedOrder.orderStatus < 70 && (
-                      <div className="border-t border-ink-100 pt-4 mt-4">
-                        <p className="text-[10px] font-mono uppercase tracking-wider text-ink-400 mb-2">Webhook 시뮬레이션</p>
-                        <button
-                          onClick={() => handleSimulateWebhook(selectedOrder.orderUid, selectedOrder.orderStatus)}
-                          disabled={simulatingOrder === selectedOrder.orderUid}
-                          className={`w-full py-2 text-xs font-mono rounded-lg border transition-all ${
-                            simulatingOrder === selectedOrder.orderUid
-                              ? 'bg-neutral-100 text-neutral-400 border-neutral-200 cursor-wait animate-pulse'
-                              : 'bg-neutral-900 text-white border-neutral-900 hover:bg-neutral-700'
-                          }`}
-                        >
-                          {simulatingOrder === selectedOrder.orderUid
-                            ? '시뮬레이션 중...'
-                            : `다음 상태로 전이 (현재: ${selectedOrder.orderStatus})`}
-                        </button>
-                        <p className="text-[10px] text-ink-400 mt-1">localhost에서 SweetBook Webhook 수신을 시뮬레이션합니다</p>
-                      </div>
-                    )}
+                    {(() => {
+                      const currentSimStatus = simulatedStatus ?? selectedOrder.orderStatus;
+                      if (currentSimStatus >= 70) return null;
+                      return (
+                        <div className="border-t border-ink-100 pt-4 mt-4">
+                          <p className="text-[10px] font-mono uppercase tracking-wider text-ink-400 mb-2">Webhook 시뮬레이션</p>
+                          <button
+                            onClick={() => handleSimulateWebhook(selectedOrder.orderUid, currentSimStatus)}
+                            disabled={simulatingOrder === selectedOrder.orderUid}
+                            className={`w-full py-2 text-xs font-mono rounded-lg border transition-all ${
+                              simulatingOrder === selectedOrder.orderUid
+                                ? 'bg-neutral-100 text-neutral-400 border-neutral-200 cursor-wait animate-pulse'
+                                : 'bg-neutral-900 text-white border-neutral-900 hover:bg-neutral-700'
+                            }`}
+                          >
+                            {simulatingOrder === selectedOrder.orderUid
+                              ? '시뮬레이션 중...'
+                              : `다음 상태로 전이 (현재: ${currentSimStatus})`}
+                          </button>
+                          <p className="text-[10px] text-ink-400 mt-1">localhost에서 SweetBook Webhook 수신을 시뮬레이션합니다</p>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </>
               )}
