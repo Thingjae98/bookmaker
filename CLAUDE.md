@@ -80,7 +80,7 @@ bookmaker/
 1. 에디터 갤러리에 아이 그림 사진 업로드
 2. 썸네일 클릭 → 인라인 편집 패널에서 역할 지정 + AI 해설 생성
 3. 구성 미리보기에서 확인
-4. [최종 생성 및 주문] → POST /books → /photos → GET /photos(검증) → /cover → /contents → /finalization → GET /books/{uid}(검증)
+4. [최종 생성 및 주문] → POST /books → /photos → GET /photos(검증) → /cover → /contents → /finalization → GET /books(목록 필터링 검증, 단건 405 우회)
 5. POST /orders/estimate → POST /orders
 ```
 
@@ -108,7 +108,7 @@ bookmaker/
 - **AI 텍스트 생성**: 에디터 내 `AI TEXT` 버튼 → `/api/generate-page-text` → Gemini API로 아이 그림 작품 해설 자동 작성
 - **로컬 경로 안전 처리**: `resolveImageUrl()` + `safePreviewUrl()` — `/images/...` 로컬 경로도 유효 URL로 인정
 - **Gemini 생성 더미 이미지**: AI 생성 아이 그림 28장, date(YYYY-MM-DD) 포맷 + 제목 + 해설 완비
-- **API 검증 파이프라인**: 사진 업로드 후 `GET /photos` 카운트 검증 + 최종화 후 `GET /books/{uid}` 상태 확인
+- **API 검증 파이프라인**: 사진 업로드 후 `GET /photos` 카운트 검증 + 최종화 후 `GET /books` 목록 필터링 상태 확인 (단건 405 우회)
 - **미리보기 API 통합**: `GET /books/{uid}` 상태 + `GET /photos` 업로드 수 + `GET /credits` 잔액 실시간 표시
 
 ### 판형 (BookSpec)

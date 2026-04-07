@@ -44,7 +44,8 @@
 
 ### 7. API 검증 파이프라인 — 업로드/최종화/미리보기 3단 검증
 - 사진 업로드 완료 후 `GET /books/{bookUid}/photos` 호출 → 서버 등록 수량 vs 로컬 전송 수량 교차검증
-- 최종화 완료 후 `GET /books/{bookUid}` 호출 → 실제 책 상태(status), 페이지 수, 판형 확인
+- 최종화 완료 후 `GET /books` (목록 조회 + UID 필터링) → 실제 책 상태(status), 페이지 수, 판형 확인
+- `GET /books/{bookUid}` 단건 API 405 대응 — `listBooks()` 우회 전략 + 프론트엔드 에러 폴백
 - 미리보기 페이지에서 3개 API 병렬 호출 → 책 상태 배지 + 업로드 사진 수 + 충전금 잔액 실시간 표시
 - API 로그에 검증 결과 실시간 표시 — 누락 사진 조기 감지
 
@@ -98,7 +99,7 @@ npm run dev
 | API | 메서드 | 엔드포인트 | 용도 |
 |-----|--------|-----------|------|
 | Books | `POST` | `/v1/books` | 책 생성 (draft) |
-| Books | `GET` | `/v1/books/{bookUid}` | 책 상세 조회 (최종화 후 상태 검증) |
+| Books | `GET` | `/v1/books` | 책 목록 조회 (단건 조회 우회 — `GET /books/{uid}` 405 대응) |
 | Books | `POST` | `/v1/books/{bookUid}/photos` | 사진 업로드 (multipart) |
 | Books | `GET` | `/v1/books/{bookUid}/photos` | 사진 목록 조회 (업로드 검증) |
 | Books | `POST` | `/v1/books/{bookUid}/cover` | 표지 추가 |

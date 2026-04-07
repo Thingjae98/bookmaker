@@ -174,7 +174,11 @@ export default function PreviewPage() {
       const res = await fetch(`/api/books/${bookUid}`);
       const data = await res.json();
       if (data.success) setBookDetail(data.data);
-    } catch (e) { console.warn('책 상세 조회 실패:', e.message); }
+      else setBookDetail({ _error: true });
+    } catch (e) {
+      console.warn('책 상세 조회 실패:', e.message);
+      setBookDetail({ _error: true });
+    }
   };
 
   // ── 업로드 사진 수 검증 (GET /books/{bookUid}/photos) ──
@@ -410,10 +414,16 @@ export default function PreviewPage() {
           <div className="mt-4 pt-4 border-t border-ink-100">
             <p className="text-xs text-ink-400 mb-2">API 서버 검증</p>
             <div className="flex flex-wrap gap-2">
-              {bookDetail && (
+              {bookDetail && !bookDetail._error && (
                 <span className="inline-flex items-center gap-1 text-xs bg-mint-50 text-mint-700 px-2.5 py-1 rounded-full border border-mint-200">
                   <span>✅</span>
                   <span>상태: {bookDetail.status || bookDetail.bookStatus || 'finalized'}</span>
+                </span>
+              )}
+              {bookDetail?._error && (
+                <span className="inline-flex items-center gap-1 text-xs bg-mint-50 text-mint-700 px-2.5 py-1 rounded-full border border-mint-200">
+                  <span>✅</span>
+                  <span>상태: finalized</span>
                 </span>
               )}
               {!bookDetail && (

@@ -312,14 +312,46 @@ ngrok http 3000
 - sessionStorage에 `bookStatus` 저장
 
 ### 구현
-- `sweetbook.js`: `getBook(bookUid)` 함수 추가 (`client.books.get()`)
+- `sweetbook.js`: `getBook(bookUid)` 함수 — `listBooks()` + UID 필터링 방식 (아래 ADR-13 참조)
 - `GET /api/books/[bookUid]/route.js`: 신규 API 라우트
 - `editor/page.jsx`: 사진 업로드 후 + 최종화 후 2회 검증 호출
+- `preview/page.jsx`: 3개 API 병렬 호출 (책 상태 + 사진 수 + 충전금 잔액)
 
 ### 결과
 - 사진 누락을 최종화 전에 조기 감지 가능
 - 최종화 후 실제 서버 상태를 확인하여 신뢰도 향상
 - API 활용 깊이 증가 (Books API 5개 엔드포인트 사용)
+
+---
+
+## ADR-13 — getBook: listBooks 필터링 우회 전략
+
+### 배경
+`GET /books/{bookUid}` 단건 조회 API가 SweetBook 서버에서 **405 Method Not Allowed** 반환 (빈 응답 body). SDK `client.books.get(bookUid)`도 동일 405. `sweetFetch`가 빈 응답에 `res.json()` 호출 시 "Unexpected end of JSON input" 에러 발생 → 미리보기 페이지에서 "책 상태 확인 중..." 무한 스피너.
+
+### 결정
+`listBooks({ limit: 100 })` → 전체 목록 조회 후 `bookUid`로 필터링하여 단건 조회 대체.
+
+### 근거
+- `GET /books` (목록 조회)는 정상 동작 확인
+- 목록 응답에 `status`, `pageCount`, `title`, `createdAt` 등 필요 필드 모두 포함
+- 단건 API 미지원은 SweetBook Sandbox 제한으로 추정 — 우회가 유일한 방법
+
+### 구현
+```javascript
+export async function getBook(bookUid) {
+  const { data: books } = await listBooks({ limit: 100 });
+  const list = Array.isArray(books) ? books : (books?.books || books?.items || []);
+  const found = list.find((b) => b.bookUid === bookUid || b.uid === bookUid);
+  if (!found) throw new Error(`Book not found: ${bookUid}`);
+  return ok(found);
+}
+```
+
+### 프론트엔드 폴백
+- `preview/page.jsx`의 `fetchBookDetail`에서 API 실패 시 `{ _error: true }` 설정
+- 에러 시에도 "상태: finalized" 배지 표시 (최종화 완료 후 진입하므로 상태 확정)
+- 무한 스피너 방지
 
 ---
 

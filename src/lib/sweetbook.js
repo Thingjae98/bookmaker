@@ -34,11 +34,6 @@ export async function listBooks({ limit = 20, offset = 0 } = {}) {
   return ok(data);
 }
 
-export async function getBook(bookUid) {
-  const data = await getClient().books.get(bookUid);
-  return ok(data);
-}
-
 export async function addCover(bookUid, { templateUid, parameters }) {
   const data = await getClient().covers.create(bookUid, templateUid, parameters || {});
   return ok(data);
@@ -143,6 +138,20 @@ async function sweetFetch(path, params = {}, options = {}) {
     throw err;
   }
   return json;
+}
+
+// SweetBook API는 GET /books/{bookUid} 미지원 (405 반환)
+// → listBooks()로 전체 조회 후 bookUid로 필터링
+export async function getBook(bookUid) {
+  const { data: books } = await listBooks({ limit: 100 });
+  const list = Array.isArray(books) ? books : (books?.books || books?.items || []);
+  const found = list.find((b) => b.bookUid === bookUid || b.uid === bookUid);
+  if (!found) {
+    const err = new Error(`Book not found: ${bookUid}`);
+    err.statusCode = 404;
+    throw err;
+  }
+  return ok(found);
 }
 
 export async function listTemplates({ bookSpecUid, category, templateKind, limit = 50, offset = 0 } = {}) {
