@@ -1,9 +1,11 @@
-# ARCHIVE — Developer Portfolio Book Editor
+# KidCanvas — 우리 아이 그림 작품집
 
-> 프로젝트의 여정을 한 권의 프리미엄 하드커버 북으로.
+> 아이가 그린 세상을 한 권의 프리미엄 하드커버 작품집으로.
 
-**ARCHIVE**는 SweetBook Book Print API 기반의 B2D(Business-to-Developer) 포트폴리오 북 제작 에디터입니다.
-프로젝트 스크린샷, 아키텍처 다이어그램, 회고 텍스트를 드래그앤드롭으로 구성하고, 실제 하드커버 북으로 인쇄·배송까지 한 번에 처리합니다.
+**KidCanvas**는 SweetBook Book Print API 기반의 아이 그림 작품집 제작 에디터입니다.
+부모가 아이의 그림 사진을 업로드하면 AI가 미술관 큐레이터 스타일의 작품 해설을 자동 생성하고, 미술관 도록 스타일의 하드커버 포토북으로 제작·배송합니다.
+
+**타겟 고객**: 3~10세 자녀를 둔 부모, 어린이집/유치원 (B2B 단체 주문)
 
 ---
 
@@ -17,7 +19,7 @@
 ### 2. breakBefore 기반 동적 레이아웃 페이지 렌더링
 - SweetBook Dynamic Layout 엔진의 `breakBefore` 속성을 템플릿 메타데이터에서 동적 해석
 - `'page'` (독립 페이지) vs `'none'` (연속 플로우) — 갤러리/일기장/포토북 템플릿별 최적 배치
-- rowGallery 템플릿에서 `breakBefore: 'none'` 적용 시 페이지 카운트 불일치 → finalize 400 에러를 분석하여 안전 기본값 `'page'`로 전환
+- 안전 기본값 `'page'`로 전환하여 전 카테고리 finalize 100% 성공
 
 ### 3. 유령 템플릿 차단 아키텍처 (3-Layer Defense)
 - **Layer 1**: `categoryToTplMap` 글로벌 상수 폴백 완전 제거 — 현재 카테고리 스코프 내 UID만 허용
@@ -26,30 +28,24 @@
 
 ### 4. Decorative File Binding 분리
 - 템플릿 `parameters.definitions`의 `file` 바인딩을 사용자 사진 vs 장식용 에셋으로 정밀 분류
-- `DECORATIVE_FILE_KEYS` Set (`lineVertical`, `pencilIcon`, `weatherIcon` 등) — 장식 파일에는 투명 placeholder 자동 주입
-- 전 카테고리(일기장A, 알림장A/B/C, 구글포토북A/B/C) API 100% 호환 달성
+- `DECORATIVE_FILE_KEYS` Set — 장식 파일에는 투명 placeholder 자동 주입
+- 전 카테고리(일기장A/B, 알림장A/B/C, 구글포토북A/B/C) API 100% 호환 달성
 
 ### 5. Auto Compose — 이미지 기반 자동 페이지 구성
 - 갤러리에 이미지 업로드 후 **AUTO COMPOSE** 버튼 클릭 → 자동 페이지 배치
 - 첫 장 → 앞표지, 마지막 → 뒤표지, 나머지 → 내지 순서 자동 배정
 - 목표 페이지 수 설정 (24~130p, 2 단위) → 부족분 빈 슬롯 자동 패딩
-- 구성 후 자유롭게 수정 가능 — 역할 재지정, 순서 변경, 텍스트 추가
 
-### 6. AI 텍스트 생성 — Gemini 기반 페이지별 회고 자동 작성
-- 에디터 편집 패널에서 **AI TEXT** 버튼 클릭 → Google Gemini API로 회고/캡션 텍스트 자동 생성
-- Create 페이지에서 입력한 프로젝트 정보(제목, 저자, 역할, 기술 스택, 기간, 설명)를 컨텍스트로 활용
+### 6. AI 작품 해설 생성 — Gemini 기반 큐레이터 스타일
+- 에디터 편집 패널에서 **AI TEXT** 버튼 클릭 → Google Gemini API로 작품 해설 텍스트 자동 생성
+- 아이 이름, 나이, 작품 기간, 작품집 설명을 컨텍스트로 활용
+- 미술관 큐레이터의 시선으로 아이의 순수한 표현을 따뜻하게 해석
 - 모델 폴백 체인: `gemini-flash-lite-latest` → `gemini-2.5-flash` → 규칙 기반 폴백 텍스트
-- 레거시 텍스트 필드 + 동적 파라미터 long text 필드 모두 지원
 
 ### 7. Webhook 주문 상태 실시간 추적
 - SweetBook 서버 → `POST /api/webhooks/sweetbook` — 주문 상태 변경 이벤트 수신
-- **HMAC-SHA256 서명 검증**: `X-Webhook-Signature` + `X-Webhook-Timestamp` + timing-safe comparison
-- **중복 방지**: `X-Webhook-Delivery` ID로 동일 이벤트 재전송 무시
-- 인메모리 이벤트 저장소 — 수신 이벤트 로그 보관 (최대 200건)
-- 주문 내역 페이지에서 Webhook 이벤트 로그 실시간 표시 (30초 폴링)
-- **ngrok 연동**: 주문 내역 페이지 Webhook 설정 패널에서 ngrok URL 입력 → `PUT /webhooks/config` → SweetBook에 자동 등록
-- **테스트 이벤트**: 설정 패널에서 `order.created` / `production.confirmed` / `shipping.departed` 테스트 전송
-- **로컬 시연용 시뮬레이터**: `POST /api/webhooks/sweetbook/simulate` — ngrok 없이도 상태 전이 수동 시뮬레이션 (HMAC 서명 자동 생성으로 시크릿 설정 환경에서도 정상 작동)
+- **HMAC-SHA256 서명 검증** + 중복 방지
+- **ngrok 연동** + **로컬 시뮬레이터** 지원
 
 ---
 
@@ -78,15 +74,16 @@ npm run dev
 `http://localhost:3000` 접속 후 서비스를 확인할 수 있습니다.
 
 ### 시연 순서 (로컬 영상 녹화용)
-1. 메인 페이지 → **"Start Archiving"**
-2. **"Fill Demo Data"** → 포트폴리오 샘플 자동 입력
-3. **"Next: Compose"** → 에디터 진입
-4. 갤러리 Drag & Drop 존에 프로젝트 스크린샷 업로드
+1. 메인 페이지 → **"작품집 만들기"**
+2. **"샘플 채우기"** → 아이 그림 작품집 샘플 자동 입력
+3. **"다음: 꾸미기"** → 에디터 진입
+4. 갤러리 Drag & Drop 존에 아이 그림 사진 업로드
 5. 썸네일 클릭 → 인라인 편집 패널에서 표지/내지 역할 지정
-6. **"책 생성 & 최종화"** → API 로그 실시간 확인
-7. **"다음: 미리보기 & 주문"** → 스프레드 뷰 확인
-8. **"다음: 주문하기"** → 배송지 입력 → 주문 생성
-9. **"주문 내역"**에서 상태 추적
+6. **AI TEXT** 버튼으로 작품 해설 자동 생성
+7. **"책 생성 & 최종화"** → API 로그 실시간 확인
+8. **"다음: 미리보기 & 주문"** → 스프레드 뷰 확인
+9. **"다음: 주문하기"** → 배송지 입력 → 주문 생성
+10. **"주문 내역"**에서 상태 추적
 
 ---
 
@@ -121,25 +118,26 @@ npm run dev
 |---------|----------|
 | Claude (Anthropic) | 프로젝트 아키텍처 설계, 프론트엔드/백엔드 코드 작성, API 연동 |
 | Claude (Anthropic) | SweetBook API 문서 분석, 트러블슈팅 (breakBefore, Decorative File) |
-| Claude (Anthropic) | README, DECISION_LOG, CLAUDE.md 작성 |
-| Gemini (Google) | 에디터 내 페이지별 회고/캡션 텍스트 AI 자동 생성 |
+| Claude (Anthropic) | README, DECISION_LOG, CLAUDE.md 작성, 서비스 기획 |
+| Gemini (Google) | 에디터 내 아이 그림 작품 해설 텍스트 AI 자동 생성 |
 
 ---
 
 ## 설계 의도
 
-### 왜 "ARCHIVE"인가
-Book Print API의 본질은 **디지털→물리적 변환**입니다. 개발자에게 1년간의 프로젝트 스크린샷, 아키텍처 의사결정, 회고를 한 권의 하드커버 북으로 아카이빙하는 경험을 제공합니다.
+### 왜 "KidCanvas"인가
+Book Print API의 본질은 **디지털→물리적 변환**입니다. 아이가 그린 그림은 시간이 지나면 잊혀지거나 버려지지만, 부모에게는 가장 소중한 작품입니다. KidCanvas는 이 순간을 미술관 도록 스타일의 프리미엄 하드커버 작품집으로 영구 보존합니다.
 
-### 디자인 철학: Black & White Minimalism
-- **Typography**: JetBrains Mono (기술 라벨) + Noto Serif KR (본문)
-- **Palette**: neutral-900 ~ neutral-50 그레이스케일, 콘텐츠 집중형 UI
-- **Layout**: 직각 보더, uppercase tracking, 정보 위계 명확화
+### 디자인 철학: Warm & Playful
+- **Typography**: Nanum Pen Script (손글씨 느낌 헤딩) + Noto Sans KR (본문)
+- **Palette**: peach/butter/mint/sky/lavender 파스텔 톤, 따뜻하고 부드러운 UI
+- **Layout**: 둥근 모서리(rounded-2xl), 부드러운 그림자, 귀여운 이모지 아이콘
 
 ### 비즈니스 확장 가능성
-- **B2B SaaS**: 기업 연간 프로젝트 보고서 → 팀 구독 모델
-- **컨퍼런스 파트너십**: 발표자료 → 아카이브 북 자동 변환
-- **프리미엄 포트폴리오**: 면접/이직 시 물리적 포트폴리오 북 차별화
+- **B2C**: 부모가 자녀 그림 → 작품집 제작 (생일, 졸업, 크리스마스 선물)
+- **B2B**: 어린이집/유치원 연간 계약 → 학기별 작품집 단체 제작
+- **프리미엄**: AI Vision으로 아이 그림 자동 분석 → 화풍/색감/발달 단계 해설
+- **구독 모델**: 월/분기 정기 작품집 제작 서비스
 
 ---
 
@@ -153,8 +151,8 @@ Book Print API의 본질은 **디지털→물리적 변환**입니다. 개발자
 | 백엔드 | Next.js API Routes |
 | API 클라이언트 | bookprintapi-nodejs-sdk |
 | 파일 업로드 | HTML5 File API + Drag & Drop + FormData |
-| 이미지 전처리 | sharp (포트폴리오 스크린샷 → 판형 비율 리사이징) |
-| 폰트 | JetBrains Mono, Noto Serif KR |
+| 이미지 전처리 | sharp (이미지 → 판형 비율 리사이징) |
+| 폰트 | Nanum Pen Script, Noto Sans KR |
 
 ### 프로젝트 구조
 
@@ -163,7 +161,7 @@ bookmaker/
 ├── src/
 │   ├── app/
 │   │   ├── page.jsx                          # 랜딩 페이지
-│   │   ├── create/[serviceType]/page.jsx     # 프로젝트 정보 입력
+│   │   ├── create/[serviceType]/page.jsx     # 작품집 정보 입력
 │   │   ├── editor/page.jsx                   # 콘텐츠 에디터 (핵심)
 │   │   ├── preview/page.jsx                  # 미리보기 & 견적
 │   │   ├── order/page.jsx                    # 주문 (배송지 입력)
@@ -174,12 +172,12 @@ bookmaker/
 │   │       ├── templates/                    #   Templates API
 │   │       ├── book-specs/                   #   BookSpecs API
 │   │       ├── credits/                      #   Credits API
-│   │       ├── generate-page-text/            #   AI 텍스트 생성 (Gemini)
+│   │       ├── generate-page-text/           #   AI 작품 해설 생성 (Gemini)
 │   │       └── webhooks/sweetbook/           #   Webhook 수신
 │   ├── components/                           # UI 컴포넌트
 │   ├── lib/                                  # 유틸리티 (sweetbook.js, fetchWithRetry)
-│   └── data/dummy.js                         # 포트폴리오 더미 데이터 (24p)
-├── public/images/portfolio/                  # 프로젝트 스크린샷 (시연용)
+│   └── data/dummy.js                         # 아이 그림 작품집 더미 데이터 (24p)
+├── public/images/portfolio/                  # 샘플 이미지 (시연용)
 └── .env.example                              # 환경변수 템플릿
 ```
 
@@ -195,7 +193,7 @@ bookmaker/
 - **Retry / Backoff** — 5xx 3회 재시도, 지수 백오프
 - **페이지 규격** — pageMin/pageIncrement 실시간 검증 + 자동 패딩
 - **Special Page Rules** — PUR 제본 첫 내지 Right 배치, spineTitle 자동 바인딩
-- **Webhook 수신** — POST /api/webhooks/sweetbook 개통, HMAC-SHA256 서명 검증, 중복 방지, 인메모리 이벤트 로그
+- **Webhook 수신** — POST /api/webhooks/sweetbook 개통, HMAC-SHA256 서명 검증, 중복 방지
 - **Webhook 설정** — PUT /api/webhooks/config (ngrok URL 자동 등록), POST /api/webhooks/config (테스트 이벤트)
 - **Webhook 시뮬레이션** — POST /api/webhooks/sweetbook/simulate 로컬 시연용 상태 전이 시뮬레이터
 

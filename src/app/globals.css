@@ -2,27 +2,30 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;700;900&family=Noto+Sans+KR:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Nanum+Pen+Script&family=Noto+Sans+KR:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap');
 
 :root {
-  --color-cream: #FAFAFA;
-  --color-warm-800: #262626;
-  --color-warm-600: #525252;
-  --color-warm-200: #E5E5E5;
-  --color-ink-900: #0A0A0A;
+  --color-peach-50: #FFF8F5;
+  --color-peach-200: #FFDDD2;
+  --color-peach-500: #FF8C5E;
+  --color-peach-600: #E8734A;
+  --color-warm-800: #5C3D2E;
+  --color-warm-600: #7A5C4F;
+  --color-warm-200: #FFDDD2;
+  --color-ink-900: #2D1F18;
 }
 
 * { box-sizing: border-box; }
 
 body {
   font-family: 'Noto Sans KR', sans-serif;
-  background-color: #FFFFFF;
+  background-color: #FFF8F5;
   color: var(--color-ink-900);
   -webkit-font-smoothing: antialiased;
 }
 
 h1, h2, h3, h4 {
-  font-family: 'Noto Serif KR', Georgia, serif;
+  font-family: 'Nanum Pen Script', 'Noto Sans KR', cursive;
 }
 
 code, .font-mono {
@@ -32,8 +35,8 @@ code, .font-mono {
 /* Scrollbar */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #D4D4D4; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #A3A3A3; }
+::-webkit-scrollbar-thumb { background: #FFDDD2; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #FFA07A; }
 
 textarea { resize: vertical; }
 
@@ -51,25 +54,25 @@ textarea { resize: vertical; }
 }
 .card-hover:hover {
   transform: translateY(-4px);
-  box-shadow: 0 20px 40px -12px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 20px 40px -12px rgba(232, 115, 74, 0.15);
 }
 
-/* Buttons — B&W Minimalist */
+/* Buttons — KidCanvas Warm Style */
 .btn-primary {
-  @apply px-6 py-3 bg-neutral-900 text-white text-sm font-medium tracking-wider transition-all;
-  @apply hover:bg-neutral-800 active:scale-[0.98];
+  @apply px-6 py-3 bg-peach-500 text-white text-sm font-semibold tracking-wider transition-all rounded-2xl;
+  @apply hover:bg-peach-600 active:scale-[0.98] shadow-md;
 }
 
 .btn-secondary {
-  @apply px-6 py-3 border border-neutral-300 text-neutral-700 text-sm font-medium tracking-wider transition-all;
-  @apply hover:bg-neutral-50 active:scale-[0.98];
+  @apply px-6 py-3 border-2 border-peach-300 text-peach-600 text-sm font-semibold tracking-wider transition-all rounded-2xl;
+  @apply hover:bg-peach-50 active:scale-[0.98];
 }
 
-/* Input — Clean */
+/* Input — Rounded Warm */
 .input-field {
-  @apply w-full px-4 py-3 border border-neutral-300 bg-white text-sm;
-  @apply focus:outline-none focus:ring-2 focus:ring-neutral-900/10 focus:border-neutral-900;
-  @apply transition-all placeholder:text-neutral-400;
+  @apply w-full px-4 py-3 border-2 border-peach-200 bg-white text-sm rounded-xl;
+  @apply focus:outline-none focus:ring-2 focus:ring-peach-300/50 focus:border-peach-400;
+  @apply transition-all placeholder:text-peach-300;
 }
 
 /* Step Indicator */
@@ -77,13 +80,13 @@ textarea { resize: vertical; }
   @apply w-2.5 h-2.5 rounded-full transition-all;
 }
 .step-dot.active {
-  @apply bg-neutral-900 scale-125;
+  @apply bg-peach-500 scale-125;
 }
 .step-dot.completed {
-  @apply bg-neutral-900;
+  @apply bg-mint-500;
 }
 .step-dot.pending {
-  @apply bg-neutral-300;
+  @apply bg-peach-200;
 }
 
 /* Spinner */
@@ -104,10 +107,10 @@ textarea { resize: vertical; }
   100% { background-position: 400px 0; }
 }
 .skeleton {
-  background: linear-gradient(90deg, #F5F5F5 25%, #EBEBEB 37%, #F5F5F5 63%);
+  background: linear-gradient(90deg, #FFF0EB 25%, #FFDDD2 37%, #FFF0EB 63%);
   background-size: 800px 100%;
   animation: shimmer 1.6s ease-in-out infinite;
-  border-radius: 4px;
+  border-radius: 12px;
 }
 .skeleton-text {
   @apply skeleton;
@@ -125,7 +128,7 @@ textarea { resize: vertical; }
 }
 .skeleton-card {
   @apply skeleton;
-  border-radius: 12px;
+  border-radius: 16px;
 }
 .skeleton-circle {
   @apply skeleton;
@@ -144,17 +147,17 @@ textarea { resize: vertical; }
 /* ── Book Shadow (Preview spread) ── */
 .book-spread {
   box-shadow:
-    0 1px 3px rgba(0,0,0,0.06),
-    0 8px 24px rgba(0,0,0,0.08),
-    0 20px 48px -12px rgba(0,0,0,0.1);
+    0 1px 3px rgba(232, 115, 74, 0.06),
+    0 8px 24px rgba(232, 115, 74, 0.08),
+    0 20px 48px -12px rgba(232, 115, 74, 0.1);
 }
 .book-spread-page {
-  box-shadow: inset -1px 0 3px rgba(0,0,0,0.05);
+  box-shadow: inset -1px 0 3px rgba(232, 115, 74, 0.05);
 }
 
 /* ── Enhanced Input Focus ── */
 .input-field:focus {
-  box-shadow: 0 0 0 3px rgba(10, 10, 10, 0.06);
+  box-shadow: 0 0 0 3px rgba(255, 140, 94, 0.12);
 }
 
 /* ── Modal Backdrop ── */
@@ -164,4 +167,10 @@ textarea { resize: vertical; }
 }
 .modal-enter {
   animation: modalIn 0.25s ease-out forwards;
+}
+
+/* ── Decorative elements ── */
+.crayon-border {
+  border: 3px dashed #FFDDD2;
+  border-radius: 1.5rem;
 }

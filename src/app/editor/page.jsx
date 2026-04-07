@@ -14,7 +14,7 @@ import { toast } from '@/lib/toast';
 import { fetchWithRetry } from '@/lib/fetchWithRetry';
 
 // sessionStorage 자동 저장 키 — 에디터 갤러리 상태 보존
-const ARCHIVE_EDITOR_STATE_KEY = 'ARCHIVE_EDITOR_STATE';
+const ARCHIVE_EDITOR_STATE_KEY = 'KIDCANVAS_EDITOR_STATE';
 
 // ─── 검증된 폴백 상수 (SQUAREBOOK_HC 기준) ─────────────────────────
 const COVER_TEMPLATE_FALLBACK = '79yjMH3qRPly';
@@ -33,9 +33,11 @@ const TPL_TEXT_ONLY  = TPL_TEXT_ONLY_FALLBACK;
 // 문자열 파싱(split('_')) 기반 추론은 전면 폐기.
 
 // 서비스 타입 → 추천 카테고리(theme) 매핑
+// KidCanvas: 일기장B(동화책 스타일) — 아이 그림 + 스토리텔링 구조에 최적
 const SERVICE_CATEGORY_MAP = {
-  archive:      '구글포토북A',
+  kidcanvas:    '일기장B',
   // Legacy mappings (하위 호환)
+  archive:      '구글포토북A',
   baby:         '일기장A',
   kindergarten: '알림장B',
   fairytale:    '일기장B',
@@ -398,7 +400,7 @@ export default function EditorPage() {
       }
 
       // ── 내지 24장 (pages 배열 전체 — 표지에 빼앗기지 않음) ──
-      const svcKey = data.serviceType || 'archive';
+      const svcKey = data.serviceType || 'kidcanvas';
       initialPages.forEach((p, i) => {
         items.push({
           id:          `init-${i}-${ts}`,
@@ -1051,19 +1053,19 @@ export default function EditorPage() {
 
   // ── 텍스트 바인딩 키 → 사용자 친화적 라벨 매핑 ──────────────────
   const TEXT_FIELD_LABELS = {
-    title:      '프로젝트 제목',
-    bookTitle:  '아카이브 제목',
-    date:       '릴리즈 / 개발 기간',
-    dateLabel:  '기간 라벨',
-    dayLabel:   '일정 라벨',
+    title:      '작품 제목',
+    bookTitle:  '작품집 제목',
+    date:       '그린 날짜',
+    dateLabel:  '날짜 라벨',
+    dayLabel:   '날짜 라벨',
     dayNum:     '일',
     monthNum:   '월',
     month:      '월',
     year:       '연도',
-    weather:    '상태 / 환경',
-    meal:       '기술 스택',
+    weather:    '그날의 기분',
+    meal:       '사용한 재료',
     memo:       '메모',
-    diaryText:  '프로젝트 회고 및 트러블슈팅',
+    diaryText:  '작품 해설 / 아이의 이야기',
     text:       '텍스트',
     content:    '내용',
     spineTitle: '책등 제목',
@@ -1324,13 +1326,13 @@ export default function EditorPage() {
 
     setLoading(true);
     try {
-      const service = SERVICE_TYPES[session.serviceType] || SERVICE_TYPES.archive || Object.values(SERVICE_TYPES)[0];
+      const service = SERVICE_TYPES[session.serviceType] || SERVICE_TYPES.kidcanvas || Object.values(SERVICE_TYPES)[0];
       if (!service) throw new Error('서비스 타입을 찾을 수 없습니다. 처음부터 다시 시작해 주세요.');
       const fd      = session.formData || {};
-      const name    = fd.authorName || fd.babyName || fd.childName || fd.heroName || fd.petName || '';
+      const name    = fd.childName || fd.authorName || fd.babyName || fd.heroName || fd.petName || '';
       const title   = name
         ? `${name}의 ${service.name}`
-        : fd.bookTitle || fd.tripName || service.name || 'ARCHIVE';
+        : fd.bookTitle || fd.tripName || service.name || 'KidCanvas';
 
       // bookSpecUid 검증 — API에서 실제로 책 생성 가능한 UID인지 확인 후 보정
       // bs_ 접두사 UID(bs_6a8OUY 등)는 빈 플레이스홀더로 API가 400 반환 — 반드시 내부 키(SQUAREBOOK_HC 등) 사용
@@ -1509,7 +1511,7 @@ export default function EditorPage() {
       // ── STEP 2-b: 모든 내지 사진 일괄 사전 업로드 ──
       // POST /contents 루프 전에, 모든 로컬 File 객체를 서버에 업로드하여 fileName/URL로 변환
       // 이렇게 하면 POST /contents 시점에는 모든 이미지가 서버 참조 가능한 값이다.
-      const svcKey = session.serviceType || 'archive';
+      const svcKey = session.serviceType || 'kidcanvas';
 
       // 내지별 사전 업로드 결과 맵: ci → string (단일 서버 참조) 또는 string[] (다중 사진)
       const preUploadedImagesMap = {};
@@ -1685,7 +1687,7 @@ export default function EditorPage() {
       while (paddedPages.length < targetContentCount) {
         const pIdx = paddedPages.length;
         // 패딩 페이지는 반드시 이미지 URL 확보 (null 이미지로 API 전송 시 400 위험)
-        const padImgUrl = `https://picsum.photos/seed/${session.serviceType || 'archive'}-pad${pIdx}/600/600`;
+        const padImgUrl = `https://picsum.photos/seed/${session.serviceType || 'kidcanvas'}-pad${pIdx}/600/600`;
         paddedPages.push({
           imageUrl:    padImgUrl,
           text:        '',           // 패딩은 항상 텍스트 없음
@@ -1822,7 +1824,7 @@ export default function EditorPage() {
                 // ⚠️ blob: URL이 여기에 들어오면 API 실패 — 반드시 서버 참조값만 전달
                 const fileRef = hasImage ? page.imageUrl : null;
                 const isSafeRef = fileRef && !String(fileRef).startsWith('blob:');
-                params[key] = isSafeRef ? fileRef : `https://picsum.photos/seed/${session.serviceType || 'archive'}-p${i}/600/600`;
+                params[key] = isSafeRef ? fileRef : `https://picsum.photos/seed/${session.serviceType || 'kidcanvas'}-p${i}/600/600`;
               }
             } else if (binding === 'text') {
               // 1순위: 사용자가 동적 폼에서 직접 입력한 params[key]
@@ -1879,7 +1881,7 @@ export default function EditorPage() {
                 const singleRef = hasImage && !String(page.imageUrl).startsWith('blob:') ? page.imageUrl : null;
                 images = singleRef
                   ? [singleRef]
-                  : [`https://picsum.photos/seed/${session.serviceType || 'archive'}-gallery-${i}/600/600`];
+                  : [`https://picsum.photos/seed/${session.serviceType || 'kidcanvas'}-gallery-${i}/600/600`];
               }
               params[key] = images;
               console.log(`[갤러리 바인딩] 페이지 ${i + 1} key=${key} binding=${binding} urls=${images.length}개:`, images);

@@ -1,23 +1,22 @@
 // 서비스 타입별 설정 정보
-// ARCHIVE — 크리에이터/개발자를 위한 프리미엄 프로젝트 포트폴리오 북
+// KidCanvas — 우리 아이 그림 작품집: 미술관 도록 스타일 포토북
 export const SERVICE_TYPES = {
-  archive: {
-    key: 'archive',
-    name: 'ARCHIVE',
-    subtitle: '당신의 프로젝트를 한 권의 아카이브로',
-    description: '1년간의 프로젝트, 성과, 회고를 프리미엄 하드커버 북으로 아카이빙하세요. 개발자·디자이너·PM을 위한 포트폴리오 북.',
+  kidcanvas: {
+    key: 'kidcanvas',
+    name: 'KidCanvas',
+    subtitle: '우리 아이 그림을 한 권의 작품집으로',
+    description: '아이가 그린 그림을 사진으로 찍어 업로드하면, AI가 작품 해설을 생성하고 미술관 도록 스타일의 프리미엄 포토북으로 제작합니다.',
     icon: null,
-    color: 'from-neutral-900 to-neutral-800',
-    accentColor: '#171717',
+    color: 'from-peach-400 to-peach-500',
+    accentColor: '#FF8C5E',
     recommendedSpec: 'SQUAREBOOK_HC',
     templateCategory: 'etc',
     fields: [
-      { key: 'bookTitle', label: 'Book Title', type: 'text', placeholder: 'e.g. 2025 Annual Archive', required: true },
-      { key: 'authorName', label: 'Author / Creator', type: 'text', placeholder: 'e.g. Jimin Park', required: true },
-      { key: 'role', label: 'Role', type: 'select', options: ['Frontend Developer', 'Backend Developer', 'Full-Stack Developer', 'Designer', 'PM / PO', 'Data Engineer', 'DevOps / SRE', 'Other'], required: true },
-      { key: 'techStack', label: 'Tech Stack', type: 'text', placeholder: 'e.g. React, Next.js, TypeScript, AWS', required: false },
-      { key: 'period', label: 'Archive Period', type: 'text', placeholder: 'e.g. 2025.01 — 2025.12', required: true },
-      { key: 'bookDescription', label: 'Description', type: 'textarea', placeholder: 'Briefly describe what this archive covers — projects, learnings, milestones.', required: false },
+      { key: 'bookTitle', label: '작품집 제목', type: 'text', placeholder: '예) 하은이의 작은 미술관', required: true },
+      { key: 'childName', label: '아이 이름', type: 'text', placeholder: '예) 김하은', required: true },
+      { key: 'childAge', label: '나이', type: 'select', options: ['3세', '4세', '5세', '6세', '7세', '8세', '9세', '10세'], required: true },
+      { key: 'period', label: '작품 기간', type: 'text', placeholder: '예) 2025.03 — 2026.02', required: true },
+      { key: 'bookDescription', label: '작품집 소개', type: 'textarea', placeholder: '아이의 그림 이야기, 특별한 추억, 엄마아빠의 한마디를 적어주세요.', required: false },
     ],
   },
 };
@@ -34,7 +33,7 @@ export const BOOK_SPECS = {
     pages: '24~130p',
     pageMin: 24,
     pageIncrement: 2,
-    description: '가장 범용적인 판형. 앨범, 일기장, 졸업앨범 등 다양한 용도에 적합합니다.',
+    description: '가장 범용적인 판형. 아이 그림을 크고 선명하게 담을 수 있는 정방형 하드커버입니다.',
   },
   PHOTOBOOK_A4_SC: {
     uid: 'PHOTOBOOK_A4_SC',
@@ -45,7 +44,7 @@ export const BOOK_SPECS = {
     pages: '24~130p',
     pageMin: 24,
     pageIncrement: 2,
-    description: 'A4 사이즈 소프트커버. 사진과 텍스트를 넉넉하게 담을 수 있는 포토북입니다.',
+    description: 'A4 사이즈 소프트커버. 세로로 긴 그림을 넉넉하게 담을 수 있는 포토북입니다.',
   },
   PHOTOBOOK_A5_SC: {
     uid: 'PHOTOBOOK_A5_SC',
@@ -56,7 +55,7 @@ export const BOOK_SPECS = {
     pages: '50~200p',
     pageMin: 50,
     pageIncrement: 2,
-    description: 'A5 사이즈 소프트커버. 가볍고 휴대하기 편한 아담한 포토북입니다.',
+    description: 'A5 사이즈 소프트커버. 가볍고 휴대하기 편한 아담한 작품집입니다.',
   },
 };
 

@@ -3,8 +3,8 @@ import Header from '@/components/Header';
 import Toast from '@/components/Toast';
 
 export const metadata = {
-  title: 'ARCHIVE — Premium Project Portfolio Book',
-  description: '당신의 프로젝트와 1년의 성과를 한 권의 프리미엄 아카이브로. SweetBook Book Print API 기반 포트폴리오 북 제작 플랫폼.',
+  title: 'KidCanvas — 우리 아이 그림 작품집',
+  description: '아이가 그린 그림을 사진으로 찍어 업로드하면, AI가 작품 해설을 생성하고 미술관 도록 스타일의 프리미엄 하드커버 포토북으로 제작합니다.',
 };
 
 export default function RootLayout({ children }) {

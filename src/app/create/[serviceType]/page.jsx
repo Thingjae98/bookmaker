@@ -165,10 +165,10 @@ export default function CreatePage() {
 
   if (!service) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-peach-50">
         <div className="text-center">
-          <h1 className="font-display text-2xl font-bold text-neutral-900 mb-4">Page not found</h1>
-          <Link href="/" className="btn-primary inline-block">Back to Home</Link>
+          <h1 className="font-display text-3xl text-ink-900 mb-4">페이지를 찾을 수 없어요</h1>
+          <Link href="/" className="btn-primary inline-block">홈으로 돌아가기</Link>
         </div>
       </div>
     );
@@ -183,7 +183,7 @@ export default function CreatePage() {
     if (dummy) {
       setFormData(dummy.meta);
       setUseDummy(true);
-      toast.success('더미 데이터가 채워졌습니다');
+      toast.success('샘플 데이터가 채워졌어요!');
     }
   };
 
@@ -215,25 +215,25 @@ export default function CreatePage() {
   };
 
   return (
-    <div className="min-h-screen bg-white pb-20 page-transition">
+    <div className="min-h-screen bg-peach-50 pb-20 page-transition">
       <StepIndicator currentStep="info" />
 
       <div className="max-w-xl mx-auto px-6">
         {/* Header */}
         <div className="text-center mb-12 opacity-0 animate-fade-up">
-          <p className="text-neutral-400 font-mono text-xs tracking-[0.3em] uppercase mb-4">Configure</p>
-          <h1 className="font-display font-bold text-3xl md:text-4xl text-neutral-900 tracking-tight mb-3">
-            New Archive
+          <p className="text-peach-400 font-body text-sm tracking-[0.2em] uppercase mb-4">정보 입력</p>
+          <h1 className="font-display text-4xl md:text-5xl text-ink-900 tracking-tight mb-3">
+            새 작품집
           </h1>
-          <p className="text-neutral-500 text-sm">프로젝트 정보를 입력하고 아카이브를 구성하세요</p>
+          <p className="text-ink-600 text-sm">아이와 작품집에 대한 정보를 입력해 주세요</p>
         </div>
 
         {/* Quick Fill */}
-        <div className="mb-8 p-4 border border-neutral-200 opacity-0 animate-fade-up delay-100">
+        <div className="mb-8 p-5 bg-white border-2 border-peach-100 rounded-2xl opacity-0 animate-fade-up delay-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-neutral-800 font-mono">Quick Fill</p>
-              <p className="text-xs text-neutral-400 mt-0.5">더미 데이터로 빠르게 체험</p>
+              <p className="text-sm font-semibold text-ink-800">✨ 샘플 데이터</p>
+              <p className="text-xs text-ink-400 mt-0.5">더미 데이터로 빠르게 체험해 보세요</p>
             </div>
             <div className="flex items-center gap-2">
               {draftRestored && (
@@ -246,13 +246,13 @@ export default function CreatePage() {
                     sessionStorage.removeItem(DRAFT_KEY);
                     toast.info('초기화되었습니다');
                   }}
-                  className="px-3 py-2 text-xs text-neutral-500 border border-neutral-300 hover:bg-neutral-50 transition-colors"
+                  className="px-3 py-2 text-xs text-ink-400 border-2 border-peach-200 rounded-xl hover:bg-peach-50 transition-colors"
                 >
-                  Reset
+                  초기화
                 </button>
               )}
-              <button onClick={fillDummy} className="px-4 py-2 bg-neutral-900 text-white text-xs font-medium tracking-wider hover:bg-neutral-800 transition-colors">
-                Fill Demo Data
+              <button onClick={fillDummy} className="px-4 py-2 bg-peach-500 text-white text-xs font-semibold rounded-xl hover:bg-peach-600 transition-colors shadow-sm">
+                샘플 채우기
               </button>
             </div>
           </div>
@@ -261,8 +261,10 @@ export default function CreatePage() {
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-6 opacity-0 animate-fade-up delay-200">
           {/* Service Fields */}
-          <div className="border border-neutral-200 p-6 space-y-5">
-            <h2 className="font-mono text-sm font-medium text-neutral-900 tracking-wide uppercase">Project Info</h2>
+          <div className="bg-white border-2 border-peach-100 rounded-2xl p-6 space-y-5">
+            <h2 className="text-sm font-semibold text-ink-900 tracking-wide flex items-center gap-2">
+              <span>🎨</span> 작품집 정보
+            </h2>
 
             {service.fields.map((field) => {
               if (field.showWhen) {
@@ -272,9 +274,9 @@ export default function CreatePage() {
 
               return (
                 <div key={field.key}>
-                  <label className="block text-xs font-medium text-neutral-600 mb-1.5 tracking-wide uppercase">
+                  <label className="block text-xs font-medium text-ink-600 mb-1.5 tracking-wide">
                     {field.label}
-                    {field.required && <span className="text-red-400 ml-0.5">*</span>}
+                    {field.required && <span className="text-coral-400 ml-0.5">*</span>}
                   </label>
 
                   {field.type === 'text' && (
@@ -302,7 +304,7 @@ export default function CreatePage() {
                       value={formData[field.key] || ''}
                       onChange={(e) => handleChange(field.key, e.target.value)}
                     >
-                      <option value="">Select...</option>
+                      <option value="">선택해 주세요...</option>
                       {field.options.map((opt) => (
                         <option key={opt} value={opt}>{opt}</option>
                       ))}
@@ -323,10 +325,12 @@ export default function CreatePage() {
           </div>
 
           {/* Book Spec Selection */}
-          <div className="border border-neutral-200 p-6">
+          <div className="bg-white border-2 border-peach-100 rounded-2xl p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-mono text-sm font-medium text-neutral-900 tracking-wide uppercase">Book Format</h2>
-              {specsLoading && <span className="text-xs text-neutral-400 flex items-center gap-1"><span className="spinner" style={{width:12,height:12}} /> Loading...</span>}
+              <h2 className="text-sm font-semibold text-ink-900 tracking-wide flex items-center gap-2">
+                <span>📚</span> 작품집 판형
+              </h2>
+              {specsLoading && <span className="text-xs text-peach-400 flex items-center gap-1"><span className="spinner" style={{width:12,height:12}} /> 불러오는 중...</span>}
             </div>
             <div className="space-y-3">
               {(bookSpecs.length > 0 ? bookSpecs : Object.values(BOOK_SPECS).map(s => ({ bookSpecUid: s.uid, ...s }))).map((s) => {
@@ -340,10 +344,10 @@ export default function CreatePage() {
                 return (
                   <label
                     key={uid}
-                    className={`block p-4 border cursor-pointer transition-all ${
+                    className={`block p-4 border-2 cursor-pointer transition-all rounded-xl ${
                       selectedSpec === uid
-                        ? 'border-neutral-900 bg-neutral-50'
-                        : 'border-neutral-200 hover:border-neutral-400'
+                        ? 'border-peach-400 bg-peach-50'
+                        : 'border-peach-100 hover:border-peach-300'
                     }`}
                   >
                     <div className="flex items-start gap-3">
@@ -353,16 +357,16 @@ export default function CreatePage() {
                         value={uid}
                         checked={selectedSpec === uid}
                         onChange={() => setSelectedSpec(uid)}
-                        className="mt-1 accent-neutral-900"
+                        className="mt-1 accent-peach-500"
                       />
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
-                          <span className="font-medium text-neutral-900 text-sm">{displayName}</span>
+                          <span className="font-medium text-ink-900 text-sm">{displayName}</span>
                           {uid === service.recommendedSpec && (
-                            <span className="text-xs bg-neutral-900 text-white px-2 py-0.5 font-mono">REC</span>
+                            <span className="text-xs bg-peach-500 text-white px-2 py-0.5 rounded-full font-medium">추천</span>
                           )}
                         </div>
-                        <p className="text-xs text-neutral-500 mt-1 font-mono">{displayDetail}</p>
+                        <p className="text-xs text-ink-400 mt-1 font-mono">{displayDetail}</p>
                       </div>
                     </div>
                   </label>
@@ -374,10 +378,10 @@ export default function CreatePage() {
           {/* Submit */}
           <div className="flex gap-3 pt-4">
             <Link href="/" className="btn-secondary flex-1 text-center">
-              Back
+              뒤로
             </Link>
             <button type="submit" className="btn-primary flex-1">
-              Next: Compose
+              다음: 꾸미기
             </button>
           </div>
         </form>

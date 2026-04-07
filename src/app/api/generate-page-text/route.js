@@ -1,6 +1,6 @@
 // src/app/api/generate-page-text/route.js
 // 에디터 내 개별 페이지 AI 텍스트 생성 API — Google Gemini 기반
-// 프로젝트 정보(Create 페이지 입력값)를 참고하여 페이지별 회고/캡션 텍스트 자동 생성
+// 아이 그림에 대한 작품 해설/캡션 텍스트 자동 생성
 
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -17,10 +17,10 @@ export async function POST(request) {
     const body = await request.json();
     const {
       bookTitle = '',
+      childName = '',
       authorName = '',
       bookDescription = '',
-      techStack = '',
-      role = '',
+      childAge = '',
       period = '',
       pageTitle = '',
       pageIndex = 0,
@@ -35,21 +35,24 @@ export async function POST(request) {
       );
     }
 
-    const prompt = `당신은 개발자/크리에이터 포트폴리오 북의 편집자입니다.
+    const artistName = childName || authorName || '우리 아이';
 
-프로젝트 정보:
-- 책 제목: ${bookTitle}
-- 저자: ${authorName}
-- 역할: ${role}
-- 기술 스택: ${techStack}
-- 기간: ${period}
-- 설명: ${bookDescription}
+    const prompt = `당신은 어린이 미술 전시회의 큐레이터이자, 아이 그림 작품집의 편집자입니다.
 
-이 책의 ${totalPages}페이지 중 ${pageIndex + 1}번째 페이지입니다.
-${pageTitle ? `이 페이지의 제목: "${pageTitle}"` : ''}
+작품집 정보:
+- 작품집 제목: ${bookTitle}
+- 작가(아이 이름): ${artistName}
+- 나이: ${childAge}
+- 작품 기간: ${period}
+- 작품집 소개: ${bookDescription}
 
-이 페이지에 어울리는 회고/캡션 텍스트를 한국어로 2~3문장 작성해 주세요.
-개발자답게 기술적이면서도 감성적인 톤으로, 프로젝트 경험을 회고하는 느낌으로 써주세요.
+이 작품집의 ${totalPages}페이지 중 ${pageIndex + 1}번째 페이지입니다.
+${pageTitle ? `이 작품의 제목: "${pageTitle}"` : ''}
+
+이 페이지에 어울리는 작품 해설 텍스트를 한국어로 2~3문장 작성해 주세요.
+미술관 도록의 작품 해설처럼, 아이의 순수한 시선과 상상력을 따뜻하게 해석해 주세요.
+부모가 읽으면 감동하고, 아이가 자라서 읽으면 추억이 될 수 있는 톤으로 써주세요.
+아이의 표현력과 창의성을 존중하면서도, 전문 큐레이터의 시선으로 해석해 주세요.
 
 응답은 순수 텍스트만 반환하세요 (JSON, 마크다운 없이). 따옴표도 넣지 마세요.`;
 
@@ -75,8 +78,8 @@ ${pageTitle ? `이 페이지의 제목: "${pageTitle}"` : ''}
 
     // 모든 모델 실패 → 간단한 폴백 텍스트
     const fallbackText = pageTitle
-      ? `${pageTitle}에 대한 기록입니다. ${bookDescription || '이 프로젝트에서 많은 것을 배웠습니다.'}`
-      : `${bookTitle || '프로젝트'} ${pageIndex + 1}번째 페이지. ${bookDescription || '개발 여정의 한 페이지를 기록합니다.'}`;
+      ? `${artistName}의 작품 "${pageTitle}". ${bookDescription || '아이만의 시선으로 세상을 표현한 소중한 그림입니다.'}`
+      : `${bookTitle || '우리 아이 작품집'} ${pageIndex + 1}번째 페이지. ${bookDescription || '크레파스와 물감으로 표현한 아이만의 세상을 담았습니다.'}`;
 
     return NextResponse.json({
       success: true,
