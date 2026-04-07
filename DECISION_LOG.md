@@ -219,28 +219,46 @@ if (/^(https?:|blob:|data:)/i.test(src) || src.startsWith('/')) return src;
 
 ---
 
-## ADR-11 — Webhook 인메모리 이벤트 로그 + 로컬 시뮬레이션
+## ADR-11 — Webhook 완전 구현: 서명 검증 + ngrok 연동 + 시뮬레이션
 
 ### 배경
-SweetBook 서버가 주문 상태 변경 시 Webhook POST를 보내지만, 기존 구현은 `console.log`만 수행. 주문 내역 페이지에서 상태 변경 이력을 확인할 수 없음. 또한 localhost에서는 외부 Webhook을 수신할 수 없어 시연 불가.
+SweetBook API가 Webhook을 지원하지만 기존 구현은 `console.log`만 수행. 로컬(localhost)에서 외부 Webhook 수신 불가.
 
-### 결정
-1. **인메모리 이벤트 저장소**: Webhook POST 수신 시 이벤트를 배열에 저장 (FIFO, 최대 200건)
-2. **GET 엔드포인트 추가**: `GET /api/webhooks/sweetbook?orderUid=xxx&limit=N` — 이벤트 로그 조회
-3. **시뮬레이션 엔드포인트**: `POST /api/webhooks/sweetbook/simulate` — orderUid + currentStatus → 다음 상태로 자동 전이, 내부적으로 실제 Webhook POST 호출
-4. **주문 내역 UI**: 30초 폴링으로 이벤트 로그 표시, 주문 상세 모달에 "다음 상태로 전이" 시뮬레이션 버튼
+### 결정: 3-Layer Webhook 아키텍처
 
-### 상태 전이 흐름
+**Layer 1 — 수신 + 검증** (`POST /api/webhooks/sweetbook`):
+- SweetBook 공식 이벤트 8종 파싱 (`order.created`, `production.confirmed`, `shipping.departed` 등)
+- HMAC-SHA256 서명 검증: `X-Webhook-Signature` + `X-Webhook-Timestamp` → `crypto.timingSafeEqual()`
+- `X-Webhook-Delivery` ID로 중복 이벤트 무시
+- `SWEETBOOK_WEBHOOK_SECRET` 미설정 시 검증 스킵 (개발 환경 친화적)
+
+**Layer 2 — ngrok 연동** (`PUT/POST /api/webhooks/config`):
+- SweetBook API `PUT /webhooks/config` 프록시 — ngrok URL 입력 → 자동 등록
+- `POST /webhooks/test` 프록시 — 테스트 이벤트 전송
+- 주문 내역 페이지에 설정 패널 UI (URL 입력 + 이벤트 유형별 테스트 버튼)
+
+**Layer 3 — 시뮬레이션** (`POST /api/webhooks/sweetbook/simulate`):
+- ngrok 없이도 상태 전이 시뮬레이션 가능
+- 주문 상세 모달에 "다음 상태로 전이" 버튼
+
+### SweetBook 공식 이벤트 플로우
 ```
-PAID(20) → PDF_READY(25) → CONFIRMED(30) → IN_PRODUCTION(40) → COMPLETED(45) → PRODUCTION_COMPLETE(50) → SHIPPED(60) → DELIVERED(70)
+order.created → production.confirmed → production.started → production.completed → shipping.departed → shipping.delivered
+```
+
+### 로컬 시연 시나리오
+```bash
+# 방법 A: ngrok 사용 (실제 SweetBook Webhook 수신)
+ngrok http 3000
+# → 주문 내역 > Webhook 설정 > ngrok URL 입력 > 등록 > 테스트 전송
+
+# 방법 B: 시뮬레이션 (ngrok 없이)
+# → 주문 상세 > "다음 상태로 전이" 반복 클릭 > 이벤트 로그 확인
 ```
 
 ### 한계
-- 인메모리 → 서버 재시작 시 초기화 (프로덕션에서는 DB/Redis 필요)
-- 시뮬레이션은 실제 SweetBook API 상태를 변경하지 않음 (UI 시연 전용)
-
-### 결과
-로컬 환경에서 주문 생성 → 상태 전이 → Webhook 수신 → 이벤트 로그 확인까지 전체 플로우 시연 가능.
+- 인메모리 → 서버 재시작 시 로그 초기화 (프로덕션: DB/Redis 필요)
+- 시뮬레이션은 UI 전용 — SweetBook API 실제 상태 미변경
 
 ---
 

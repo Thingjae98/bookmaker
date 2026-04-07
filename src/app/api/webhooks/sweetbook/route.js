@@ -1,53 +1,116 @@
 // src/app/api/webhooks/sweetbook/route.js
-// POST /api/webhooks/sweetbook — SweetBook 주문 상태 변경 Webhook 수신 엔드포인트
+// POST /api/webhooks/sweetbook — SweetBook Webhook 수신 엔드포인트
 // GET  /api/webhooks/sweetbook — 수신된 이벤트 로그 조회 (주문 내역 페이지에서 폴링)
 //
-// 스위트북 서버가 주문 상태 전이(CONFIRMED → IN_PRODUCTION → SHIPPED 등) 시
-// 이 라우트로 POST 요청을 보냄. 인메모리 이벤트 로그에 저장하여
-// 주문 내역 페이지에서 실시간 상태 변경 이력을 확인할 수 있음.
+// SweetBook 공식 Webhook 이벤트:
+//   order.created, order.cancelled, order.restored,
+//   production.confirmed, production.started, production.completed,
+//   shipping.departed, shipping.delivered, webhook.exhausted
 //
-// 로컬 환경(localhost)에서는 외부 Webhook을 직접 수신할 수 없으므로
-// 시연용 시뮬레이션 엔드포인트도 함께 제공.
+// 서명 검증 헤더:
+//   X-Webhook-Signature: sha256=HMAC-SHA256(secretKey, "{timestamp}.{body}")
+//   X-Webhook-Timestamp: Unix timestamp (seconds)
+//   X-Webhook-Event: 이벤트 타입
+//   X-Webhook-Delivery: 고유 전송 ID (중복 방지)
 
 import { NextResponse } from 'next/server';
+import crypto from 'crypto';
 
 // ── 인메모리 이벤트 저장소 (서버 프로세스 생존 기간 동안 유지) ──
 // 프로덕션에서는 DB/Redis로 교체 필요
 const webhookEvents = [];
-const MAX_EVENTS = 200; // 최대 보관 이벤트 수
+const MAX_EVENTS = 200;
+
+// ── HMAC-SHA256 서명 검증 ──
+function verifySignature(rawBody, signature, timestamp) {
+  const secret = process.env.SWEETBOOK_WEBHOOK_SECRET;
+  if (!secret) return null; // 시크릿 미설정 → 검증 스킵 (개발 환경)
+
+  if (!signature || !timestamp) return false;
+
+  // 타임스탬프 유효성 (5분 이내)
+  const now = Math.floor(Date.now() / 1000);
+  if (Math.abs(now - parseInt(timestamp, 10)) > 300) return false;
+
+  const payload = `${timestamp}.${rawBody}`;
+  const expected = 'sha256=' + crypto
+    .createHmac('sha256', secret)
+    .update(payload)
+    .digest('hex');
+
+  // timing-safe comparison
+  try {
+    return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
+  } catch {
+    return false;
+  }
+}
 
 // ── POST: Webhook 수신 ──
 export async function POST(request) {
   try {
-    const payload = await request.json();
+    const rawBody = await request.text();
+    const payload = JSON.parse(rawBody);
 
-    // ── 핵심 필드 파싱 ──
+    // 서명 검증 (SWEETBOOK_WEBHOOK_SECRET 설정 시 활성화)
+    const signature = request.headers.get('x-webhook-signature');
+    const timestamp = request.headers.get('x-webhook-timestamp');
+    const webhookEvent = request.headers.get('x-webhook-event');
+    const deliveryId = request.headers.get('x-webhook-delivery');
+
+    const sigResult = verifySignature(rawBody, signature, timestamp);
+    if (sigResult === false) {
+      console.warn('[Webhook] 서명 검증 실패 — 요청 거부');
+      return NextResponse.json(
+        { success: false, message: 'Invalid signature' },
+        { status: 401 }
+      );
+    }
+
+    // ── SweetBook 공식 이벤트 페이로드 파싱 ──
     const {
-      orderUid,         // 스위트북 주문 UID
-      externalRef,      // 우리 시스템 참조값 (bookmaker-order-{uuid})
-      status,           // 변경된 주문 상태 코드 (20, 30, 40, …)
-      previousStatus,   // 이전 상태 코드
-      updatedAt,        // 상태 변경 시각 (ISO 8601)
-      eventType,        // 이벤트 유형 (예: order.status.changed)
-      trackingNumber,   // 배송 추적번호 (발송 시)
-      trackingUrl,      // 배송 추적 URL
+      event: eventType,   // 공식 필드명: event
+      orderUid,
+      status,
+      timestamp: eventTimestamp,
+      isTest,
+      // order.created
+      bookUid, quantity, totalCredits, shippingAddress,
+      // order.cancelled
+      cancelledAt, cancelReason, refundedCredits,
+      // production.*
+      confirmedAt, estimatedShipDate, startedAt, completedAt,
+      // shipping.*
+      trackingNumber, trackingCarrier, shippedAt, deliveredAt,
     } = payload;
 
     const event = {
-      id: `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      id: deliveryId || `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       receivedAt: new Date().toISOString(),
-      eventType: eventType || 'order.status.changed',
+      eventType: webhookEvent || eventType || payload.eventType || 'unknown',
       orderUid,
-      externalRef,
-      previousStatus,
       status,
-      updatedAt,
-      trackingNumber: trackingNumber || null,
-      trackingUrl: trackingUrl || null,
+      isTest: isTest || false,
+      timestamp: eventTimestamp,
+      // 이벤트별 추가 데이터
+      ...(trackingNumber && { trackingNumber, trackingCarrier }),
+      ...(estimatedShipDate && { estimatedShipDate }),
+      ...(cancelReason && { cancelReason }),
+      ...(completedAt && { completedAt }),
+      ...(deliveredAt && { deliveredAt }),
+      // 시뮬레이션 마커
       simulated: payload._simulated || false,
+      // 레거시 호환 (simulate 엔드포인트)
+      previousStatus: payload.previousStatus || null,
+      externalRef: payload.externalRef || null,
     };
 
-    // 이벤트 저장 (FIFO — 최대 MAX_EVENTS)
+    // 중복 방지 (같은 deliveryId 재전송)
+    if (deliveryId && webhookEvents.some((e) => e.id === deliveryId)) {
+      return NextResponse.json({ success: true, message: 'Duplicate — already processed' }, { status: 200 });
+    }
+
+    // 이벤트 저장 (FIFO)
     webhookEvents.unshift(event);
     if (webhookEvents.length > MAX_EVENTS) {
       webhookEvents.length = MAX_EVENTS;
@@ -56,24 +119,20 @@ export async function POST(request) {
     console.log('[Webhook 수신]', {
       eventType: event.eventType,
       orderUid,
-      previousStatus,
       status,
-      trackingNumber: event.trackingNumber,
-      receivedAt: event.receivedAt,
+      deliveryId: event.id,
+      isTest: event.isTest,
+      simulated: event.simulated,
     });
 
-    // 스위트북 서버에 200 OK 응답 — 미응답 시 재시도 발생
     return NextResponse.json({ success: true, message: 'Webhook received', eventId: event.id }, { status: 200 });
   } catch (err) {
     console.error('[Webhook 에러] 파싱 실패:', err.message);
-    // 파싱 실패해도 200 반환 — 스위트북의 무한 재시도 방지
     return NextResponse.json({ success: false, message: err.message }, { status: 200 });
   }
 }
 
 // ── GET: 이벤트 로그 조회 ──
-// ?orderUid=xxx — 특정 주문 이벤트만 필터링
-// ?limit=N     — 최근 N개만 반환 (기본 50)
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);

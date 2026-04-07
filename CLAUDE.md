@@ -143,6 +143,6 @@ bookmaker/
 - [x] AI 텍스트 생성 — 에디터 내 페이지별 회고/캡션 Gemini AI 자동 작성 (AI TEXT 버튼)
 - [x] 로컬 이미지 미리보기 수정 — resolveImageUrl + safePreviewUrl 로컬 경로(`/`) 지원
 - [ ] 임시저장 & 이어서 편집 (localStorage/IndexedDB → Orders 페이지 연동)
-- [x] Webhook 상태 동기화 — 인메모리 이벤트 저장 + 주문 내역 실시간 로그 + 로컬 시뮬레이션
+- [x] Webhook 상태 동기화 — 인메모리 이벤트 저장 + 주문 내역 실시간 로그 + 로컬 시뮬레이션 + ngrok 연동 + HMAC 서명 검증
 - [ ] 사용자 인증 (NextAuth)
 - [ ] 다크 모드

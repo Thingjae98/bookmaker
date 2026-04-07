@@ -15,6 +15,13 @@ export default function OrdersPage() {
   const [webhookEvents, setWebhookEvents] = useState([]);
   const [simulatingOrder, setSimulatingOrder] = useState(null);
 
+  // Webhook 설정 (ngrok URL 등록)
+  const [showWebhookConfig, setShowWebhookConfig] = useState(false);
+  const [webhookUrl, setWebhookUrl] = useState('');
+  const [webhookConfigLoading, setWebhookConfigLoading] = useState(false);
+  const [webhookConfigResult, setWebhookConfigResult] = useState(null);
+  const [webhookTestLoading, setWebhookTestLoading] = useState(false);
+
   // 배송지 변경 모달 state
   const [shippingModal, setShippingModal] = useState(false);
   const [shippingForm, setShippingForm] = useState({
@@ -167,6 +174,52 @@ export default function OrdersPage() {
     }
   };
 
+  // Webhook URL 등록 (SweetBook API PUT /webhooks/config)
+  const handleWebhookConfig = async () => {
+    if (!webhookUrl.startsWith('https://')) {
+      setWebhookConfigResult({ success: false, message: 'https:// URL이 필요합니다. ngrok URL을 입력하세요.' });
+      return;
+    }
+    setWebhookConfigLoading(true);
+    setWebhookConfigResult(null);
+    try {
+      const fullUrl = webhookUrl.replace(/\/$/, '') + '/api/webhooks/sweetbook';
+      const res = await fetch('/api/webhooks/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ webhookUrl: fullUrl }),
+      });
+      const data = await res.json();
+      setWebhookConfigResult(data);
+    } catch (err) {
+      setWebhookConfigResult({ success: false, message: err.message });
+    } finally {
+      setWebhookConfigLoading(false);
+    }
+  };
+
+  // Webhook 테스트 이벤트 전송
+  const handleWebhookTest = async (eventType = 'order.created') => {
+    setWebhookTestLoading(true);
+    try {
+      const res = await fetch('/api/webhooks/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventType }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        // 이벤트 로그 갱신
+        setTimeout(fetchWebhookEvents, 1500);
+      }
+      setWebhookConfigResult(data);
+    } catch (err) {
+      setWebhookConfigResult({ success: false, message: err.message });
+    } finally {
+      setWebhookTestLoading(false);
+    }
+  };
+
   const formatPrice = (n) => (n ? n.toLocaleString('ko-KR') : '—');
   const formatDate = (d) => d ? new Date(d).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
   // raw UID(예: ord_AbCdEfGhIjKl)를 사용자 친화적 짧은 주문번호로 변환
@@ -214,6 +267,72 @@ export default function OrdersPage() {
               새 책 만들기
             </Link>
           </div>
+        </div>
+
+        {/* Webhook 설정 패널 (ngrok 연동) */}
+        <div className="mb-6">
+          <button
+            onClick={() => setShowWebhookConfig(!showWebhookConfig)}
+            className="text-xs font-mono text-ink-400 hover:text-ink-700 border border-ink-200 rounded px-3 py-1.5 transition-colors"
+          >
+            {showWebhookConfig ? '▾ Webhook 설정 닫기' : '▸ Webhook 설정 (ngrok)'}
+          </button>
+
+          {showWebhookConfig && (
+            <div className="mt-3 bg-neutral-950 rounded-xl border border-neutral-800 p-5">
+              <h3 className="font-mono text-sm font-bold text-white mb-1">Webhook URL 등록</h3>
+              <p className="text-[11px] text-neutral-500 mb-4">
+                ngrok http 3000 실행 후 발급된 https URL을 입력하세요. /api/webhooks/sweetbook 경로는 자동 추가됩니다.
+              </p>
+
+              <div className="flex gap-2 mb-3">
+                <input
+                  type="url"
+                  value={webhookUrl}
+                  onChange={(e) => setWebhookUrl(e.target.value)}
+                  placeholder="https://xxxx-xx-xx.ngrok-free.app"
+                  className="flex-1 bg-neutral-900 border border-neutral-700 rounded px-3 py-2 text-sm font-mono text-white placeholder:text-neutral-600 focus:border-neutral-500 focus:outline-none"
+                />
+                <button
+                  onClick={handleWebhookConfig}
+                  disabled={webhookConfigLoading || !webhookUrl}
+                  className={`px-4 py-2 text-xs font-mono font-bold rounded transition-all ${
+                    webhookConfigLoading
+                      ? 'bg-neutral-700 text-neutral-400 cursor-wait animate-pulse'
+                      : 'bg-white text-black hover:bg-neutral-200'
+                  }`}
+                >
+                  {webhookConfigLoading ? '등록중...' : '등록'}
+                </button>
+              </div>
+
+              {/* 테스트 이벤트 버튼 */}
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-neutral-500">테스트 이벤트:</span>
+                {['order.created', 'production.confirmed', 'shipping.departed'].map((evt) => (
+                  <button
+                    key={evt}
+                    onClick={() => handleWebhookTest(evt)}
+                    disabled={webhookTestLoading}
+                    className="text-[10px] font-mono px-2 py-1 bg-neutral-800 text-neutral-300 hover:bg-neutral-700 hover:text-white rounded transition-colors disabled:opacity-50"
+                  >
+                    {evt.split('.')[1]}
+                  </button>
+                ))}
+              </div>
+
+              {/* 결과 메시지 */}
+              {webhookConfigResult && (
+                <div className={`text-xs font-mono px-3 py-2 rounded ${
+                  webhookConfigResult.success
+                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                    : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                }`}>
+                  {webhookConfigResult.message}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {loading && (
@@ -280,26 +399,26 @@ export default function OrdersPage() {
               </button>
             </div>
             <div className="bg-neutral-950 rounded-xl border border-neutral-800 overflow-hidden">
-              <div className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-x-4 px-4 py-2 bg-neutral-900 text-[10px] font-mono uppercase tracking-wider text-neutral-500 border-b border-neutral-800">
+              <div className="grid grid-cols-[auto_1fr_auto] gap-x-4 px-4 py-2 bg-neutral-900 text-[10px] font-mono uppercase tracking-wider text-neutral-500 border-b border-neutral-800">
                 <span>시각</span>
+                <span>이벤트</span>
                 <span>주문</span>
-                <span>이전</span>
-                <span></span>
-                <span>현재</span>
               </div>
               <div className="max-h-[240px] overflow-y-auto divide-y divide-neutral-800/50">
                 {webhookEvents.map((evt) => (
-                  <div key={evt.id} className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-x-4 items-center px-4 py-2 text-xs font-mono hover:bg-neutral-900/50 transition-colors">
+                  <div key={evt.id} className="grid grid-cols-[auto_1fr_auto] gap-x-4 items-center px-4 py-2 text-xs font-mono hover:bg-neutral-900/50 transition-colors">
                     <span className="text-neutral-500 text-[10px]">
                       {new Date(evt.receivedAt).toLocaleTimeString('ko-KR')}
                     </span>
-                    <span className="text-neutral-300 truncate">
-                      {evt.orderUid?.slice(-8) || '—'}
-                      {evt.simulated && <span className="ml-1.5 text-[9px] text-amber-500 bg-amber-500/10 px-1 py-0.5 rounded">SIM</span>}
+                    <span className="flex items-center gap-1.5">
+                      <span className="text-emerald-400 font-medium">{evt.eventType}</span>
+                      {evt.simulated && <span className="text-[9px] text-amber-500 bg-amber-500/10 px-1 py-0.5 rounded">SIM</span>}
+                      {evt.isTest && <span className="text-[9px] text-blue-400 bg-blue-500/10 px-1 py-0.5 rounded">TEST</span>}
+                      {evt.trackingNumber && <span className="text-[9px] text-cyan-400">{evt.trackingNumber}</span>}
                     </span>
-                    <span className="text-neutral-500">{evt.previousStatus ?? '—'}</span>
-                    <span className="text-neutral-600">→</span>
-                    <span className="text-emerald-400 font-medium">{evt.status}</span>
+                    <span className="text-neutral-400 truncate">
+                      {evt.orderUid?.slice(-8) || '—'}
+                    </span>
                   </div>
                 ))}
               </div>

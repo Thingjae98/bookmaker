@@ -43,9 +43,13 @@
 
 ### 7. Webhook 주문 상태 실시간 추적
 - SweetBook 서버 → `POST /api/webhooks/sweetbook` — 주문 상태 변경 이벤트 수신
+- **HMAC-SHA256 서명 검증**: `X-Webhook-Signature` + `X-Webhook-Timestamp` + timing-safe comparison
+- **중복 방지**: `X-Webhook-Delivery` ID로 동일 이벤트 재전송 무시
 - 인메모리 이벤트 저장소 — 수신 이벤트 로그 보관 (최대 200건)
 - 주문 내역 페이지에서 Webhook 이벤트 로그 실시간 표시 (30초 폴링)
-- **로컬 시연용 시뮬레이터**: `POST /api/webhooks/sweetbook/simulate` — 주문 상태 전이를 수동 시뮬레이션 (PAID → PDF_READY → CONFIRMED → ... → DELIVERED)
+- **ngrok 연동**: 주문 내역 페이지 Webhook 설정 패널에서 ngrok URL 입력 → `PUT /webhooks/config` → SweetBook에 자동 등록
+- **테스트 이벤트**: 설정 패널에서 `order.created` / `production.confirmed` / `shipping.departed` 테스트 전송
+- **로컬 시연용 시뮬레이터**: `POST /api/webhooks/sweetbook/simulate` — ngrok 없이도 상태 전이 수동 시뮬레이션
 
 ---
 
@@ -105,6 +109,8 @@ npm run dev
 | Templates | `GET` | `/v1/templates/{templateUid}` | 템플릿 상세 |
 | BookSpecs | `GET` | `/v1/book-specs` | 판형 목록 |
 | Credits | `GET` | `/v1/credits` | 충전금 잔액 |
+| Webhooks | `PUT` | `/v1/webhooks/config` | Webhook URL 등록/수정 |
+| Webhooks | `POST` | `/v1/webhooks/test` | 테스트 이벤트 전송 |
 | Webhooks | `POST` | `/api/webhooks/sweetbook` | 주문 상태 이벤트 수신 |
 
 ---
@@ -188,7 +194,8 @@ bookmaker/
 - **Retry / Backoff** — 5xx 3회 재시도, 지수 백오프
 - **페이지 규격** — pageMin/pageIncrement 실시간 검증 + 자동 패딩
 - **Special Page Rules** — PUR 제본 첫 내지 Right 배치, spineTitle 자동 바인딩
-- **Webhook 수신** — POST /api/webhooks/sweetbook 개통, 인메모리 이벤트 로그, 주문 상세 페이지 실시간 표시
+- **Webhook 수신** — POST /api/webhooks/sweetbook 개통, HMAC-SHA256 서명 검증, 중복 방지, 인메모리 이벤트 로그
+- **Webhook 설정** — PUT /api/webhooks/config (ngrok URL 자동 등록), POST /api/webhooks/config (테스트 이벤트)
 - **Webhook 시뮬레이션** — POST /api/webhooks/sweetbook/simulate 로컬 시연용 상태 전이 시뮬레이터
 
 ### 의도적 미구현 (고급 UX)

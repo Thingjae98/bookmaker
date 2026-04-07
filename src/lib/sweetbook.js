@@ -171,3 +171,24 @@ export async function getBookSpec(bookSpecUid) {
   const json = await sweetFetch(`/book-specs/${bookSpecUid}`);
   return ok(json?.data || json);
 }
+
+// ─── Webhooks API ────────────────────────────────────────────
+
+export async function configureWebhook({ webhookUrl, events = null, description }) {
+  const body = { webhookUrl };
+  if (events) body.events = events;
+  if (description) body.description = description;
+  const json = await sweetFetch('/webhooks/config', {}, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+  return ok(json?.data || json);
+}
+
+export async function testWebhook(eventType = 'order.created') {
+  const json = await sweetFetch('/webhooks/test', {}, {
+    method: 'POST',
+    body: JSON.stringify({ eventType }),
+  });
+  return ok(json?.data || json);
+}
