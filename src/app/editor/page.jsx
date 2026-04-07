@@ -1129,6 +1129,131 @@ export default function EditorPage() {
     }
   };
 
+  // ── AI 텍스트 일괄 생성 (Gemini Vision — 이미지 분석) ─────────
+  const [batchAiLoading, setBatchAiLoading] = useState(false);
+  const [batchAiProgress, setBatchAiProgress] = useState('');
+
+  const handleBatchAiText = async () => {
+    const contentItems = gallery.filter(g => g.role === 'content');
+    if (contentItems.length === 0) {
+      toast.error('내지 페이지가 없습니다. 먼저 자동 구성을 실행해 주세요.');
+      return;
+    }
+
+    setBatchAiLoading(true);
+    setBatchAiProgress('이미지 수집 중...');
+
+    try {
+      const fd = session?.formData || {};
+      const CHUNK = 5; // 5장씩 배치 전송 (payload 크기 제한 대응)
+      const allResults = [];
+
+      for (let c = 0; c < contentItems.length; c += CHUNK) {
+        const chunk = contentItems.slice(c, c + CHUNK);
+        const pages = [];
+
+        for (let i = 0; i < chunk.length; i++) {
+          const item = chunk[i];
+          let imageBase64 = null;
+          let mimeType = 'image/png';
+
+          if (item.previewUrl) {
+            setBatchAiProgress(`이미지 변환 중... (${c + i + 1}/${contentItems.length})`);
+            try {
+              const imgRes = await fetch(item.previewUrl);
+              const blob = await imgRes.blob();
+              mimeType = blob.type || 'image/png';
+              const buffer = await blob.arrayBuffer();
+              imageBase64 = btoa(
+                new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+              );
+            } catch (e) {
+              console.warn(`[batchAi] 이미지 변환 실패 (${c + i}):`, e.message);
+            }
+          }
+
+          pages.push({
+            index: c + i,
+            title: item.title || '',
+            imageBase64,
+            mimeType,
+          });
+        }
+
+        const batchNum = Math.floor(c / CHUNK) + 1;
+        const totalBatches = Math.ceil(contentItems.length / CHUNK);
+        setBatchAiProgress(`AI 분석 중... (${batchNum}/${totalBatches} 배치, ${pages.filter(p => p.imageBase64).length}장)`);
+
+        const res = await fetch('/api/generate-batch-text', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            bookTitle:       fd.bookTitle || '',
+            childName:       fd.authorName || '',
+            bookDescription: fd.bookDescription || '',
+            childAge:        fd.childAge || '',
+            period:          fd.period || '',
+            pages,
+          }),
+        });
+
+        const chunkData = await res.json();
+        if (chunkData.success && Array.isArray(chunkData.results)) {
+          allResults.push(...chunkData.results);
+        }
+
+        // rate limit 대응 — 배치 간 간격
+        if (c + CHUNK < contentItems.length) await new Promise(r => setTimeout(r, 1000));
+      }
+
+      // 모든 배치 결과를 합쳐서 data 형태로 구성
+      const data = { success: allResults.length > 0, results: allResults };
+
+      if (data.success && Array.isArray(data.results)) {
+        setBatchAiProgress('텍스트 적용 중...');
+        let appliedCount = 0;
+
+        // 갤러리 전체에서 content 아이템의 인덱스를 매핑
+        const contentIndices = [];
+        gallery.forEach((g, gi) => {
+          if (g.role === 'content') contentIndices.push(gi);
+        });
+
+        setGallery(prev => {
+          const next = [...prev];
+          data.results.forEach((r) => {
+            const galIdx = contentIndices[r.index];
+            if (galIdx === undefined) return;
+            const item = next[galIdx];
+
+            // 텍스트 적용
+            const textKey = getTextDefinitions(item).find(d => isLongTextField(d.key))?.key;
+            const updates = {
+              title: r.title || item.title,
+              text: r.text || '',
+            };
+            if (textKey) {
+              updates.params = { ...item.params, [textKey]: r.text };
+            }
+            next[galIdx] = { ...item, ...updates };
+            appliedCount++;
+          });
+          return next;
+        });
+
+        toast.success(`AI 텍스트 일괄 생성 완료: ${data.results.length}페이지 (Gemini Vision)`);
+      } else {
+        toast.error('AI 일괄 생성 실패');
+      }
+    } catch (err) {
+      console.error('AI 일괄 생성 오류:', err);
+      toast.error('AI 일괄 생성 중 오류가 발생했습니다');
+    } finally {
+      setBatchAiLoading(false);
+      setBatchAiProgress('');
+    }
+  };
+
   // ── 동적 폼 렌더링 — 선택된 템플릿의 text binding 필드를 자동 입력창으로 변환 ──
   const renderDynamicTextFields = (item, idx) => {
     const textDefs = getTextDefinitions(item);
@@ -2429,6 +2554,32 @@ export default function EditorPage() {
                       </button>
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* AI 텍스트 일괄 생성 버튼 — 내지가 있을 때만 표시 */}
+              {gallery.filter(g => g.role === 'content').length > 0 && (
+                <div className="mb-4">
+                  <button
+                    onClick={handleBatchAiText}
+                    disabled={batchAiLoading}
+                    className={`w-full py-3 text-sm font-semibold tracking-wider transition-colors rounded-xl flex items-center justify-center gap-2 shadow-sm ${
+                      batchAiLoading
+                        ? 'bg-purple-300 text-white cursor-wait animate-pulse'
+                        : 'bg-purple-500 text-white hover:bg-purple-600'
+                    }`}
+                  >
+                    {batchAiLoading ? (
+                      <span>{batchAiProgress || 'AI 분석 중...'}</span>
+                    ) : (
+                      <>
+                        <span>✨ AI 텍스트 일괄 생성</span>
+                        <span className="text-white/70 text-xs">
+                          ({gallery.filter(g => g.role === 'content').length}페이지 · Vision)
+                        </span>
+                      </>
+                    )}
+                  </button>
                 </div>
               )}
 

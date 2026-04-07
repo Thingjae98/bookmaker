@@ -59,7 +59,7 @@ bookmaker/
 │   │   ├── preview/page.jsx     # 미리보기 & 견적
 │   │   ├── order/page.jsx       # 배송지 + 주문
 │   │   ├── orders/page.jsx      # 주문 내역
-│   │   └── api/                 # 백엔드 API 프록시 + AI 텍스트 생성
+│   │   └── api/                 # 백엔드 API 프록시 + AI 텍스트 생성 + Vision 일괄 분석
 │   ├── components/              # Header, StepIndicator, Toast 등
 │   ├── lib/                     # sweetbook.js, constants.js, fetchWithRetry.js
 │   └── data/dummy.js            # 아이 그림 작품집 더미 데이터 (26p, Gemini 생성)
@@ -106,6 +106,7 @@ bookmaker/
 - **Auto Compose**: 갤러리 이미지를 자동으로 표지/내지 배치 (24~130p, 2p 단위, 빈 슬롯 자동 패딩)
 - **로컬 이미지 지원**: `public/images/kidcanvas/` 경로 → 프리뷰 표시 + API 업로드 시 fetch→File 변환
 - **AI 텍스트 생성**: 에디터 내 `AI TEXT` 버튼 → `/api/generate-page-text` → Gemini API로 아이 그림 작품 해설 자동 작성
+- **AI 텍스트 일괄 생성**: `✨ AI 텍스트 일괄 생성` 버튼 → `/api/generate-batch-text` → Gemini Vision으로 모든 내지 이미지 분석 + 해설/제목 일괄 생성 (5장씩 배치)
 - **로컬 경로 안전 처리**: `resolveImageUrl()` + `safePreviewUrl()` — `/images/...` 로컬 경로도 유효 URL로 인정
 - **Gemini 생성 더미 이미지**: AI 생성 아이 그림 28장, date(YYYY-MM-DD) 포맷 + 제목 + 해설 완비
 - **API 검증 파이프라인**: 사진 업로드 후 `GET /photos` 카운트 검증 + 최종화 후 `GET /books` 목록 필터링 상태 확인 (단건 405 우회)

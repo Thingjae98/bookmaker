@@ -36,11 +36,12 @@
 - 첫 장 → 앞표지, 마지막 → 뒤표지, 나머지 → 내지 순서 자동 배정
 - 목표 페이지 수 설정 (24~130p, 2 단위) → 부족분 빈 슬롯 자동 패딩
 
-### 6. AI 작품 해설 생성 — Gemini 기반 큐레이터 스타일
-- 에디터 편집 패널에서 **AI TEXT** 버튼 클릭 → Google Gemini API로 작품 해설 텍스트 자동 생성
-- 아이 이름, 나이, 작품 기간, 작품집 설명을 컨텍스트로 활용
-- 미술관 큐레이터의 시선으로 아이의 순수한 표현을 따뜻하게 해석
-- 모델 폴백 체인: `gemini-flash-lite-latest` → `gemini-2.5-flash` → 규칙 기반 폴백 텍스트
+### 6. AI 작품 해설 생성 — Gemini Vision 기반 큐레이터 스타일
+- **AI 텍스트 일괄 생성**: 갤러리의 모든 내지 이미지를 Gemini Vision으로 분석 → 26페이지 작품 해설 + 제목 자동 생성
+- 5장씩 배치 전송 (payload 크기 제한 대응) → 6배치 순차 처리 → 전체 결과 병합
+- 각 그림의 색감, 구도, 표현 기법, 주제를 관찰하고 미술관 도록 스타일로 해석
+- **개별 AI TEXT**: 페이지별 개별 생성도 가능 (편집 패널 AI TEXT 버튼)
+- 모델: `gemini-2.5-flash` (Vision 지원) → 배치별 폴백 텍스트
 
 ### 7. API 검증 파이프라인 — 업로드/최종화/미리보기 3단 검증
 - 사진 업로드 완료 후 `GET /books/{bookUid}/photos` 호출 → 서버 등록 수량 vs 로컬 전송 수량 교차검증
@@ -85,8 +86,8 @@ npm run dev
 2. **"샘플 채우기"** → 아이 그림 작품집 샘플 자동 입력
 3. **"다음: 꾸미기"** → 에디터 진입
 4. 갤러리 Drag & Drop 존에 아이 그림 사진 업로드
-5. 썸네일 클릭 → 인라인 편집 패널에서 표지/내지 역할 지정
-6. **AI TEXT** 버튼으로 작품 해설 자동 생성
+5. **"AI 텍스트 일괄 생성"** → Gemini Vision이 26장 이미지 분석 → 작품 해설 + 제목 자동 생성
+6. 썸네일 클릭 → 인라인 편집 패널에서 확인/수정 (개별 **AI TEXT** 버튼도 사용 가능)
 7. **"책 생성 & 최종화"** → API 로그 실시간 확인
 8. **"다음: 미리보기 & 주문"** → 스프레드 뷰 확인
 9. **"다음: 주문하기"** → 배송지 입력 → 주문 생성
@@ -182,7 +183,8 @@ bookmaker/
 │   │       ├── templates/                    #   Templates API
 │   │       ├── book-specs/                   #   BookSpecs API
 │   │       ├── credits/                      #   Credits API
-│   │       ├── generate-page-text/           #   AI 작품 해설 생성 (Gemini)
+│   │       ├── generate-page-text/           #   AI 작품 해설 개별 생성 (Gemini)
+│   │       ├── generate-batch-text/         #   AI 작품 해설 일괄 생성 (Gemini Vision)
 │   │       └── webhooks/sweetbook/           #   Webhook 수신
 │   ├── components/                           # UI 컴포넌트
 │   ├── lib/                                  # 유틸리티 (sweetbook.js, fetchWithRetry)
