@@ -259,7 +259,7 @@ export default function OrdersPage() {
   };
 
   return (
-    <div className="min-h-screen pb-20 page-transition">
+    <div className="min-h-screen bg-peach-50 pb-20 page-transition">
       <div className="max-w-4xl mx-auto px-6 pt-8">
         <div className="flex items-center justify-between mb-8">
           <div>

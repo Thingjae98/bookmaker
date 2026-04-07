@@ -1166,8 +1166,8 @@ export default function EditorPage() {
                 disabled={aiTextLoading === idx}
                 className={`text-[10px] font-mono font-medium px-2.5 py-1 rounded transition-all ${
                   aiTextLoading === idx
-                    ? 'bg-neutral-400 text-white cursor-wait animate-pulse'
-                    : 'bg-neutral-900 text-white hover:bg-neutral-700'
+                    ? 'bg-peach-300 text-white cursor-wait animate-pulse'
+                    : 'bg-peach-500 text-white hover:bg-peach-600 shadow-sm'
                 }`}
               >
                 {aiTextLoading === idx ? '생성중...' : 'AI TEXT'}
@@ -2069,7 +2069,7 @@ export default function EditorPage() {
     : null;
 
   return (
-    <div className="min-h-screen pb-20 page-transition">
+    <div className="min-h-screen bg-peach-50 pb-20 page-transition">
       <StepIndicator currentStep="editor" />
 
 
@@ -2077,12 +2077,11 @@ export default function EditorPage() {
         {/* 헤더 */}
         <div className="flex items-center justify-between mb-8 opacity-0 animate-fade-up" style={{ animationFillMode: 'forwards' }}>
           <div>
-            <h1 className="font-display font-bold text-2xl text-ink-900 flex items-center gap-2">
-              <span>{service.icon}</span>
-              포토북 구성
+            <h1 className="font-display text-3xl text-ink-900 flex items-center gap-2">
+              🎨 작품집 꾸미기
             </h1>
             <p className="text-ink-400 text-sm mt-1">
-              사진을 업로드하고 앞표지·내지·뒤표지 역할을 지정한 뒤 [최종 생성 및 주문]을 눌러 주세요
+              아이의 그림을 업로드하고 앞표지·내지·뒤표지를 지정해 주세요
               {session.bookSpecUid && (
                 <span className="ml-2 text-ink-500">·
                   판형: {BOOK_SPEC_LABELS[session.bookSpecUid] || session.bookSpecUid}
@@ -2131,7 +2130,7 @@ export default function EditorPage() {
                     {backItems[0] ? (
                       <>
                         <img src={backItems[0].previewUrl} alt="뒤표지" className="w-full h-full object-cover" />
-                        <div className="absolute inset-0 bg-black/35 flex flex-col items-center justify-center">
+                        <div className="absolute inset-0 bg-ink-800/30 backdrop-blur-[1px] flex flex-col items-center justify-center">
                           <span className="text-white text-[10px] font-bold drop-shadow">뒤표지</span>
                           <span className="text-white/70 text-[9px] mt-0.5">클릭 편집</span>
                         </div>
@@ -2157,7 +2156,7 @@ export default function EditorPage() {
                     {frontItems[0] ? (
                       <>
                         <img src={frontItems[0].previewUrl} alt="앞표지" className="w-full h-full object-cover" />
-                        <div className="absolute inset-0 bg-black/35 flex flex-col items-center justify-center">
+                        <div className="absolute inset-0 bg-ink-800/30 backdrop-blur-[1px] flex flex-col items-center justify-center">
                           <span className="text-white text-[10px] font-bold drop-shadow">앞표지</span>
                           <span className="text-white/70 text-[9px] mt-0.5">클릭 편집</span>
                         </div>
@@ -2336,10 +2335,10 @@ export default function EditorPage() {
                 onDragLeave={() => setGalleryDropActive(false)}
                 onDrop={handleGalleryZoneDrop}
                 onClick={() => document.getElementById('gallery-upload-input').click()}
-                className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all mb-4 ${
+                className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all mb-4 ${
                   galleryDropActive
-                    ? 'border-warm-600 bg-warm-50'
-                    : 'border-ink-200 hover:border-warm-400 hover:bg-ink-50'
+                    ? 'border-peach-500 bg-peach-50'
+                    : 'border-peach-200 hover:border-peach-400 hover:bg-peach-50/50'
                 }`}
               >
                 <input
@@ -2361,23 +2360,23 @@ export default function EditorPage() {
                   {!showAutoCompose ? (
                     <button
                       onClick={() => setShowAutoCompose(true)}
-                      className="w-full py-3 bg-neutral-900 text-white text-sm font-mono font-medium tracking-wider hover:bg-neutral-800 transition-colors flex items-center justify-center gap-2"
+                      className="w-full py-3 bg-mint-400 text-white text-sm font-semibold tracking-wider hover:bg-mint-500 transition-colors rounded-xl flex items-center justify-center gap-2 shadow-sm"
                     >
-                      <span>AUTO COMPOSE</span>
-                      <span className="text-neutral-400 text-xs">({gallery.filter(g => g.previewUrl && !g.isBlankSlot).length}장)</span>
+                      <span>🪄 자동 구성</span>
+                      <span className="text-white/70 text-xs">({gallery.filter(g => g.previewUrl && !g.isBlankSlot).length}장)</span>
                     </button>
                   ) : (
-                    <div className="border border-neutral-200 p-4 space-y-3">
+                    <div className="border-2 border-mint-200 bg-mint-50/50 rounded-xl p-4 space-y-3">
                       <div className="flex items-center justify-between">
-                        <p className="text-sm font-mono font-medium text-neutral-900">AUTO COMPOSE</p>
-                        <button onClick={() => setShowAutoCompose(false)} className="text-neutral-400 hover:text-neutral-600 text-lg leading-none">&times;</button>
+                        <p className="text-sm font-semibold text-mint-700 flex items-center gap-1.5">🪄 자동 구성</p>
+                        <button onClick={() => setShowAutoCompose(false)} className="text-mint-300 hover:text-mint-500 text-lg leading-none">&times;</button>
                       </div>
-                      <p className="text-xs text-neutral-500">
+                      <p className="text-xs text-ink-500">
                         업로드된 {gallery.filter(g => g.previewUrl && !g.isBlankSlot).length}장의 사진을 자동으로 배치합니다.
                         첫 장 → 앞표지, 마지막 → 뒤표지, 나머지 → 내지 순서. 부족분은 빈 페이지로 자동 패딩.
                       </p>
                       <div className="flex items-center gap-3">
-                        <label className="text-xs text-neutral-600 font-mono whitespace-nowrap">페이지 수</label>
+                        <label className="text-xs text-ink-600 whitespace-nowrap">페이지 수</label>
                         <input
                           type="number"
                           min={24}
@@ -2387,13 +2386,13 @@ export default function EditorPage() {
                           onChange={(e) => setAutoComposePages(Number(e.target.value))}
                           className="input-field w-24 text-center text-sm"
                         />
-                        <span className="text-xs text-neutral-400">(24~130, 2 단위)</span>
+                        <span className="text-xs text-ink-400">(24~130, 2 단위)</span>
                       </div>
                       <button
                         onClick={handleAutoCompose}
-                        className="w-full py-2.5 bg-neutral-900 text-white text-sm font-mono font-medium tracking-wider hover:bg-neutral-800 transition-colors"
+                        className="w-full py-2.5 bg-mint-400 text-white text-sm font-semibold tracking-wider hover:bg-mint-500 transition-colors rounded-xl shadow-sm"
                       >
-                        COMPOSE ({autoComposePages}p)
+                        🪄 구성하기 ({autoComposePages}p)
                       </button>
                     </div>
                   )}
@@ -2471,13 +2470,13 @@ export default function EditorPage() {
 
                       {/* 내지 텍스트 유무 (빈 슬롯 제외) */}
                       {item.role === 'content' && !item.isBlankSlot && (
-                        <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-[10px] py-0.5 text-center leading-none">
+                        <div className="absolute bottom-0 inset-x-0 bg-ink-800/40 text-white text-[10px] py-0.5 text-center leading-none backdrop-blur-sm">
                           {(item.text || '').trim() ? '📝' : '🖼️'}
                         </div>
                       )}
 
                       {/* 호버 오버레이 */}
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-all flex items-center justify-center">
+                      <div className="absolute inset-0 bg-transparent group-hover:bg-peach-500/20 transition-all flex items-center justify-center rounded-xl">
                         <span className="text-white text-lg opacity-0 group-hover:opacity-100 transition-opacity drop-shadow">
                           ✏️
                         </span>
@@ -2574,7 +2573,7 @@ export default function EditorPage() {
                                       className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm hover:bg-red-600"
                                       title="이 사진 제거"
                                     >✕</button>
-                                    <div className="absolute bottom-0 inset-x-0 bg-black/40 text-white text-[8px] text-center py-0.5">
+                                    <div className="absolute bottom-0 inset-x-0 bg-ink-800/35 text-white text-[8px] text-center py-0.5">
                                       {imgIdx + 1}
                                     </div>
                                   </div>
@@ -2781,7 +2780,7 @@ export default function EditorPage() {
                               {backItems[0] ? (
                                 <>
                                   <img src={backItems[0].previewUrl} alt="뒤표지" className="w-full h-full object-cover" />
-                                  <div className="absolute inset-0 bg-black/30 flex flex-col items-end justify-end p-1.5">
+                                  <div className="absolute inset-0 bg-ink-800/25 backdrop-blur-[1px] flex flex-col items-end justify-end p-1.5">
                                     <span className="bg-blue-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">뒤표지 ✓</span>
                                   </div>
                                 </>
@@ -2805,7 +2804,7 @@ export default function EditorPage() {
                               {frontItems[0] ? (
                                 <>
                                   <img src={frontItems[0].previewUrl} alt="앞표지" className="w-full h-full object-cover" />
-                                  <div className="absolute inset-0 bg-black/30 flex flex-col items-end justify-end p-1.5">
+                                  <div className="absolute inset-0 bg-ink-800/25 backdrop-blur-[1px] flex flex-col items-end justify-end p-1.5">
                                     <span className="bg-green-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">앞표지 ✓</span>
                                   </div>
                                 </>
@@ -2857,7 +2856,7 @@ export default function EditorPage() {
                   <button
                     type="button"
                     onClick={() => setSelectedIdx(null)}
-                    className="flex-1 py-2 rounded-xl text-sm font-bold text-white bg-warm-600 hover:bg-warm-800 transition-all"
+                    className="flex-1 py-2 rounded-xl text-sm font-bold text-white bg-peach-500 hover:bg-peach-600 transition-all shadow-sm"
                   >
                     확인 · 편집 완료
                   </button>

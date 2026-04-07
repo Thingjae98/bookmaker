@@ -96,7 +96,7 @@ export default function OrderPage() {
 
   if (!session) {
     return (
-      <div className="min-h-screen pb-20 page-transition">
+      <div className="min-h-screen bg-peach-50 pb-20 page-transition">
         <StepIndicator currentStep="order" />
         <div className="max-w-2xl mx-auto px-6">
           <div className="skeleton-heading mx-auto" style={{ width: '160px' }} />
@@ -119,7 +119,7 @@ export default function OrderPage() {
   // 주문 완료 화면
   if (orderResult) {
     return (
-      <div className="min-h-screen pb-20 page-transition">
+      <div className="min-h-screen bg-peach-50 pb-20 page-transition">
         <StepIndicator currentStep="order" />
         <div className="max-w-2xl mx-auto px-6 text-center">
           <div className="bg-white rounded-2xl border border-ink-100 p-10 opacity-0 animate-fade-up">
@@ -177,7 +177,7 @@ export default function OrderPage() {
   }
 
   return (
-    <div className="min-h-screen pb-20">
+    <div className="min-h-screen bg-peach-50 pb-20">
       <StepIndicator currentStep="order" />
 
       <div className="max-w-2xl mx-auto px-6">

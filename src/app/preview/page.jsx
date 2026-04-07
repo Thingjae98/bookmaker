@@ -164,7 +164,7 @@ export default function PreviewPage() {
 
   if (!session) {
     return (
-      <div className="min-h-screen pb-20 page-transition">
+      <div className="min-h-screen bg-peach-50 pb-20 page-transition">
         <StepIndicator currentStep="preview" />
         <div className="max-w-5xl mx-auto px-6">
           <div className="skeleton-heading mx-auto" style={{ width: '180px' }} />
@@ -193,7 +193,7 @@ export default function PreviewPage() {
   const isBlurred = currentSpread >= CLEAR_LIMIT;
 
   return (
-    <div className="min-h-screen pb-20 bg-ink-50 page-transition">
+    <div className="min-h-screen pb-20 bg-peach-50 page-transition">
       <StepIndicator currentStep="preview" />
 
       <div className="max-w-5xl mx-auto px-6">
