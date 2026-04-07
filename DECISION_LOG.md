@@ -467,3 +467,29 @@ curl -X POST http://localhost:3000/api/webhooks/sweetbook/simulate \
 ```
 
 90vh = 740px 뷰포트 기준 666px — 전체 모달 내용 + 시뮬레이션 섹션 포함 가능.
+
+---
+
+## ADR-15 — 의도적 미구현: Dynamic Layout 고급 UX 기능 배제
+
+### 배경
+SweetBook Dynamic Layout 엔진은 Element Grouping, Column Templates, splittable/isDynamic/lanes 등 고급 레이아웃 기능을 제공. 이들의 채택 여부를 검토.
+
+### 결정: 3가지 모두 의도적 미사용
+
+| 기능 | 설명 | 미사용 근거 |
+|------|------|------------|
+| **Element Grouping** (`visible` 토글) | 템플릿 파라미터의 `visible: true/false`로 요소를 그룹 단위 표시/숨기기 | KidCanvas는 "아이 그림 1장 + 해설 텍스트"라는 단일 구조 반복. 요소 토글이 필요한 복잡한 레이아웃 변형이 없음. 타겟 사용자(부모)에게 불필요한 복잡성 증가 |
+| **Column Templates** (2/3단 레이아웃) | 한 페이지에 사진 2~3장을 나란히 배치하는 멀티컬럼 | 핵심 컨셉이 **"1작품 = 1페이지"** (미술관 도록 스타일). 한 페이지에 여러 그림을 넣으면 작품 가치 희석. `breakBefore: 'page'` 설계(ADR-01)와 일맥상통 |
+| **Dynamic Layout 고급** (`splittable`, `isDynamic`, `lanes`) | 콘텐츠 양에 따라 자동 분할/조정/병렬 배치 | **페이지 수 예측 불가능** — `breakBefore: 'none'` + `splittable: true` 시 렌더링 페이지 수 ≠ 전송 content 수 → `pageMin/pageMax` 위반 → finalization 400 에러 (ADR-01에서 실제 경험) |
+
+### 근거 요약
+세 가지 모두 **"기술적으로 가능하지만, 서비스 컨셉과 API 안정성을 위해 의도적으로 배제"**:
+
+1. **서비스 컨셉**: 미술관 도록 스타일 → 1작품 1페이지 원칙 → 멀티컬럼/그룹 토글 불필요
+2. **타겟 사용자**: 부모(비개발자) → 단순한 워크플로우 우선 → 고급 레이아웃 옵션은 진입 장벽
+3. **API 안정성**: Dynamic Layout 고급 기능은 페이지 수 예측을 불가능하게 만들어 finalization 실패 위험 증가 (ADR-01에서 검증된 문제)
+
+### 향후 확장 가능성
+- B2B 서비스(어린이집 단체 작품집) 시 Column Templates로 한 페이지에 여러 아이의 작품 배치 가능
+- 고급 사용자 모드 도입 시 Element Grouping으로 레이아웃 커스터마이징 제공 가능
