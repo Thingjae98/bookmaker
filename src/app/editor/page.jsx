@@ -786,7 +786,16 @@ export default function EditorPage() {
   }, [selectedCategory, categoryGroups]);
 
   // ── 카테고리 스위처 (Category Switcher) ─────────────────────────
-  const catNames = useMemo(() => Object.keys(categoryGroups), [categoryGroups]);
+  // 카테고리 정렬: 추천 → 일기장 → 알림장 → 포토북 → 공용
+  const CATEGORY_ORDER = ['일기장B', '일기장A', '알림장A', '알림장B', '알림장C', '구글포토북A', '구글포토북B', '구글포토북C', '공용'];
+  const catNames = useMemo(() => {
+    const keys = Object.keys(categoryGroups);
+    return keys.sort((a, b) => {
+      const ai = CATEGORY_ORDER.indexOf(a);
+      const bi = CATEGORY_ORDER.indexOf(b);
+      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+    });
+  }, [categoryGroups]);
   const recommendedCat = session?.serviceType ? SERVICE_CATEGORY_MAP[session.serviceType] : null;
   const activeCatGroup = categoryGroups[selectedCategory] || null;
 
@@ -805,8 +814,30 @@ export default function EditorPage() {
   const renderCategorySwitcher = () => {
     if (catNames.length === 0) {
       return (
-        <div className="text-center py-4">
-          <p className="text-xs text-ink-400">카테고리를 불러오는 중...</p>
+        <div>
+          <p className="text-xs font-medium text-ink-700 mb-2">
+            디자인 카테고리
+            <span className="ml-1.5 font-normal text-ink-400">불러오는 중...</span>
+          </p>
+          {/* 스켈레톤 — 현재 카테고리 표시 */}
+          <div className="flex items-center gap-2 mb-3 bg-ink-50 border border-ink-100 rounded-xl px-3 py-2 animate-pulse">
+            <div className="w-5 h-5 rounded bg-ink-200" />
+            <div className="flex-1 space-y-1.5">
+              <div className="h-3.5 bg-ink-200 rounded w-24" />
+              <div className="h-2.5 bg-ink-100 rounded w-36" />
+            </div>
+            <div className="h-3.5 bg-ink-200 rounded w-12" />
+          </div>
+          {/* 스켈레톤 — 카테고리 카드 그리드 */}
+          <div className="grid grid-cols-2 gap-2">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="p-2.5 rounded-xl border-2 border-ink-100 bg-white animate-pulse">
+                <div className="w-full h-[56px] rounded-lg mb-2 bg-ink-100" />
+                <div className="h-3 bg-ink-200 rounded w-16 mb-1" />
+                <div className="h-2.5 bg-ink-100 rounded w-12" />
+              </div>
+            ))}
+          </div>
         </div>
       );
     }
