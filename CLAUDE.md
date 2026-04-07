@@ -109,6 +109,7 @@ bookmaker/
 - **로컬 경로 안전 처리**: `resolveImageUrl()` + `safePreviewUrl()` — `/images/...` 로컬 경로도 유효 URL로 인정
 - **Gemini 생성 더미 이미지**: AI 생성 아이 그림 28장, date(YYYY-MM-DD) 포맷 + 제목 + 해설 완비
 - **API 검증 파이프라인**: 사진 업로드 후 `GET /photos` 카운트 검증 + 최종화 후 `GET /books/{uid}` 상태 확인
+- **미리보기 API 통합**: `GET /books/{uid}` 상태 + `GET /photos` 업로드 수 + `GET /credits` 잔액 실시간 표시
 
 ### 판형 (BookSpec)
 - `SQUAREBOOK_HC` — 243×248mm, 하드커버, PUR 무선철, 24~130p (**기본**)

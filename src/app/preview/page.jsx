@@ -36,6 +36,9 @@ export default function PreviewPage() {
   const [error, setError] = useState(null);
   const [previewData, setPreviewData] = useState(null);
   const [currentSpread, setCurrentSpread] = useState(0); // 현재 스프레드 인덱스
+  const [bookDetail, setBookDetail] = useState(null);     // GET /books/{uid} 응답
+  const [photoCount, setPhotoCount] = useState(null);     // GET /books/{uid}/photos 수량
+  const [credits, setCredits] = useState(null);           // GET /credits 잔액
 
   useEffect(() => {
     const raw = sessionStorage.getItem('bookmaker_session');
@@ -44,6 +47,9 @@ export default function PreviewPage() {
     if (!data.bookUid) { router.push('/editor'); return; }
     setSession(data);
     fetchEstimate(data.bookUid);
+    fetchBookDetail(data.bookUid);
+    fetchPhotoCount(data.bookUid);
+    fetchCredits();
 
     // 에디터에서 저장한 실데이터 로드
     const previewRaw = sessionStorage.getItem('bookmaker_preview');
@@ -160,6 +166,37 @@ export default function PreviewPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // ── 책 상세 조회 (GET /books/{bookUid}) ──
+  const fetchBookDetail = async (bookUid) => {
+    try {
+      const res = await fetch(`/api/books/${bookUid}`);
+      const data = await res.json();
+      if (data.success) setBookDetail(data.data);
+    } catch (e) { console.warn('책 상세 조회 실패:', e.message); }
+  };
+
+  // ── 업로드 사진 수 검증 (GET /books/{bookUid}/photos) ──
+  const fetchPhotoCount = async (bookUid) => {
+    try {
+      const res = await fetch(`/api/books/${bookUid}/photos`);
+      const data = await res.json();
+      if (data.success) {
+        const list = Array.isArray(data.data) ? data.data
+          : (data.data?.photos || data.data?.items || []);
+        setPhotoCount(list.length);
+      }
+    } catch (e) { console.warn('사진 목록 조회 실패:', e.message); }
+  };
+
+  // ── 충전금 잔액 조회 (GET /credits) ──
+  const fetchCredits = async () => {
+    try {
+      const res = await fetch('/api/credits');
+      const data = await res.json();
+      if (data.success) setCredits(data.data);
+    } catch (e) { console.warn('충전금 조회 실패:', e.message); }
   };
 
   if (!session) {
@@ -344,7 +381,7 @@ export default function PreviewPage() {
           </div>
         )}
 
-        {/* ── 책 정보 요약 ── */}
+        {/* ── 책 정보 요약 (API 검증 포함) ── */}
         <div className="bg-white rounded-2xl border border-ink-100 p-6 mb-6 opacity-0 animate-fade-up delay-200">
           <h2 className="font-display font-bold text-lg text-ink-900 mb-4 flex items-center gap-2">
             <span>{service.icon}</span>
@@ -365,7 +402,48 @@ export default function PreviewPage() {
             </div>
             <div className="p-3 bg-ink-50 rounded-xl">
               <p className="text-xs text-ink-400 mb-0.5">페이지 수</p>
-              <p className="text-sm font-medium text-ink-800">{session.pageCount || totalPages || '—'} 페이지</p>
+              <p className="text-sm font-medium text-ink-800">{bookDetail?.pageCount || session.pageCount || totalPages || '—'} 페이지</p>
+            </div>
+          </div>
+
+          {/* ── API 서버 검증 상태 ── */}
+          <div className="mt-4 pt-4 border-t border-ink-100">
+            <p className="text-xs text-ink-400 mb-2">API 서버 검증</p>
+            <div className="flex flex-wrap gap-2">
+              {bookDetail && (
+                <span className="inline-flex items-center gap-1 text-xs bg-mint-50 text-mint-700 px-2.5 py-1 rounded-full border border-mint-200">
+                  <span>✅</span>
+                  <span>상태: {bookDetail.status || bookDetail.bookStatus || 'finalized'}</span>
+                </span>
+              )}
+              {!bookDetail && (
+                <span className="inline-flex items-center gap-1 text-xs bg-ink-50 text-ink-400 px-2.5 py-1 rounded-full">
+                  <span className="spinner-xs" /> 책 상태 확인 중...
+                </span>
+              )}
+              {photoCount !== null && (
+                <span className="inline-flex items-center gap-1 text-xs bg-sky-50 text-sky-700 px-2.5 py-1 rounded-full border border-sky-200">
+                  <span>📸</span>
+                  <span>{photoCount}장 업로드 완료</span>
+                </span>
+              )}
+              {photoCount === null && (
+                <span className="inline-flex items-center gap-1 text-xs bg-ink-50 text-ink-400 px-2.5 py-1 rounded-full">
+                  <span className="spinner-xs" /> 사진 확인 중...
+                </span>
+              )}
+              {bookDetail?.title && (
+                <span className="inline-flex items-center gap-1 text-xs bg-peach-50 text-peach-700 px-2.5 py-1 rounded-full border border-peach-200">
+                  <span>📖</span>
+                  <span>{bookDetail.title}</span>
+                </span>
+              )}
+              {bookDetail?.createdAt && (
+                <span className="inline-flex items-center gap-1 text-xs bg-butter-50 text-butter-700 px-2.5 py-1 rounded-full border border-butter-200">
+                  <span>🕐</span>
+                  <span>{new Date(bookDetail.createdAt).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                </span>
+              )}
             </div>
           </div>
 
@@ -434,8 +512,8 @@ export default function PreviewPage() {
               <div className="flex justify-between text-xs text-ink-400 mt-1">
                 <span>충전금 잔액</span>
                 <span>
-                  {formatPrice(estimate.creditBalance)}원{' '}
-                  {estimate.creditSufficient ? '✅' : '❌ 부족'}
+                  {formatPrice(credits?.balance ?? estimate.creditBalance)}원{' '}
+                  {(credits ? credits.balance >= estimate.totalAmount : estimate.creditSufficient) ? '✅' : '❌ 부족'}
                 </span>
               </div>
             </div>
