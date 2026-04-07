@@ -14,8 +14,8 @@ export default function OrdersPage() {
   // Webhook 이벤트 로그
   const [webhookEvents, setWebhookEvents] = useState([]);
   const [simulatingOrder, setSimulatingOrder] = useState(null);
-  // 모달 내 시뮬레이션 진행 상태 (실제 SweetBook 상태와 별개로 추적)
-  const [simulatedStatus, setSimulatedStatus] = useState(null);
+  // 주문별 시뮬레이션 진행 상태 (실제 SweetBook 상태와 별개로 추적)
+  const [simulatedStatuses, setSimulatedStatuses] = useState({});
 
   // Webhook 설정 (ngrok URL 등록)
   const [showWebhookConfig, setShowWebhookConfig] = useState(false);
@@ -163,10 +163,10 @@ export default function OrdersPage() {
       });
       const data = await res.json();
       if (data.success) {
-        // 시뮬레이션된 상태를 추적 — 다음 클릭 시 이 상태에서 이어서 진행
+        // 시뮬레이션된 상태를 주문별로 추적 — 목록 뱃지 + 모달에 반영
         const nextSimulatedStatus = data.simulatedEvent?.status;
         if (nextSimulatedStatus !== undefined) {
-          setSimulatedStatus(nextSimulatedStatus);
+          setSimulatedStatuses(prev => ({ ...prev, [orderUid]: nextSimulatedStatus }));
         }
         // 이벤트 로그 즉시 갱신 + 주문 목록 갱신
         await Promise.all([fetchWebhookEvents(), fetchOrders()]);
@@ -384,7 +384,7 @@ export default function OrdersPage() {
                 <div>
                   <div className="flex items-center gap-3 mb-2">
                     <span className="font-bold text-sm text-ink-900">주문 {formatOrderId(order.orderUid)}</span>
-                    {getStatusBadge(order.orderStatus)}
+                    {getStatusBadge(simulatedStatuses[order.orderUid] ?? order.orderStatus)}
                     {order.isTest && (
                       <span className="text-xs bg-ink-100 text-ink-600 px-2 py-0.5 rounded-full">Sandbox</span>
                     )}
@@ -443,7 +443,7 @@ export default function OrdersPage() {
 
         {/* 주문 상세 모달 */}
         {selectedOrder && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => { setSelectedOrder(null); setSimulatedStatus(null); }}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => { setSelectedOrder(null); }}>
             <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 modal-enter" onClick={(e) => e.stopPropagation()}>
               {detailLoading ? (
                 <div className="space-y-4 py-4">
@@ -455,7 +455,7 @@ export default function OrdersPage() {
                 <>
                   <div className="flex items-center justify-between mb-6">
                     <h2 className="font-display font-bold text-xl text-ink-900">주문 상세</h2>
-                    <button onClick={() => { setSelectedOrder(null); setSimulatedStatus(null); }} className="text-ink-400 hover:text-ink-800 text-xl">✕</button>
+                    <button onClick={() => { setSelectedOrder(null); }} className="text-ink-400 hover:text-ink-800 text-xl">✕</button>
                   </div>
 
                   <div className="space-y-4">
@@ -474,7 +474,7 @@ export default function OrdersPage() {
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-ink-400">상태</span>
-                      {getStatusBadge(selectedOrder.orderStatus)}
+                      {getStatusBadge(simulatedStatuses[selectedOrder.orderUid] ?? selectedOrder.orderStatus)}
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-ink-400">주문일시</span>
@@ -540,7 +540,7 @@ export default function OrdersPage() {
 
                     {/* Webhook 시뮬레이션 (로컬 시연용) */}
                     {(() => {
-                      const currentSimStatus = simulatedStatus ?? selectedOrder.orderStatus;
+                      const currentSimStatus = simulatedStatuses[selectedOrder.orderUid] ?? selectedOrder.orderStatus;
                       if (currentSimStatus >= 70) return null;
                       return (
                         <div className="border-t border-ink-100 pt-4 mt-4">
