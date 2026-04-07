@@ -215,7 +215,7 @@ export default function CreatePage() {
   };
 
   return (
-    <div className="min-h-screen bg-white pb-20">
+    <div className="min-h-screen bg-white pb-20 page-transition">
       <StepIndicator currentStep="info" />
 
       <div className="max-w-xl mx-auto px-6">

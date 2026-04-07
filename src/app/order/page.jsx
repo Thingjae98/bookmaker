@@ -95,7 +95,22 @@ export default function OrderPage() {
   };
 
   if (!session) {
-    return <div className="min-h-screen flex items-center justify-center"><div className="spinner text-warm-600" /></div>;
+    return (
+      <div className="min-h-screen pb-20 page-transition">
+        <StepIndicator currentStep="order" />
+        <div className="max-w-2xl mx-auto px-6">
+          <div className="skeleton-heading mx-auto" style={{ width: '160px' }} />
+          <div className="space-y-4 mt-6">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i}>
+                <div className="skeleton-text" style={{ width: '80px', height: '12px' }} />
+                <div className="skeleton-card" style={{ height: '48px' }} />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
   }
 
   const service = SERVICE_TYPES[session.serviceType];
@@ -104,7 +119,7 @@ export default function OrderPage() {
   // 주문 완료 화면
   if (orderResult) {
     return (
-      <div className="min-h-screen pb-20">
+      <div className="min-h-screen pb-20 page-transition">
         <StepIndicator currentStep="order" />
         <div className="max-w-2xl mx-auto px-6 text-center">
           <div className="bg-white rounded-2xl border border-ink-100 p-10 opacity-0 animate-fade-up">

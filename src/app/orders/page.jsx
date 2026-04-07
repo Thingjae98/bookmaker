@@ -252,7 +252,7 @@ export default function OrdersPage() {
   };
 
   return (
-    <div className="min-h-screen pb-20">
+    <div className="min-h-screen pb-20 page-transition">
       <div className="max-w-4xl mx-auto px-6 pt-8">
         <div className="flex items-center justify-between mb-8">
           <div>
@@ -336,9 +336,17 @@ export default function OrdersPage() {
         </div>
 
         {loading && (
-          <div className="flex items-center justify-center py-20">
-            <span className="spinner text-warm-600 mr-3" />
-            <span className="text-ink-400">주문 목록을 불러오고 있습니다...</span>
+          <div className="space-y-4 py-4">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="bg-white rounded-2xl border border-ink-100 p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="skeleton-text" style={{ width: '100px', height: '20px', marginBottom: 0 }} />
+                  <div className="skeleton-text" style={{ width: '70px', height: '20px', marginBottom: 0, borderRadius: '9999px' }} />
+                </div>
+                <div className="skeleton-text" style={{ width: '60%' }} />
+                <div className="skeleton-text" style={{ width: '40%' }} />
+              </div>
+            ))}
           </div>
         )}
 
@@ -429,9 +437,13 @@ export default function OrdersPage() {
         {/* 주문 상세 모달 */}
         {selectedOrder && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setSelectedOrder(null)}>
-            <div className="bg-white rounded-2xl max-w-lg w-full max-h-[80vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-white rounded-2xl max-w-lg w-full max-h-[80vh] overflow-y-auto p-6 modal-enter" onClick={(e) => e.stopPropagation()}>
               {detailLoading ? (
-                <div className="flex items-center justify-center py-8"><span className="spinner text-warm-600" /></div>
+                <div className="space-y-4 py-4">
+                  <div className="flex justify-between"><div className="skeleton-heading" style={{ width: '120px' }} /><div className="skeleton-circle" style={{ width: '24px', height: '24px' }} /></div>
+                  <div className="skeleton-text" /><div className="skeleton-text" /><div className="skeleton-text" style={{ width: '50%' }} />
+                  <div className="skeleton-card" style={{ height: '80px' }} />
+                </div>
               ) : (
                 <>
                   <div className="flex items-center justify-between mb-6">

@@ -2029,8 +2029,20 @@ export default function EditorPage() {
   // ── 로딩 중 (세션 미복원) ────────────────────────────────────
   if (!session)
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="spinner text-warm-600" />
+      <div className="min-h-screen pb-20 page-transition">
+        <StepIndicator currentStep="editor" />
+        <div className="max-w-5xl mx-auto px-6">
+          <div className="skeleton-heading mx-auto" style={{ width: '200px' }} />
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mt-6">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="skeleton-card" style={{ height: '160px' }} />
+            ))}
+          </div>
+          <div className="mt-6 space-y-3">
+            <div className="skeleton-text" style={{ width: '80%' }} />
+            <div className="skeleton-text" style={{ width: '50%' }} />
+          </div>
+        </div>
       </div>
     );
 
@@ -2055,7 +2067,7 @@ export default function EditorPage() {
     : null;
 
   return (
-    <div className="min-h-screen pb-20">
+    <div className="min-h-screen pb-20 page-transition">
       <StepIndicator currentStep="editor" />
 
 

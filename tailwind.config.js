@@ -18,11 +18,13 @@ module.exports = {
         'fade-up': 'fadeUp 0.6s ease-out forwards',
         'fade-in': 'fadeIn 0.5s ease-out forwards',
         'slide-in': 'slideIn 0.4s ease-out forwards',
+        'pulse-soft': 'pulseSoft 2s ease-in-out infinite',
       },
       keyframes: {
         fadeUp: { '0%': { opacity: '0', transform: 'translateY(24px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
         fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
         slideIn: { '0%': { opacity: '0', transform: 'translateX(-12px)' }, '100%': { opacity: '1', transform: 'translateX(0)' } },
+        pulseSoft: { '0%, 100%': { opacity: '1' }, '50%': { opacity: '0.6' } },
       },
     },
   },

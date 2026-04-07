@@ -164,8 +164,20 @@ export default function PreviewPage() {
 
   if (!session) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="spinner text-warm-600" />
+      <div className="min-h-screen pb-20 page-transition">
+        <StepIndicator currentStep="preview" />
+        <div className="max-w-5xl mx-auto px-6">
+          <div className="skeleton-heading mx-auto" style={{ width: '180px' }} />
+          <div className="skeleton-card mx-auto mb-6" style={{ height: '340px', maxWidth: '640px' }} />
+          <div className="bg-white rounded-2xl border border-ink-100 p-6">
+            <div className="skeleton-heading" />
+            <div className="space-y-3">
+              <div className="skeleton-text" />
+              <div className="skeleton-text" />
+              <div className="skeleton-text" style={{ width: '40%' }} />
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -181,7 +193,7 @@ export default function PreviewPage() {
   const isBlurred = currentSpread >= CLEAR_LIMIT;
 
   return (
-    <div className="min-h-screen pb-20 bg-ink-50">
+    <div className="min-h-screen pb-20 bg-ink-50 page-transition">
       <StepIndicator currentStep="preview" />
 
       <div className="max-w-5xl mx-auto px-6">
@@ -231,7 +243,7 @@ export default function PreviewPage() {
               </button>
 
               {/* 스프레드 본체 */}
-              <div className="flex-1 max-w-3xl relative">
+              <div className="flex-1 max-w-3xl relative book-spread rounded-lg overflow-hidden">
                 {/* 블러 오버레이 */}
                 {isBlurred && (
                   <div className="absolute inset-0 z-20 flex flex-col items-center justify-center rounded-2xl backdrop-blur-sm"
@@ -376,9 +388,13 @@ export default function PreviewPage() {
           <h2 className="font-display font-bold text-lg text-ink-900 mb-4">가격 견적</h2>
 
           {loading && (
-            <div className="flex items-center justify-center py-8">
-              <span className="spinner text-warm-600 mr-3" />
-              <span className="text-ink-400">견적을 조회하고 있습니다...</span>
+            <div className="space-y-4 py-2">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="flex justify-between items-center">
+                  <div className="skeleton-text" style={{ width: '120px', marginBottom: 0 }} />
+                  <div className="skeleton-text" style={{ width: '80px', marginBottom: 0 }} />
+                </div>
+              ))}
             </div>
           )}
 

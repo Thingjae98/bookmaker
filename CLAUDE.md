@@ -158,8 +158,9 @@ bookmaker/
 - [ ] 구글폼 서술형 4문항 작성 + GitHub URL 제출
 
 ### P1 — UX 폴리시 (제출 전 가능하면)
-- [ ] Skeleton UI 로딩 — spinner → 콘텐츠 형태 스켈레톤 (에디터/미리보기/주문내역)
-- [ ] 페이지 전환 애니메이션 — 스텝 간 이동 시 fade + translateY 트랜지션
+- [x] Skeleton UI 로딩 — spinner → 콘텐츠 형태 스켈레톤 (에디터/미리보기/주문/주문내역)
+- [x] 페이지 전환 애니메이션 — 전 페이지 fade + translateY 트랜지션 (page-transition)
+- [x] 디자인 개선 — StepIndicator 넘버 뱃지, 미리보기 북 그림자(book-spread), 모달 진입 애니메이션, 입력 필드 포커스 효과
 - [ ] 모바일 반응형 최종 점검 (640px 이하)
 
 ### P2 — 면접 준비
