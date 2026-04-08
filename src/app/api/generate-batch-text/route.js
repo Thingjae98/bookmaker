@@ -9,6 +9,21 @@ const VISION_MODEL = 'gemini-2.5-flash';
 const BATCH_SIZE = 5; // 한 번에 처리할 이미지 수
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// 503 등 일시적 오류 재시도 (최대 3회, 지수 백오프)
+async function withRetry(fn, retries = 3, baseDelay = 3000) {
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const is503 = err.message?.includes('503') || err.message?.includes('Service Unavailable') || err.message?.includes('high demand');
+      if (!is503 || attempt === retries - 1) throw err;
+      const wait = baseDelay * Math.pow(2, attempt); // 3s, 6s, 12s
+      console.log(`[generate-batch-text] 503 재시도 ${attempt + 1}/${retries - 1} — ${wait}ms 대기`);
+      await delay(wait);
+    }
+  }
+}
+
 // 단일 배치를 Gemini Vision으로 처리
 async function processBatch(genAI, batchPages, artistName, bookContext) {
   const parts = [];
@@ -115,19 +130,22 @@ export async function POST(request) {
       if (b > 0) await delay(1500);
 
       try {
-        const batchResults = await processBatch(genAI, batchPages, artistName, bookContext);
+        const batchResults = await withRetry(() => processBatch(genAI, batchPages, artistName, bookContext));
         if (Array.isArray(batchResults)) {
           allResults.push(...batchResults);
         }
         console.log(`[generate-batch-text] 배치 ${b + 1}/${totalBatches} 완료 (${batchResults.length}건)`);
       } catch (err) {
         console.error(`[generate-batch-text] 배치 ${b + 1}/${totalBatches} 실패:`, err.message?.slice(0, 300));
-        // 실패한 배치는 폴백 텍스트로 채움
+        // 실패한 배치는 페이지별로 다른 폴백 텍스트로 채움
         for (const p of batchPages) {
+          const pageNum = p.index + 1;
+          const pageTitle = p.title ? `"${p.title}"` : `${pageNum}번째 작품`;
           allResults.push({
             index: p.index,
-            title: p.title || `작품 ${p.index + 1}`,
-            text: `${artistName}의 작품. ${bookDescription || '아이만의 시선으로 세상을 표현한 소중한 그림입니다.'}`,
+            title: p.title || `작품 ${pageNum}`,
+            text: `${artistName}의 ${pageTitle}입니다. 아이만의 시선으로 세상을 표현한 소중한 그림으로, 이 순간의 감성과 상상력이 고스란히 담겨 있습니다.`,
+            fallback: true,
           });
         }
       }
@@ -136,7 +154,8 @@ export async function POST(request) {
     // index 순서 정렬
     allResults.sort((a, b) => a.index - b.index);
 
-    const visionCount = allResults.filter((r) => r.text && !r.text.includes('아이만의 시선으로')).length;
+    const visionCount = allResults.filter((r) => !r.fallback).length;
+    const fallbackCount = allResults.filter((r) => r.fallback).length;
 
     return NextResponse.json({
       success: true,
@@ -145,6 +164,8 @@ export async function POST(request) {
       imageCount: pages.filter((p) => p.imageBase64).length,
       totalPages: pages.length,
       batchCount: totalBatches,
+      visionCount,
+      fallbackCount,
     });
   } catch (err) {
     console.error('[generate-batch-text] 예외:', err.message);

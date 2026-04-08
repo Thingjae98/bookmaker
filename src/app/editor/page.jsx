@@ -1251,12 +1251,11 @@ export default function EditorPage() {
       });
       const data = await res.json();
       if (data.success && data.text) {
-        // 레거시 text 필드 + params 동적 필드 동시 업데이트
-        const textKey = getTextDefinitions(item).find(d => isLongTextField(d.key))?.key;
-        const updates = { text: data.text };
-        if (textKey) {
-          updates.params = { ...item.params, [textKey]: data.text };
-        }
+        // item.text(레거시) + params의 모든 long text 키 동시 업데이트
+        const longTextKeys = getTextDefinitions(item).filter(d => isLongTextField(d.key)).map(d => d.key);
+        const newParams = { ...item.params };
+        longTextKeys.forEach(k => { newParams[k] = data.text; });
+        const updates = { text: data.text, params: newParams };
         updateGalleryItem(idx, updates);
         toast.success('AI 텍스트가 생성됐습니다');
       } else {
@@ -1352,12 +1351,25 @@ export default function EditorPage() {
 
       if (data.success && Array.isArray(data.results)) {
         setBatchAiProgress('텍스트 적용 중...');
-        let appliedCount = 0;
+
+        const visionCount = allResults.filter(r => !r.fallback).length;
+        const fallbackCount = allResults.filter(r => r.fallback).length;
 
         // 갤러리 전체에서 content 아이템의 인덱스를 매핑
         const contentIndices = [];
         gallery.forEach((g, gi) => {
           if (g.role === 'content') contentIndices.push(gi);
+        });
+
+        // setGallery 콜백 바깥에서 미리 계산 (tplMap이 로드된 현재 시점 기준)
+        const longTextKeysByGalIdx = {};
+        contentIndices.forEach((galIdx) => {
+          const item = gallery[galIdx];
+          if (item) {
+            longTextKeysByGalIdx[galIdx] = getTextDefinitions(item)
+              .filter(d => isLongTextField(d.key))
+              .map(d => d.key);
+          }
         });
 
         setGallery(prev => {
@@ -1367,22 +1379,27 @@ export default function EditorPage() {
             if (galIdx === undefined) return;
             const item = next[galIdx];
 
-            // 텍스트 적용
-            const textKey = getTextDefinitions(item).find(d => isLongTextField(d.key))?.key;
+            // item.text(레거시) + params의 모든 long text 키 동시 업데이트
+            const longTextKeys = longTextKeysByGalIdx[galIdx] || [];
+            const newParams = { ...item.params };
+            longTextKeys.forEach(k => { newParams[k] = r.text || ''; });
             const updates = {
               title: r.title || item.title,
               text: r.text || '',
+              params: newParams,
             };
-            if (textKey) {
-              updates.params = { ...item.params, [textKey]: r.text };
-            }
             next[galIdx] = { ...item, ...updates };
-            appliedCount++;
           });
           return next;
         });
 
-        toast.success(`AI 텍스트 일괄 생성 완료: ${data.results.length}페이지 (Gemini Vision)`);
+        if (fallbackCount > 0 && visionCount === 0) {
+          toast.error(`AI 서버 과부하로 텍스트 생성 실패. 잠시 후 다시 시도해 주세요.`);
+        } else if (fallbackCount > 0) {
+          toast.success(`AI 텍스트 생성 완료: ${visionCount}페이지 (Vision) / ${fallbackCount}페이지 기본 텍스트 적용`);
+        } else {
+          toast.success(`AI 텍스트 일괄 생성 완료: ${visionCount}페이지 (Gemini Vision)`);
+        }
       } else {
         toast.error('AI 일괄 생성 실패');
       }

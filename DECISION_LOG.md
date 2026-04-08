@@ -378,6 +378,77 @@ Gemini 2.5 Flash의 Vision 기능으로 모든 내지 이미지를 분석하여 
 - 각 그림의 색감, 구도, 주제를 실제로 분석한 맞춤 해설 생성
 - 기존 개별 AI TEXT 버튼도 병행 사용 가능
 
+### 후속 개선 — 503 재시도 + 페이지별 폴백 + 표시 동기화 (BUG-A1, BUG-A2)
+초기 구현 후 두 가지 버그가 보고되어 추가 수정 진행. 상세는 BUG-A1, BUG-A2 참조.
+
+---
+
+## BUG-A1 — Gemini 503 시 모든 페이지에 동일 폴백 텍스트
+
+### 증상
+"AI 텍스트 일괄 생성" 버튼 클릭 시 일부 배치가 503(Service Unavailable)로 실패 → 전체 페이지가 동일한 폴백 텍스트로 채워짐. Gemini의 일시적 부하 상황을 사용자가 회복할 방법이 없었음.
+
+### 원인
+1. **재시도 로직 부재**: 503은 일시적 오류임에도 첫 실패 즉시 폴백 분기로 이동
+2. **폴백 텍스트가 모든 페이지에 동일한 단일 문자열**:
+   ```javascript
+   text: `${artistName}의 작품. ${bookDescription || '아이만의 시선으로 세상을 표현한 소중한 그림입니다.'}`
+   ```
+
+### 해결
+`src/app/api/generate-batch-text/route.js`:
+1. **`withRetry()` 헬퍼 추가** — 503/`Service Unavailable`/`high demand` 키워드 감지 시 지수 백오프(3s → 6s → 12s)로 최대 3회 재시도
+2. **페이지별 차별화된 폴백 텍스트** — 작품 제목과 페이지 번호를 포함한 문장으로 변경
+3. **`fallback: true` 플래그** — 응답에 포함하여 클라이언트가 Vision 성공 vs 폴백 항목을 구분 가능
+4. **응답 메타데이터 추가** — `visionCount`, `fallbackCount` 필드로 결과 분류 노출
+
+`src/app/editor/page.jsx`:
+- `handleBatchAiText()`에서 `visionCount`/`fallbackCount` 카운트 → 토스트 메시지 3가지로 분기:
+  - 전부 Vision 성공 → "일괄 생성 완료: N페이지 (Gemini Vision)"
+  - 일부 폴백 → "Vision N페이지 / 기본 텍스트 M페이지"
+  - 전부 폴백 → "AI 서버 과부하로 텍스트 생성 실패. 잠시 후 다시 시도해 주세요" (error 토스트)
+
+### 결과
+503 일시적 오류는 자동 재시도로 대부분 회복. 회복 불가 시에도 페이지마다 다른 텍스트가 들어가고, 사용자는 명확한 에러 메시지를 통해 재시도 시점을 판단 가능.
+
+---
+
+## BUG-A2 — AI 텍스트가 인라인 편집 패널에 표시되지 않는 문제
+
+### 증상
+"AI TEXT" 버튼(개별/일괄) 클릭 후 "생성됐습니다" 토스트가 나타나지만, 인라인 편집 패널의 텍스트 textarea는 여전히 비어 있음.
+
+### 원인
+이중 데이터 모델 동기화 실패. 갤러리 아이템은 두 곳에 텍스트를 보관:
+- `item.text` — 레거시 필드 (templateUid 없을 때 사용)
+- `item.params[key]` — 동적 필드 (template definitions 기반, 예: `diaryText`)
+
+기존 AI TEXT 핸들러는 long text 키 한 개만 찾아 `params`에 저장:
+```javascript
+const textKey = getTextDefinitions(item).find(d => isLongTextField(d.key))?.key;
+const updates = { text: data.text };
+if (textKey) updates.params = { ...item.params, [textKey]: data.text };
+```
+
+문제 시나리오:
+1. **타이밍 이슈**: 일괄 생성 시 `setGallery` 콜백 안에서 `getTextDefinitions(item)`을 호출했는데, 그 시점에 `tplMap`이 아직 비어있으면 `textKey = undefined` → `params`에 아무것도 저장 안 됨
+2. 패널이 다시 렌더링될 때 `tplMap`은 로드돼 있어서 dynamic path가 활성화 → `currentVal = item.params[key] ?? item.text` 인데 `params[key]`가 undefined이면 `item.text`로 폴백되어야 하지만, 일부 케이스에서 빈 문자열로 묶이는 등 폴백 동작이 일관적이지 않음
+
+### 해결
+`src/app/editor/page.jsx`:
+1. **단일 AI TEXT 핸들러** (`handleGenerateAiText`): long text 키 **모두**를 한 번에 업데이트
+   ```javascript
+   const longTextKeys = getTextDefinitions(item).filter(d => isLongTextField(d.key)).map(d => d.key);
+   const newParams = { ...item.params };
+   longTextKeys.forEach(k => { newParams[k] = data.text; });
+   updateGalleryItem(idx, { text: data.text, params: newParams });
+   ```
+2. **일괄 AI 핸들러** (`handleBatchAiText`): `setGallery` 콜백 **바깥**에서 `longTextKeysByGalIdx` 맵을 미리 계산 → 콜백 안에서는 인덱스로 조회만 수행. 콜백 안의 `getTextDefinitions` 호출에 의존하지 않으므로 `tplMap` 타이밍 문제가 사라짐
+3. 두 핸들러 모두 `item.text`(레거시) + `item.params`의 모든 long text 키를 항상 함께 업데이트 → legacy path든 dynamic path든 어느 쪽이 활성화돼도 텍스트가 즉시 표시
+
+### 결과
+템플릿 로드 타이밍과 무관하게 AI 생성 텍스트가 textarea에 즉시 반영됨. legacy/dynamic path 전환이 일어나도 동일한 데이터를 두 곳에서 읽으므로 표시가 깨지지 않음.
+
 ---
 
 ## 이전 디버깅 기록 요약
