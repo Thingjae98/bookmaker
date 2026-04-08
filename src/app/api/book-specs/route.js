@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { listBookSpecs, getBookSpec } from '@/lib/sweetbook';
 
+// request.url을 사용하므로 빌드 타임 정적 생성 경고 방지
+export const dynamic = 'force-dynamic';
+
 // GET /api/book-specs — 판형 목록 조회
 export async function GET(request) {
   try {

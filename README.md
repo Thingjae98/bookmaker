@@ -9,6 +9,73 @@
 
 ---
 
+## 미리보기 — Gemini 생성 더미 작품집
+
+> 실행 직후 `샘플 채우기` 버튼 한 번으로 아래 28장의 AI 생성 작품과 큐레이터 스타일 해설이 자동 입력됩니다.
+
+<table>
+  <tr>
+    <td align="center"><b>앞표지</b><br/><img src="public/images/kidcanvas/cover_front.png" width="160"/></td>
+    <td align="center"><b>색깔 회오리</b><br/><img src="public/images/kidcanvas/row-1-column-3.png" width="160"/></td>
+    <td align="center"><b>두부와 의자</b><br/><img src="public/images/kidcanvas/row-2-column-1.png" width="160"/></td>
+    <td align="center"><b>가족의 정원</b><br/><img src="public/images/kidcanvas/row-3-column-1.png" width="160"/></td>
+    <td align="center"><b>뒤표지</b><br/><img src="public/images/kidcanvas/cover_back.png" width="160"/></td>
+  </tr>
+</table>
+
+---
+
+## 사용자 워크플로우
+
+```mermaid
+flowchart LR
+    A[📷 사진 업로드] --> B[🪄 자동 구성]
+    B --> C[✨ AI 텍스트 일괄 생성]
+    C --> D[📖 미리보기 & 견적]
+    D --> E[🚚 주문 & 배송]
+
+    B -.다중 사진 패킹.-> B1[collageGallery<br/>균등 분배]
+    C -.Gemini Vision.-> C1[26p 작품 해설<br/>+ 제목 자동]
+    D -.실시간.-> D1[책 상태 + 사진 수<br/>+ 충전금 잔액]
+```
+
+## 시스템 아키텍처
+
+```mermaid
+flowchart TB
+    subgraph Browser["🌐 브라우저 (Next.js Client)"]
+        UI[Editor UI]
+    end
+
+    subgraph Server["⚙️ Next.js API Routes (백엔드)"]
+        Books[/api/books/*]
+        Orders[/api/orders/*]
+        Tpl[/api/templates]
+        AI[/api/generate-batch-text]
+        WH[/api/webhooks/sweetbook]
+    end
+
+    subgraph External["🔌 외부 서비스"]
+        SB[SweetBook<br/>Book Print API]
+        GM[Google Gemini<br/>Vision API]
+    end
+
+    UI -->|fetch| Books
+    UI -->|fetch| Orders
+    UI -->|fetch| Tpl
+    UI -->|fetch| AI
+
+    Books -->|SDK + Idempotency-Key| SB
+    Orders -->|SDK + externalRef| SB
+    Tpl -->|REST| SB
+    AI -->|GenerateContent| GM
+    SB -.HMAC-SHA256 서명.-> WH
+```
+
+> **핵심 보안 원칙**: 브라우저는 SweetBook API에 직접 호출하지 않습니다. API Key는 서버 측 환경변수(`process.env.SWEETBOOK_API_KEY`)에서만 읽히며, 모든 SweetBook 호출은 Next.js API Routes를 통한 프록시로 일원화됩니다.
+
+---
+
 ## 핵심 기술 성과
 
 ### 1. Idempotency-Safe 트랜잭션 파이프라인
