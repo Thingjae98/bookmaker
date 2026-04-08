@@ -48,11 +48,11 @@ flowchart TB
     end
 
     subgraph Server["⚙️ Next.js API Routes (백엔드)"]
-        Books[/api/books/*]
-        Orders[/api/orders/*]
-        Tpl[/api/templates]
-        AI[/api/generate-batch-text]
-        WH[/api/webhooks/sweetbook]
+        Books["/api/books/*"]
+        Orders["/api/orders/*"]
+        Tpl["/api/templates"]
+        AI["/api/generate-batch-text"]
+        WH["/api/webhooks/sweetbook"]
     end
 
     subgraph External["🔌 외부 서비스"]
