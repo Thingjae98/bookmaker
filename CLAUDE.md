@@ -100,10 +100,14 @@ bookmaker/
 | `알림장B` | ★★ | 유치원 구조이나 알림장 특화, 작품집과는 결이 다름 |
 
 - `buildCategoryGroups()` — theme별 `{ covers[], withPhoto[], textOnly[], blank[] }` 분류
-- `categoryToTplMap()` — 카테고리 그룹 → 템플릿 UID 매핑
+- `categoryToTplMap()` — 카테고리 그룹 → 템플릿 UID 매핑 (`validUids` Set 포함)
 - `DECORATIVE_FILE_KEYS` — 장식용 파일 바인딩(`lineVertical`, `pencilIcon` 등) 분리
 - `breakBefore` 안전 기본값: `'page'` — 1 content = 1 물리적 페이지 보장
-- **Auto Compose**: 갤러리 이미지를 자동으로 표지/내지 배치 (24~130p, 2p 단위, 빈 슬롯 자동 패딩)
+- **표지/내지 레이아웃 자동 선택**: 카테고리만 고르고 표지/내지 레이아웃 미선택 시 `catGroup.covers[0]` + `catGroup.withPhoto[0]`이 자동 사용됨. 사용자가 표지 레이아웃을 직접 선택한 경우 `frontItem.templateUid`가 `validUids`로 유효성 검증 후 우선 사용됨 (카테고리 외부 UID는 자동 차단)
+- **Auto Compose**: 갤러리 이미지를 자동으로 표지/내지 배치 (24~130p, 2p 단위)
+  - **Case A** (사진 ≤ 목표): 1장/페이지 + 부족분 빈 슬롯 자동 패딩
+  - **Case B** (사진 > 목표): 현재 카테고리의 다중 사진 템플릿(`collageGallery` 우선, `rowGallery` 폴백) 자동 탐색 → `Math.ceil(remaining / pagesLeft)` 균등 분배로 한 페이지에 여러 장 패킹 → 목표 페이지 수 맞춤
+  - **Case C** (다중 템플릿 없음/용량 초과): 1장/페이지 폴백 + 경고 토스트
 - **로컬 이미지 지원**: `public/images/kidcanvas/` 경로 → 프리뷰 표시 + API 업로드 시 fetch→File 변환
 - **AI 텍스트 생성**: 에디터 내 `AI TEXT` 버튼 → `/api/generate-page-text` → Gemini API로 아이 그림 작품 해설 자동 작성
 - **AI 텍스트 일괄 생성**: `✨ AI 텍스트 일괄 생성` 버튼 → `/api/generate-batch-text` → Gemini Vision으로 모든 내지 이미지 분석 + 해설/제목 일괄 생성 (5장씩 배치)
@@ -191,7 +195,8 @@ bookmaker/
 - [ ] 서비스 설계 의도 + 기술적 의사결정 설명 준비 (DECISION_LOG.md 기반)
 
 ### 완료된 기능
-- [x] Auto Compose — 이미지 기반 자동 페이지 구성 (규칙 기반 배치, 24~130p 지원)
+- [x] Auto Compose — 이미지 기반 자동 페이지 구성 (규칙 기반 배치, 24~130p 지원, 다중 사진 패킹)
+- [x] 표지/내지 레이아웃 자동+사용자 선택 하이브리드 — 카테고리 기본 폴백 + `validUids` 게이트키핑
 - [x] AI 텍스트 생성 — 에디터 내 페이지별 작품 해설 Gemini AI 자동 작성 (AI TEXT 버튼)
 - [x] 로컬 이미지 미리보기 — resolveImageUrl + safePreviewUrl 로컬 경로(`/`) 지원
 - [x] Webhook 완전 구현 — 수신 + HMAC 서명 검증 + ngrok 연동 + 로컬 시뮬레이션

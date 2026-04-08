@@ -493,3 +493,95 @@ SweetBook Dynamic Layout 엔진은 Element Grouping, Column Templates, splittabl
 ### 향후 확장 가능성
 - B2B 서비스(어린이집 단체 작품집) 시 Column Templates로 한 페이지에 여러 아이의 작품 배치 가능
 - 고급 사용자 모드 도입 시 Element Grouping으로 레이아웃 커스터마이징 제공 가능
+
+### 뉘앙스 업데이트 (ADR-16 참조)
+**Column Templates**(`collageGallery`/`rowGallery`) 자체는 여전히 **기본 워크플로우에서 수동으로 선택하지 않음**. 다만 Auto Compose에서 사진 수가 사용자가 지정한 목표 페이지 수를 초과하는 특수 상황에 한해, 현재 카테고리의 `collageGallery`/`rowGallery` 템플릿을 자동 탐색하여 한 페이지에 여러 장을 패킹하는 용도로 활용됨. 이는 "1작품 1페이지" 원칙을 깨는 것이 아니라, **사용자가 명시적으로 '페이지 수를 줄여 달라'고 요청한 케이스의 수용 장치**임. 일반 에디터 플로우에서는 여전히 1작품 1페이지가 기본 동작.
+
+---
+
+## ADR-16 — Auto Compose 다중 사진 패킹 + 표지 레이아웃 하이브리드 선택
+
+### 배경 (2개 이슈 동시 해결)
+
+**이슈 A — Auto Compose 목표 초과 처리 부재**
+`handleAutoCompose()`는 사진 수와 목표 페이지 수 비교 없이 항상 1장/페이지로 배치하고 부족분만 패딩했음. 사용자가 30장의 사진을 업로드하고 목표 24p를 설정해도 결과는 24p가 아닌 30p — 목표값이 사실상 무시됨.
+
+**이슈 B — 사용자 선택 표지 레이아웃 무시 버그**
+`handleCreateBook()`의 STEP 3(앞표지 추가)이 `frontItem.templateUid`(편집 패널의 "레이아웃 썸네일 클릭"으로 선택된 UID)를 완전히 무시하고 항상 `tplMap.cover`(`catGroup.covers[0]` — 카테고리 첫 번째 표지)만 사용했음. 사용자가 여러 표지 레이아웃 중 하나를 골라도 반영되지 않음.
+
+### 결정 A — 3-Case 다중 사진 패킹 로직
+
+```javascript
+// Case A: 사진 ≤ 목표 → 1장/페이지 + 빈 슬롯 패딩 (기존 동작 유지)
+if (contentImageCount <= adjustedTarget) { /* 패딩 로직 */ }
+
+// Case B: 사진 > 목표 + 다중 템플릿 존재 → 균등 분배
+const canFitMulti = multiPhotoTpl && contentImageCount <= adjustedTarget * multiPhotoMax;
+if (canFitMulti) {
+  let cursor = 0;
+  for (let p = 0; p < adjustedTarget; p++) {
+    const remaining = contentImageCount - cursor;
+    const pagesLeft = adjustedTarget - p;
+    const take = Math.ceil(remaining / pagesLeft);
+    const slice = contentImages.slice(cursor, cursor + take);
+    cursor += take;
+    // slice.length === 1 → 단일 페이지, > 1 → 다중 템플릿 + images[] 배열
+  }
+}
+
+// Case C: 다중 템플릿 없음/용량 초과 → 1장/페이지 폴백 + 경고 토스트
+```
+
+**다중 템플릿 탐색 우선순위**: `collageGallery` 우선(격자 배치, 시각적으로 깔끔, 표준 max 9장) → 없으면 `rowGallery` 폴백(가로 나열, max 50장). 두 binding 모두 SweetBook 템플릿 엔진의 `images: [{fileName|file, previewUrl}]` 배열을 수용.
+
+**균등 분배 알고리즘**: `Math.ceil(remaining / pagesLeft)`는 앞쪽 페이지에 1장씩 더 쏠리고 뒤쪽이 가벼워지는 자연스러운 분배를 만듦. 예) 26장 → 24p 목표: 앞 2p에 2장씩, 뒤 22p에 1장씩 = `2×2 + 22×1 = 26`.
+
+### 결정 B — 표지 레이아웃 하이브리드 선택 (사용자 선택 우선 + 폴백)
+
+```javascript
+// ── STEP 3: 앞표지 추가 ──
+// ★ 사용자가 표지 레이아웃을 직접 선택했으면 그 UID를 우선 사용
+//    (현재 카테고리 내 유효성 검증 — validUids Set)
+// 미선택 시 catGroup.covers[0] (카테고리 기본 표지) 폴백
+const userCoverTplUid = frontItem?.templateUid;
+const coverTplUid = (userCoverTplUid && tplMap.validUids?.has(userCoverTplUid))
+  ? userCoverTplUid
+  : tplMap.cover;
+const coverSource = coverTplUid === userCoverTplUid ? '사용자 선택' : '카테고리 기본';
+
+// templateKind 교차 검증 — 표지에 반드시 cover 템플릿만 사용
+const activeCatForCover = categoryGroups[selectedCategory] || null;
+const coverTplObj = activeCatForCover?.covers?.find(t => t.templateUid === coverTplUid) || tplMap.coverTpl;
+if (coverTplObj && coverTplObj.templateKind !== 'cover') {
+  addLog(`❌ 표지 templateKind 불일치: ${coverTplObj.templateKind} (cover 필요)`);
+}
+addLog(`🎨 표지 추가 중... (템플릿: ${coverTplUid} · ${coverSource})`);
+```
+
+**3단계 안전 장치**:
+1. `frontItem?.templateUid`가 truthy인지 확인 (빈 선택 허용)
+2. `tplMap.validUids?.has(userCoverTplUid)` — ADR-03의 유령 템플릿 방어와 동일한 Set 사용 → 카테고리 외부 UID 즉시 차단
+3. `templateKind !== 'cover'` 교차 검증 → 표지 슬롯에 내지 템플릿이 주입되는 혼선 차단
+
+### 검증 (preview_eval 시뮬레이션)
+
+| 테스트 | 입력 | 기대 결과 | 실제 결과 |
+|--------|------|----------|----------|
+| Case A — 사진 ≤ 목표 | 26장 사진, 24p 목표 | 26p (목표 초과 허용) | 26p 내지 + 0 패딩 ✓ |
+| Case A — 패딩 | 10장 사진, 24p 목표 | 10p + 14p 패딩 | 동일 ✓ |
+| Case B — 균등 분배 | 26장 사진, 24p 목표 (`일기장B`) | 24p (2p × 2장 + 22p × 1장 = 26장) | 다중 2p + 단일 22p ✓ |
+| Case B — 과밀 | 200장 사진, 24p 목표 | 24p (collage max 9 × 24 = 216 ≥ 200) | 정상 분배 ✓ |
+| Case C — 용량 초과 | 300장 사진, 24p 목표 | 1장/페이지 폴백 + 경고 | 300p + 경고 토스트 ✓ |
+| Cover — null | `frontItem.templateUid = null` | 카테고리 기본 | `tplMap.cover` · 로그 "카테고리 기본" ✓ |
+| Cover — invalid UID | 다른 카테고리 UID | 카테고리 기본 (차단) | `validUids.has()` false → 폴백 ✓ |
+| Cover — valid 같은 카테고리 | 같은 카테고리의 2번째 표지 | 사용자 선택 | `userCoverTplUid` 사용 · 로그 "사용자 선택" ✓ |
+
+### 영향
+- **Auto Compose UX**: 목표 페이지 수가 실질적 의미를 가지게 됨 — 사용자가 "24페이지로 맞춰 달라"고 하면 실제로 24페이지가 나옴
+- **표지 선택 UX**: 편집 패널의 표지 레이아웃 썸네일 클릭이 실제로 최종 책에 반영됨
+- **안전성**: 두 변경 모두 `validUids` Set과 `templateKind` 교차 검증을 활용해 기존 3-Layer Defense(ADR-03)와 통합 — 유령 템플릿/타입 불일치 원천 차단
+
+### 관련 ADR
+- ADR-00 (Auto Compose 기본 구조 — 본 ADR은 Case B/C 확장)
+- ADR-03 (유령 템플릿 차단 — `validUids` 재사용)
+- ADR-15 (Column Templates 의도적 미사용 — 뉘앙스 업데이트: Auto Compose 목표 초과 케이스 한정 자동 활용)

@@ -605,6 +605,41 @@ export default function EditorPage() {
     // 짝수로 맞추기 (2페이지 단위)
     const adjustedTarget = targetPages % 2 === 0 ? targetPages : targetPages + 1;
 
+    // ── 다중 사진 템플릿 탐색 (현재 카테고리 내 collageGallery / rowGallery) ──
+    // 사진이 목표 페이지보다 많을 때, 한 페이지에 여러 장을 배치할 수 있는 템플릿을 찾는다
+    const catGroup = categoryGroups[selectedCategory] || null;
+    let multiPhotoTpl = null;
+    let multiPhotoMax = 1;
+    let multiPhotoType = null;
+    if (catGroup) {
+      // collageGallery 우선 (격자 배치 — 시각적으로 더 깔끔)
+      for (const tpl of catGroup.all || []) {
+        const defs = tpl.parameters?.definitions;
+        if (!defs) continue;
+        const collageDef = Object.values(defs).find(d => d.binding === 'collageGallery');
+        if (collageDef) {
+          multiPhotoTpl = tpl;
+          multiPhotoType = 'collageGallery';
+          multiPhotoMax = 9; // collage 표준 최대값
+          break;
+        }
+      }
+      // collageGallery 없으면 rowGallery 폴백
+      if (!multiPhotoTpl) {
+        for (const tpl of catGroup.all || []) {
+          const defs = tpl.parameters?.definitions;
+          if (!defs) continue;
+          const rowDef = Object.values(defs).find(d => d.binding === 'rowGallery');
+          if (rowDef) {
+            multiPhotoTpl = tpl;
+            multiPhotoType = 'rowGallery';
+            multiPhotoMax = 50;
+            break;
+          }
+        }
+      }
+    }
+
     const ts = Date.now();
     const newGallery = [];
 
@@ -626,8 +661,90 @@ export default function EditorPage() {
       });
     }
 
-    // 3. 내지: 나머지 이미지 순서대로 배치
+    // 3. 내지 후보 이미지 (앞/뒤표지 제외)
     const contentImages = imageItems.slice(1, backImg ? -1 : undefined);
+    const contentImageCount = contentImages.length;
+
+    // ── 분기: 사진 수 vs 목표 페이지 수 비교 ──
+    if (contentImageCount <= adjustedTarget) {
+      // ── Case A: 사진 ≤ 목표 — 1장/페이지 + 빈 슬롯 패딩 (기존 동작) ──
+      contentImages.forEach((img, i) => {
+        newGallery.push({
+          ...img,
+          id: `auto-c${i}-${ts}`,
+          role: 'content',
+          title: img.title || `Page ${i + 1}`,
+        });
+      });
+      const neededPadding = adjustedTarget - contentImageCount;
+      for (let i = 0; i < neededPadding; i++) {
+        newGallery.push({
+          ...makeBlankItem(),
+          id: `auto-blank-${i}-${ts}`,
+        });
+      }
+      setGallery(newGallery);
+      setSelectedIdx(null);
+      setShowAutoCompose(false);
+      toast.success(`자동 구성 완료: 표지 2장 + 내지 ${adjustedTarget}장 (1장/페이지${neededPadding > 0 ? ` · 빈 ${neededPadding}p 패딩` : ''})`);
+      return;
+    }
+
+    // ── Case B: 사진 > 목표 — 다중 사진 템플릿으로 균등 분배 ──
+    // 다중 사진 템플릿이 있고, max 용량 안에 들어가면 분배 시도
+    const canFitMulti = multiPhotoTpl && contentImageCount <= adjustedTarget * multiPhotoMax;
+
+    if (canFitMulti) {
+      // 균등 분배 알고리즘: 페이지마다 ceil(remaining / pagesLeft)장씩 할당
+      // → 앞쪽 페이지가 1장씩 더 많고 뒤쪽이 적어지는 자연스러운 분배
+      let cursor = 0;
+      let multiPageCount = 0;
+      let singlePageCount = 0;
+      for (let p = 0; p < adjustedTarget; p++) {
+        const remaining = contentImageCount - cursor;
+        const pagesLeft = adjustedTarget - p;
+        if (remaining <= 0) break;
+        const take = Math.ceil(remaining / pagesLeft);
+        const slice = contentImages.slice(cursor, cursor + take);
+        cursor += take;
+
+        if (slice.length === 1) {
+          // 1장만 들어가면 일반 페이지(템플릿 자동 선택)로 배치
+          newGallery.push({
+            ...slice[0],
+            id: `auto-c${p}-${ts}`,
+            role: 'content',
+            title: slice[0].title || `Page ${p + 1}`,
+            templateUid: null,
+          });
+          singlePageCount++;
+        } else {
+          // 여러 장 → 다중 사진 템플릿 + images 배열
+          const baseImage = slice[0];
+          newGallery.push({
+            ...baseImage,
+            id: `auto-c${p}-${ts}`,
+            role: 'content',
+            title: baseImage.title || `Page ${p + 1}`,
+            templateUid: multiPhotoTpl.templateUid,
+            images: slice.map((img, ii) => ({
+              id: `auto-mi-${p}-${ii}-${ts}`,
+              file: img.file || null,
+              previewUrl: img.previewUrl,
+            })),
+          });
+          multiPageCount++;
+        }
+      }
+      setGallery(newGallery);
+      setSelectedIdx(null);
+      setShowAutoCompose(false);
+      const typeLabel = multiPhotoType === 'collageGallery' ? '콜라주' : '행 갤러리';
+      toast.success(`자동 구성 완료: 표지 2장 + 내지 ${adjustedTarget}장 (${contentImageCount}장 분배 · ${typeLabel} ${multiPageCount}p + 단일 ${singlePageCount}p)`);
+      return;
+    }
+
+    // ── Case C: 다중 템플릿 없거나 용량 초과 — 1장/페이지 폴백 (목표 초과 허용) ──
     contentImages.forEach((img, i) => {
       newGallery.push({
         ...img,
@@ -636,21 +753,14 @@ export default function EditorPage() {
         title: img.title || `Page ${i + 1}`,
       });
     });
-
-    // 4. 부족한 페이지 → 빈 슬롯(text-only)으로 자동 패딩
-    const currentContentCount = contentImages.length;
-    const neededPadding = adjustedTarget - currentContentCount;
-    for (let i = 0; i < neededPadding; i++) {
-      newGallery.push({
-        ...makeBlankItem(),
-        id: `auto-blank-${i}-${ts}`,
-      });
-    }
-
     setGallery(newGallery);
     setSelectedIdx(null);
     setShowAutoCompose(false);
-    toast.success(`자동 구성 완료: 표지 2장 + 내지 ${Math.max(adjustedTarget, currentContentCount)}장`);
+    if (multiPhotoTpl) {
+      toast.warn(`사진 ${contentImageCount}장이 다중 템플릿(최대 ${adjustedTarget * multiPhotoMax}장)에도 너무 많아 1장/페이지로 배치합니다 (총 ${contentImageCount}p)`);
+    } else {
+      toast.warn(`현재 카테고리(${selectedCategory || '?'})에 다중 사진 템플릿이 없어 1장/페이지로 배치합니다 (총 ${contentImageCount}p)`);
+    }
   };
 
   // 스프레드 쌍 삭제 — 내지 아이템의 파트너까지 함께 제거해 항상 짝수 유지
@@ -1876,13 +1986,20 @@ export default function EditorPage() {
       }
 
       // ── STEP 3: 앞표지 추가 — parameters.definitions 기반 안전 바인딩 ──
-      const coverTplUid = tplMap.cover;
+      // ★ 사용자가 표지 레이아웃을 직접 선택했으면 그 UID를 우선 사용 (현재 카테고리 내 유효성 검증)
+      // 미선택 시 catGroup.covers[0] (카테고리 기본 표지) 폴백
+      const userCoverTplUid = frontItem?.templateUid;
+      const coverTplUid = (userCoverTplUid && tplMap.validUids?.has(userCoverTplUid))
+        ? userCoverTplUid
+        : tplMap.cover;
+      const coverSource = coverTplUid === userCoverTplUid ? '사용자 선택' : '카테고리 기본';
       // templateKind 검증: 표지에 반드시 cover 템플릿만 사용
-      const coverTplObj = tplMap.coverTpl;
+      const activeCatForCover = categoryGroups[selectedCategory] || null;
+      const coverTplObj = activeCatForCover?.covers?.find(t => t.templateUid === coverTplUid) || tplMap.coverTpl;
       if (coverTplObj && coverTplObj.templateKind !== 'cover') {
         addLog(`❌ 표지 templateKind 불일치: ${coverTplObj.templateKind} (cover 필요)`);
       }
-      addLog(`🎨 표지 추가 중... (템플릿: ${coverTplUid})`);
+      addLog(`🎨 표지 추가 중... (템플릿: ${coverTplUid} · ${coverSource})`);
       // 표지 파라미터를 definitions 기반으로 빌드
       const coverDefs = tplMap.contentTpls[coverTplUid] || findDefinitions(coverTplUid) || {};
       const dateRange = fd.period || fd.semester
