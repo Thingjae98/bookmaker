@@ -1339,7 +1339,10 @@ export default function EditorPage() {
 
         const chunkData = await res.json();
         if (chunkData.success && Array.isArray(chunkData.results)) {
-          allResults.push(...chunkData.results);
+          // Gemini가 배치마다 0-based index를 반환할 수 있으므로 절대 위치로 강제 리매핑
+          chunkData.results.forEach((r, i) => {
+            allResults.push({ ...r, index: c + i });
+          });
         }
 
         // rate limit 대응 — 배치 간 간격
