@@ -1637,7 +1637,7 @@ export default function EditorPage() {
       const bookRes  = await fetchWithRetry('/api/books', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ title, bookSpecUid, creationType: 'TEST', externalRef: `bookmaker-${crypto.randomUUID()}` }),
+        body:    JSON.stringify({ title, bookSpecUid, externalRef: `bookmaker-${crypto.randomUUID()}` }),
       });
       const bookData = await bookRes.json();
       if (!bookData.success) throw new Error(bookData.message || '책 생성 실패');

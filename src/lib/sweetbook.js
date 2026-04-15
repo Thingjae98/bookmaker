@@ -24,9 +24,13 @@ function ok(data) {
 
 // ─── Books API ───────────────────────────────────────────────
 
-export async function createBook({ title, bookSpecUid, creationType = 'TEST', externalRef }) {
-  const data = await getClient().books.create({ title, bookSpecUid, creationType, externalRef });
-  return ok(data);
+export async function createBook({ title, bookSpecUid, externalRef }) {
+  // SDK books.create는 creationType='NORMAL' 기본값을 강제 전송 → API 400
+  // sweetFetch 직접 호출로 우회 (creationType 미전송 시 API 기본값 사용)
+  const body = { title, bookSpecUid };
+  if (externalRef) body.externalRef = externalRef;
+  const json = await sweetFetch('/books', {}, { method: 'POST', body: JSON.stringify(body) });
+  return ok(json?.data || json);
 }
 
 export async function listBooks({ limit = 20, offset = 0 } = {}) {
